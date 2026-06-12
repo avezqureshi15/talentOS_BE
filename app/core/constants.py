@@ -1,0 +1,12 @@
+from enum import Enum
+
+
+class ErrorCode(str, Enum):
+    TODO_NOT_FOUND = "TODO_NOT_FOUND"
+    INTERNAL_ERROR = "INTERNAL_ERROR"
+    VALIDATION_ERROR = "VALIDATION_ERROR"
+    NOT_FOUND = "NOT_FOUND"
+
+
+DEFAULT_PAGE_SIZE: int = 20
+MAX_PAGE_SIZE: int = 100
