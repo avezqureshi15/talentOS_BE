@@ -3,7 +3,7 @@ from app.core.constants import ErrorCode
 
 
 class JobNotFoundException(BaseAppException):
-    def __init__(self, job_id: int):
+    def __init__(self, job_id: str | None):
         super().__init__(
             message=f"Job listing with id {job_id} not found",
             code=ErrorCode.JOB_NOT_FOUND,

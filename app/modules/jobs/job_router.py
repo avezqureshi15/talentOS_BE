@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from fastapi import APIRouter, status
 
 from app.core.config import settings
@@ -14,7 +16,7 @@ def get_all_jobs():
 
 
 @router.get("/{job_id}")
-def get_job_by_id(job_id: int):
+def get_job_by_id(job_id: UUID):
     service = JobService()
     return service.get_job_by_id(job_id)
 
@@ -26,12 +28,12 @@ def create_job(data: JobCreate):
 
 
 @router.put("/{job_id}")
-def update_job(job_id: int, data: JobUpdate):
+def update_job(job_id: UUID, data: JobUpdate):
     service = JobService()
     return service.update_job(job_id, data)
 
 
 @router.delete("/{job_id}")
-def delete_job(job_id: int):
+def delete_job(job_id: UUID):
     service = JobService()
     return service.delete_job(job_id)

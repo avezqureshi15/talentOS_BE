@@ -1,4 +1,5 @@
 from datetime import datetime
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -26,7 +27,7 @@ class JobUpdate(BaseModel):
 
 
 class JobResponse(BaseModel):
-    id: int
+    id: UUID
     title: str
     department: str
     location: str

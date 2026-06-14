@@ -1,3 +1,5 @@
+from uuid import UUID
+
 import httpx
 
 from app.common.exceptions.base_exception import BaseAppException
@@ -27,9 +29,7 @@ class JobService:
             status_code = exc.response.status_code
             logger.error("Supabase error: status=%d | error=%s", status_code, error_msg)
             if status_code == 404:
-                job_id = None
-                if params and params.get("id"):
-                    job_id = int(params["id"])
+                job_id = params.get("id") if params else None
                 raise JobNotFoundException(job_id) from exc
             raise BaseAppException(
                 message=error_msg,
@@ -48,19 +48,19 @@ class JobService:
         logger.info("Fetching all job listings from Supabase")
         return self._request("GET")
 
-    def get_job_by_id(self, job_id: int) -> dict:
-        logger.info("Fetching job listing: id=%d", job_id)
+    def get_job_by_id(self, job_id: UUID) -> dict:
+        logger.info("Fetching job listing: id=%s", job_id)
         return self._request("GET", params={"id": str(job_id)})
 
     def create_job(self, data: JobCreate) -> dict:
         logger.info("Creating job listing: title=%s", data.title)
         return self._request("POST", json_data=data.model_dump())
 
-    def update_job(self, job_id: int, data: JobUpdate) -> dict:
-        logger.info("Updating job listing: id=%d", job_id)
+    def update_job(self, job_id: UUID, data: JobUpdate) -> dict:
+        logger.info("Updating job listing: id=%s", job_id)
         payload = data.model_dump(exclude_unset=True)
         return self._request("PUT", params={"id": str(job_id)}, json_data=payload)
 
-    def delete_job(self, job_id: int) -> dict:
-        logger.info("Deleting job listing: id=%d", job_id)
+    def delete_job(self, job_id: UUID) -> dict:
+        logger.info("Deleting job listing: id=%s", job_id)
         return self._request("DELETE", params={"id": str(job_id)})

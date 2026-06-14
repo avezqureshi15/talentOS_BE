@@ -1,3 +1,5 @@
+from uuid import UUID
+
 import httpx
 
 from app.common.exceptions.base_exception import BaseAppException
@@ -39,7 +41,7 @@ class ApplicationService:
                 status_code=502,
             ) from exc
 
-    def _fetch_job_title(self, job_id: int) -> str:
+    def _fetch_job_title(self, job_id: UUID) -> str:
         try:
             with httpx.Client(timeout=_TIMEOUT) as client:
                 response = client.get(_JOBS_ENDPOINT, params={"id": str(job_id)})
@@ -47,7 +49,7 @@ class ApplicationService:
                 body = response.json()
                 return body.get("data", {}).get("title", "Job Listing")
         except Exception as exc:
-            logger.warning("Could not fetch job title for job_id=%d: %s", job_id, str(exc))
+            logger.warning("Could not fetch job title for job_id=%s: %s", job_id, str(exc))
             return "Job Listing"
 
     def _to_camel_case(self, snake_data: dict) -> dict:
@@ -63,7 +65,7 @@ class ApplicationService:
         return camel
 
     def create_application(self, data: ApplicationCreate) -> dict:
-        logger.info("Creating application: job_id=%d | name=%s", data.job_id, data.name)
+        logger.info("Creating application: job_id=%s | name=%s", data.job_id, data.name)
 
         job_title = self._fetch_job_title(data.job_id)
 
