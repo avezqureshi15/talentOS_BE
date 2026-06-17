@@ -382,7 +382,9 @@ class TodoResponse(BaseModel):
 
 ## 7. Database Access — SQLAlchemy ORM
 
-All database operations use **SQLAlchemy 2.0 ORM** with PostgreSQL. No raw SQL, no Supabase.
+Only modules that own data in our PostgreSQL use SQLAlchemy (e.g., `todo`).
+Modules that proxy to external services (e.g., `jobs`, `applications`) use
+httpx and store no data locally.
 
 ### 7.1 Session Dependency
 
@@ -445,7 +447,85 @@ self.db.delete(todo)
 self.db.commit()
 ```
 
-## 8. Dependency Injection
+### 7.5 JSON Column Types
+
+For array or flexible data, use `JSON` column type with proper typing:
+
+```python
+from sqlalchemy import JSON
+from sqlalchemy.orm import Mapped, mapped_column
+
+class JobListing(Base):
+    __tablename__ = "job_listings"
+
+    requirements: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    benefits: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+```
+
+Pydantic schemas map these as `list[str] | None = Field(None)`.
+
+### 7.6 Foreign Key Relationships
+
+```python
+from sqlalchemy import ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+class Application(Base):
+    __tablename__ = "applications"
+
+    job_id: Mapped[int] = mapped_column(Integer, ForeignKey("job_listings.id", ondelete="CASCADE"), nullable=False)
+    job_listing: Mapped["JobListing"] = relationship(backref="applications")
+```
+
+- Use `ondelete="CASCADE"` so deleting a parent removes children
+- The `relationship()` allows eager/lazy loading of related entities
+- Back-populate from the parent side via `backref="applications"`
+- `model_validate` on the child model automatically includes the relationship response
+
+---
+
+## 8. API Versioning
+
+### 8.1 Prefix Convention
+
+All new modules MUST be versioned under `/api/v1/`:
+
+```python
+from app.core.config import settings
+
+router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/jobs", tags=["jobs"])
+```
+
+The prefix is defined in `app/core/config.py`:
+```python
+API_V1_PREFIX: str = "/api/v1"
+```
+
+### 8.2 Response Envelope
+
+List endpoints wrap results in a `data` + `count` envelope:
+
+```python
+@router.get("/")
+def list_all(db: Session = Depends(get_db)):
+    service = JobService(db)
+    items = service.get_all()
+    return {"data": items, "count": len(items)}
+```
+
+Single-resource endpoints wrap in `data`:
+```python
+return {"data": item}
+```
+
+Delete endpoints return a confirmation message:
+```python
+return {"message": "Resource deleted successfully"}
+```
+
+---
+
+## 9. Dependency Injection
 
 - All DB sessions are injected via `Depends(get_db)` in routers
 - Service and Repository classes receive the session through their `__init__`
@@ -467,7 +547,37 @@ class TodoService:
 
 ---
 
-## 10. Module `__init__.py` Pattern
+---
+
+## 11. External API Integration (httpx)
+
+All outbound HTTP calls MUST use the `httpx` library:
+
+```python
+import httpx
+
+try:
+    with httpx.Client(timeout=30.0) as client:
+        response = client.post(url, headers=headers, json=payload)
+        response.raise_for_status()
+        return response.json()
+except httpx.HTTPStatusError as exc:
+    logger.error("API error: status=%d | body=%s", exc.response.status_code, exc.response.text)
+    raise
+except httpx.RequestError as exc:
+    logger.error("Connection error: %s", str(exc))
+    raise
+```
+
+**Rules:**
+- Always set an explicit `timeout` — never use the default (no timeout)
+- Always call `raise_for_status()` to surface HTTP errors
+- Log the error details before raising
+- Wrap specific errors into `BaseAppException` subclasses for the global handler
+
+---
+
+## 12. Module `__init__.py` Pattern
 
 Each module's `__init__.py` re-exports exactly one thing: the router.
 
@@ -489,7 +599,9 @@ app.include_router(todo_router)
 
 ---
 
-## 11. Adding a New Module — Step-by-Step
+## 13. Adding a New Module — Step-by-Step
+
+### DB-Backed Module (stores data in our PostgreSQL)
 
 1. Create `app/modules/<name>/` directory
 2. Create files (in order of dependency):
@@ -500,15 +612,28 @@ app.include_router(todo_router)
    - `<name>_router.py` — endpoints
 3. Create `__init__.py` that re-exports the router
 4. Import the new model in `alembic/env.py` for autogenerate detection
-5. Run `docker compose exec app alembic revision --autogenerate -m "create <table>"`
-6. Register the router in `app/main.py`
-7. Add module-specific exceptions to `app/common/exceptions/`
-8. Add new `ErrorCode` values to `app/core/constants.py` if needed
-9. Add seed data in `seed/` if needed
+5. Set the router prefix to `f"{settings.API_V1_PREFIX}/<plural>"`
+6. Run `docker compose exec app alembic revision --autogenerate -m "create <table>"`
+7. Register the router in `app/main.py`
+8. Add module-specific exceptions to `app/common/exceptions/`
+9. Add new `ErrorCode` values to `app/core/constants.py` if needed
+10. Add seed data in `seed/` if needed
+
+### Proxy Module (calls external API, no local storage)
+
+1. Create `app/modules/<name>/` directory
+2. Create files:
+   - `<name>_schema.py` — Pydantic request DTOs
+   - `<name>_service.py` — httpx calls to external API + error handling
+   - `<name>_router.py` — endpoints
+3. Create `__init__.py` that re-exports the router
+4. Register the router in `app/main.py`
+5. Set the router prefix to `f"{settings.API_V1_PREFIX}/<plural>"`
+6. No model, repository, migration, or seed needed
 
 ---
 
-## 12. Naming Conventions
+## 14. Naming Conventions
 
 | Element | Convention | Example |
 |---------|-----------|---------|
@@ -524,7 +649,7 @@ app.include_router(todo_router)
 
 ---
 
-## 13. Code Style
+## 15. Code Style
 
 - Line length: 120 characters maximum
 - Indentation: 4 spaces (no tabs)
@@ -539,12 +664,12 @@ app.include_router(todo_router)
 
 ---
 
-## 14. Alembic Migrations
+## 16. Alembic Migrations
 
 Alembic is the **only** way to manage schema changes. Never use `Base.metadata.create_all()`
 in production (it's used in `main.py` only as a fallback for local dev).
 
-### 14.1 Creating a Migration
+### 16.1 Creating a Migration
 
 ```bash
 # After adding a new model, generate a migration:
@@ -555,7 +680,7 @@ docker compose exec app alembic revision --autogenerate -m "create users table"
 docker compose exec app alembic upgrade head
 ```
 
-### 14.2 Migration Standards
+### 16.2 Migration Standards
 
 - Each migration file must have a descriptive message
 - Always provide both `upgrade()` and `downgrade()` functions
@@ -563,7 +688,7 @@ docker compose exec app alembic upgrade head
 - Never edit an existing migration that has been committed — create a new one
 - Use `--autogenerate` only as a starting point; always review the output
 
-### 14.3 Wiring New Models
+### 16.3 Wiring New Models
 
 When you create a new SQLAlchemy model, import it in `alembic/env.py` so Alembic
 can detect it for autogenerate:
@@ -578,9 +703,9 @@ target_metadata = Base.metadata
 
 ---
 
-## 15. Seeding
+## 17. Seeding
 
-### 15.1 Seed Files
+### 17.1 Seed Files
 
 Place seed data in `seed/<module>_seed.py`:
 
@@ -592,7 +717,7 @@ USER_SEEDS = [
 ]
 ```
 
-### 15.2 Running Seeds
+### 17.2 Running Seeds
 
 ```bash
 # Via Docker:
@@ -602,7 +727,7 @@ docker compose exec app python3 -m seed.run_seed
 python -m seed.run_seed
 ```
 
-### 15.3 Seed Runner Pattern
+### 17.3 Seed Runner Pattern
 
 The runner checks for existing data and skips if records already exist (idempotent):
 
@@ -617,9 +742,9 @@ if existing > 0:
 
 ---
 
-## 16. Docker — The Only Setup Path
+## 18. Docker — The Only Setup Path
 
-### 16.1 Single Command
+### 18.1 Single Command
 
 ```bash
 cp .env.example .env        # edit DATABASE_URL if needed
@@ -634,7 +759,7 @@ That single command does all of the following:
 5. Runs `python3 -m seed.run_seed` to seed initial data (idempotent)
 6. Starts the uvicorn server on port 8000
 
-### 16.2 Other Useful Commands
+### 18.2 Other Useful Commands
 
 ```bash
 docker compose logs -f                                   # tail logs
@@ -646,20 +771,24 @@ docker compose exec app python3 -m seed.run_seed          # re-seed
 docker compose exec app python3 -c "from app.db.session import engine; engine.connect()"  # test DB
 ```
 
-### 16.3 Required Environment Variables
+### 18.3 Required Environment Variables
 
 ```
 DATABASE_URL=postgresql://postgres:postgres@db:5432/talentos
 APP_ENV=development
 LOG_LEVEL=INFO
+RESEND_API_KEY=re_xxx                    # optional — email sending
 ```
 
 In Docker Compose, `DATABASE_URL` points to the `db` service (`host=db`).
 For local development, use `host=localhost`.
 
+`RESEND_API_KEY` is optional — the email service logs a warning and skips
+sending if the key is not set.
+
 ---
 
-## 17. Testing Conventions (not yet implemented)
+## 19. Testing Conventions (not yet implemented)
 
 When tests are added:
 
@@ -671,7 +800,7 @@ When tests are added:
 
 ---
 
-## 18. Summary — Checklist Before Committing
+## 20. Summary — Checklist Before Committing
 
 - [ ] Constants defined at the right level (global vs module)
 - [ ] Exceptions inherit `BaseAppException`, registered in `__init__.py`
@@ -680,9 +809,13 @@ When tests are added:
 - [ ] Type annotations on every function
 - [ ] No magic numbers or hard-coded strings
 - [ ] Imports follow the required order
+- [ ] Router uses versioned prefix: `f"{settings.API_V1_PREFIX}/<plural>"`
+- [ ] List endpoints use `{"data": items, "count": len(items)}` envelope
 - [ ] Router exports from module `__init__.py`
 - [ ] `__all__` defined in every public `__init__.py`
 - [ ] `ErrorCode` added to `core/constants.py` for new exceptions
 - [ ] Migration created for new/modified models
 - [ ] New model imported in `alembic/env.py`
+- [ ] New config vars added to `.env.example` and `Settings` class
 - [ ] Seed data added for new modules (if applicable)
+- [ ] httpx timeouts set for all external API calls
