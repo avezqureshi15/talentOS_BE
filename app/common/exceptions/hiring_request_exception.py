@@ -18,3 +18,21 @@ class HiringRequestNotCreatedException(BaseAppException):
             code=ErrorCode.HIRING_REQUEST_NOT_CREATED,
             status_code=500,
         )
+
+
+class HiringRequestNotUpdatedException(BaseAppException):
+    def __init__(self, message: str = "Failed to update hiring request"):
+        super().__init__(
+            message=message,
+            code=ErrorCode.HIRING_REQUEST_NOT_UPDATED,
+            status_code=500,
+        )
+
+
+class HiringRequestNotDeletedException(BaseAppException):
+    def __init__(self, message: str = "Failed to delete hiring request"):
+        super().__init__(
+            message=message,
+            code=ErrorCode.HIRING_REQUEST_NOT_DELETED,
+            status_code=500,
+        )

@@ -16,6 +16,18 @@ class HiringRequestCreate(BaseModel):
     custom_evaluation_criteria: str | None = Field(None)
 
 
+class HiringRequestUpdate(BaseModel):
+    title: str | None = Field(None, min_length=1, max_length=255)
+    department: str | None = Field(None, min_length=1, max_length=255)
+    location: str | None = Field(None, min_length=1, max_length=255)
+    type: str | None = Field(None, min_length=1, max_length=100)
+    description: str | None = Field(None, min_length=1)
+    requirements: list[str] | None = Field(None)
+    benefits: list[str] | None = Field(None)
+    is_active: bool | None = Field(None)
+    custom_evaluation_criteria: str | None = Field(None)
+
+
 class HiringRequestResponse(BaseModel):
     id: UUID
     title: str
@@ -27,6 +39,8 @@ class HiringRequestResponse(BaseModel):
     benefits: list[str] | None
     is_active: bool
     custom_evaluation_criteria: str | None
+    supabase_job_id: UUID | None
+    deleted_at: datetime | None
     created_at: datetime
     updated_at: datetime
 

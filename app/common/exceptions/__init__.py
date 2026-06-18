@@ -4,7 +4,12 @@ from .job_exception import JobNotFoundException
 from .application_exception import ApplicationNotFoundException
 from .designation_exception import DesignationNotFoundException
 from .user_exception import UserNotFoundException
-from .hiring_request_exception import HiringRequestNotFoundException, HiringRequestNotCreatedException
+from .hiring_request_exception import (
+    HiringRequestNotCreatedException,
+    HiringRequestNotDeletedException,
+    HiringRequestNotFoundException,
+    HiringRequestNotUpdatedException,
+)
 
 __all__ = [
     "BaseAppException",
@@ -15,4 +20,6 @@ __all__ = [
     "UserNotFoundException",
     "HiringRequestNotFoundException",
     "HiringRequestNotCreatedException",
+    "HiringRequestNotUpdatedException",
+    "HiringRequestNotDeletedException",
 ]
