@@ -24,9 +24,12 @@ class JobService:
                 response.raise_for_status()
                 return response.json()
         except httpx.HTTPStatusError as exc:
-            body = exc.response.json()
-            error_msg = body.get("error", "Unknown error")
             status_code = exc.response.status_code
+            try:
+                body = exc.response.json()
+                error_msg = body.get("error", "Unknown error")
+            except Exception:
+                error_msg = exc.response.text or "Unknown error"
             logger.error("Supabase error: status=%d | error=%s", status_code, error_msg)
             if status_code == 404:
                 job_id = params.get("id") if params else None

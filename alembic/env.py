@@ -18,6 +18,7 @@ if config.config_file_name is not None:
 from app.db.base import Base  # noqa: E402
 from app.modules.designation.designation_model import Band, Designation, KpiDefinition  # noqa: E402, F401
 from app.modules.evaluations.evaluation_model import ResumeEvaluation  # noqa: E402, F401
+from app.modules.hiring_requests.hiring_request_model import HiringRequest  # noqa: E402, F401
 from app.modules.todo.todo_model import Todo  # noqa: E402, F401
 from app.modules.users.user_model import User  # noqa: E402, F401
 
