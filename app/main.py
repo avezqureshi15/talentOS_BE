@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.common.handlers import register_exception_handlers
 from app.core.config import settings
@@ -10,6 +11,7 @@ from app.db.base import Base
 from app.db.session import engine
 from app.middleware import RequestLoggingMiddleware
 from app.modules.applications import router as applications_router
+from app.modules.chat.chat_router import router as chat_router
 from app.modules.designation import router as designation_router
 from app.modules.evaluations import candidates_router as evaluation_candidates_router
 from app.modules.evaluations import router as evaluations_router
@@ -41,11 +43,20 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://localhost:4173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.add_middleware(RequestLoggingMiddleware)
 register_exception_handlers(app)
 app.include_router(todo_router)
 app.include_router(jobs_router)
 app.include_router(applications_router)
+app.include_router(chat_router)
 app.include_router(designation_router)
 app.include_router(hiring_requests_router)
 app.include_router(users_router)

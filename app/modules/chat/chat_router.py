@@ -1,0 +1,66 @@
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
+
+from app.core.config import settings
+from app.db.session import get_db
+from app.modules.chat.chat_schema import ChatResponse, ChatStreamRequest, MessageResponse
+from app.modules.chat.chat_service import (
+    _parse_ndjson_line,
+    get_messages_by_chat,
+    get_or_create_chat,
+    list_chats_by_visitor,
+    save_message,
+    stream_chat_to_ai,
+)
+
+router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/chat", tags=["chat"])
+
+
+@router.post("/stream")
+async def chat_stream(body: ChatStreamRequest, db: Session = Depends(get_db)):
+    chat = get_or_create_chat(db, body.chat_id, body.visitor_id, body.message)
+    save_message(db, chat.id, "user", body.message)
+
+    async def generate():
+        accumulated = ""
+
+        async for chunk in stream_chat_to_ai(body.message, str(chat.id)):
+            yield chunk
+            decoded = chunk.decode("utf-8", errors="replace")
+            accumulated += _parse_ndjson_line(decoded)
+
+        if accumulated:
+            save_message(db, chat.id, "assistant", accumulated)
+
+    return StreamingResponse(
+        generate(),
+        media_type="application/x-ndjson",
+        headers={"X-Chat-Id": str(chat.id)},
+    )
+
+
+@router.get("/chats")
+def get_chats(
+    visitor_id: str = Query(..., description="Device fingerprint"),
+    db: Session = Depends(get_db),
+):
+    chats = list_chats_by_visitor(db, visitor_id)
+    items = [ChatResponse.model_validate(c).model_dump() for c in chats]
+    return {"data": items, "count": len(items)}
+
+
+@router.get("/messages")
+def get_messages(
+    chat_id: UUID = Query(..., description="Chat session ID"),
+    limit: int = Query(20, ge=1, le=100, description="Max messages per page"),
+    before: int | None = Query(None, ge=0, description="Cursor: last message ID from previous page"),
+    db: Session = Depends(get_db),
+):
+    msgs, has_more = get_messages_by_chat(db, chat_id, limit, before)
+    if not msgs and before is None:
+        raise HTTPException(status_code=404, detail="Chat not found or has no messages")
+    items = [MessageResponse.model_validate(m).model_dump() for m in msgs]
+    return {"data": items, "has_more": has_more}
