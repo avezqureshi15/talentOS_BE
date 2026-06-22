@@ -10,6 +10,7 @@ from app.db.base import Base
 from app.db.session import engine
 from app.middleware import RequestLoggingMiddleware
 from app.modules.applications import router as applications_router
+from app.modules.chat.chat_router import router as chat_router
 from app.modules.designation import router as designation_router
 from app.modules.hiring_requests import router as hiring_requests_router
 from app.modules.jobs import router as jobs_router
@@ -51,6 +52,7 @@ register_exception_handlers(app)
 app.include_router(todo_router)
 app.include_router(jobs_router)
 app.include_router(applications_router)
+app.include_router(chat_router)
 app.include_router(designation_router)
 app.include_router(hiring_requests_router)
 app.include_router(users_router)
