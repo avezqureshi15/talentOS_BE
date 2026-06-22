@@ -1,3 +1,4 @@
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import exc as sa_exc
@@ -58,11 +59,39 @@ class HiringRequestService:
         response = HiringRequestResponse.model_validate(record).model_dump()
         return {"data": response}
 
-    def get_all_hiring_requests(self) -> dict:
-        logger.info("Fetching all hiring requests from local DB")
-        records = self.repository.get_all()
+    def get_all_hiring_requests(
+        self,
+        search: str | None = None,
+        department: str | None = None,
+        location: str | None = None,
+        type: str | None = None,
+        is_active: bool | None = None,
+        created_from: datetime | None = None,
+        created_to: datetime | None = None,
+        page: int = 1,
+        per_page: int = 10,
+    ) -> dict:
+        logger.info("Fetching hiring requests from local DB search=%s", search)
+        records, total = self.repository.get_all(
+            search=search,
+            department=department,
+            location=location,
+            type=type,
+            is_active=is_active,
+            created_from=created_from,
+            created_to=created_to,
+            page=page,
+            per_page=per_page,
+        )
         items = [HiringRequestResponse.model_validate(r).model_dump() for r in records]
-        return {"data": items, "count": len(items)}
+        return {
+            "data": items,
+            "count": len(items),
+            "page": page,
+            "per_page": per_page,
+            "total_pages": max(1, (total + per_page - 1) // per_page),
+            "total": total,
+        }
 
     def update_hiring_request(self, hiring_request_id: UUID, data: HiringRequestUpdate) -> dict:
         logger.info("Updating hiring request: id=%s", hiring_request_id)
@@ -82,6 +111,39 @@ class HiringRequestService:
 
         response = HiringRequestResponse.model_validate(updated).model_dump()
         return {"data": response}
+
+    def toggle_hiring_request_status(self, hiring_request_id: UUID) -> dict:
+        logger.info("Toggling hiring request status: id=%s", hiring_request_id)
+        record = self.repository.get_by_id(hiring_request_id)
+        if not record:
+            raise HiringRequestNotFoundException(str(hiring_request_id))
+
+        new_status = not record.is_active
+
+        if record.supabase_job_id:
+            job_payload = JobUpdate(is_active=new_status)
+            self.job_service.update_job(record.supabase_job_id, job_payload)
+
+        try:
+            updated = self.repository.update(record, {"is_active": new_status})
+        except sa_exc.SQLAlchemyError as exc:
+            logger.critical("Hiring request DB update failed: id=%s | error=%s", hiring_request_id, str(exc))
+            raise HiringRequestNotUpdatedException("Failed to update hiring request status locally") from exc
+
+        response = HiringRequestResponse.model_validate(updated).model_dump()
+        return {"data": response}
+
+    def get_types(self) -> dict:
+        types = self.repository.get_distinct_types()
+        return {"data": types}
+
+    def get_locations(self) -> dict:
+        locations = self.repository.get_distinct_locations()
+        return {"data": locations}
+
+    def get_departments(self) -> dict:
+        departments = self.repository.get_distinct_departments()
+        return {"data": departments}
 
     def delete_hiring_request(self, hiring_request_id: UUID) -> dict:
         logger.info("Deleting hiring request: id=%s", hiring_request_id)

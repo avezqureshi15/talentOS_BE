@@ -1,6 +1,7 @@
+from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -20,9 +21,54 @@ def create_hiring_request(data: HiringRequestCreate, db: Session = Depends(get_d
 
 
 @router.get("/")
-def get_all_hiring_requests(db: Session = Depends(get_db)):
+def get_all_hiring_requests(
+    q: str | None = Query(None, description="Search query for title, department, or location"),
+    department: str | None = Query(None, description="Filter by department"),
+    location: str | None = Query(None, description="Filter by location"),
+    type: str | None = Query(None, description="Filter by type"),
+    is_active: bool | None = Query(None, description="Filter by active status"),
+    created_from: datetime | None = Query(None, description="Filter by created_at >= this date"),
+    created_to: datetime | None = Query(None, description="Filter by created_at <= this date"),
+    page: int = Query(1, ge=1, description="Page number"),
+    per_page: int = Query(10, ge=1, le=50, description="Items per page"),
+    db: Session = Depends(get_db),
+):
     service = HiringRequestService(db)
-    return service.get_all_hiring_requests()
+    return service.get_all_hiring_requests(
+        search=q,
+        department=department,
+        location=location,
+        type=type,
+        is_active=is_active,
+        created_from=created_from,
+        created_to=created_to,
+        page=page,
+        per_page=per_page,
+    )
+
+
+@router.get("/departments")
+def get_departments(db: Session = Depends(get_db)):
+    service = HiringRequestService(db)
+    return service.get_departments()
+
+
+@router.get("/locations")
+def get_locations(db: Session = Depends(get_db)):
+    service = HiringRequestService(db)
+    return service.get_locations()
+
+
+@router.get("/types")
+def get_types(db: Session = Depends(get_db)):
+    service = HiringRequestService(db)
+    return service.get_types()
+
+
+@router.patch("/{hiring_request_id}/status")
+def toggle_hiring_request_status(hiring_request_id: UUID, db: Session = Depends(get_db)):
+    service = HiringRequestService(db)
+    return service.toggle_hiring_request_status(hiring_request_id)
 
 
 @router.get("/{hiring_request_id}")
