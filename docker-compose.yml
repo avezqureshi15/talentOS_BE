@@ -1,21 +1,6 @@
-services:
-  db:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: talentos
-    ports:
-      - "5433:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+version: "3.9"
 
+services:
   redpanda:
     image: redpandadata/redpanda:v24.2.7
     restart: unless-stopped
@@ -34,35 +19,26 @@ services:
     ports:
       - "9092:9092"
       - "9644:9644"
-    healthcheck:
-      test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy:.*true'"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
 
   app:
     build: .
     restart: unless-stopped
     depends_on:
-      db:
-        condition: service_healthy
       redpanda:
         condition: service_started
     ports:
-      - "8000:8000"
+      - "8001:8000"
+
     environment:
-      DATABASE_URL: postgresql://postgres:root@db:5432/talentos
+      DATABASE_URL: postgresql://postgres:root@host.containers.internal:5432/talentos
       APP_ENV: development
       LOG_LEVEL: INFO
       SUPABASE_FUNCTIONS_BASE_URL: https://cohqewhcplvohyjxpyoc.supabase.co/functions/v1
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       SUPABASE_WEBHOOK_SECRET: ${SUPABASE_WEBHOOK_SECRET:-}
       KAFKA_BOOTSTRAP_SERVERS: redpanda:29092
-      # Hardcoded (not ${...}) so the .env localhost value can't leak into the
-      # container, where localhost would point at the container itself.
-      AI_SERVICE_BASE_URL: http://host.docker.internal:8080
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      AI_SERVICE_BASE_URL: http://host.containers.internal:8080
+
     command: >
       sh -c "
         alembic upgrade head &&
@@ -74,23 +50,16 @@ services:
     build: .
     restart: unless-stopped
     depends_on:
-      db:
-        condition: service_healthy
       redpanda:
         condition: service_started
-    deploy:
-      replicas: 3
+
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@db:5432/talentos
+      DATABASE_URL: postgresql://postgres:root@host.containers.internal:5432/talentos
       APP_ENV: development
       LOG_LEVEL: INFO
       SUPABASE_FUNCTIONS_BASE_URL: https://cohqewhcplvohyjxpyoc.supabase.co/functions/v1
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
       KAFKA_BOOTSTRAP_SERVERS: redpanda:29092
-      AI_SERVICE_BASE_URL: http://host.docker.internal:8080
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    command: python3 -m app.workers.evaluation_worker
+      AI_SERVICE_BASE_URL: http://host.containers.internal:8080
 
-volumes:
-  pgdata:
+    command: python3 -m app.workers.evaluation_worker

@@ -28,6 +28,8 @@ class ResumeEvaluation(Base):
 
     candidate_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     candidate_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    candidate_phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    cover_letter: Mapped[str | None] = mapped_column(Text, nullable=True)
     resume_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
 
     status: Mapped[str] = mapped_column(

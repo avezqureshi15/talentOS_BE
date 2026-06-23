@@ -22,13 +22,17 @@ class EvaluationRepository:
         job_id: str,
         candidate_name: str | None,
         candidate_email: str | None,
-        resume_url: str | None,
+        candidate_phone: str | None = None,
+        cover_letter: str | None = None,
+        resume_url: str | None = None,
     ) -> ResumeEvaluation:
         evaluation = ResumeEvaluation(
             application_id=application_id,
             job_id=job_id,
             candidate_name=candidate_name,
             candidate_email=candidate_email,
+            candidate_phone=candidate_phone,
+            cover_letter=cover_letter,
             resume_url=resume_url,
             status=EvaluationStatus.QUEUED.value,
         )
