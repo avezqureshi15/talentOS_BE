@@ -1,13 +1,24 @@
+# talentOS Phase 2 — resume evaluation pipeline
+#
+# Start everything (Postgres + Redpanda + API + 3 workers):
+#   1. Copy .env.example → .env and fill SUPABASE_WEBHOOK_SECRET + SUPABASE_SERVICE_ROLE_KEY
+#   2. Start talentOS_AI on the host: uvicorn … --port 8080
+#   3. docker compose up -d --build
+#
+# API: http://localhost:8001  |  Kafka: localhost:9092  |  DB: localhost:5432 (postgres/root)
+# If `deploy.replicas` is ignored on your Docker version, run:
+#   docker compose up -d --build --scale worker=3
+
 services:
   db:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: root
       POSTGRES_DB: talentos
     ports:
-      - "5433:5432"
+      - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -47,22 +58,32 @@ services:
       db:
         condition: service_healthy
       redpanda:
-        condition: service_started
+        condition: service_healthy
     ports:
-      - "8000:8000"
+      - "8001:8000"
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@db:5432/talentos
+      # Published db port on the host — same URL works in Podman and Docker Desktop.
+      DATABASE_URL: postgresql://postgres:root@host.containers.internal:5432/talentos
       APP_ENV: development
       LOG_LEVEL: INFO
-      SUPABASE_FUNCTIONS_BASE_URL: https://cohqewhcplvohyjxpyoc.supabase.co/functions/v1
+      SUPABASE_FUNCTIONS_BASE_URL: ${SUPABASE_FUNCTIONS_BASE_URL:-https://cohqewhcplvohyjxpyoc.supabase.co/functions/v1}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       SUPABASE_WEBHOOK_SECRET: ${SUPABASE_WEBHOOK_SECRET:-}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
       KAFKA_BOOTSTRAP_SERVERS: redpanda:29092
-      # Hardcoded (not ${...}) so the .env localhost value can't leak into the
-      # container, where localhost would point at the container itself.
+      KAFKA_TOPIC_EVALUATION: ${KAFKA_TOPIC_EVALUATION:-resume.evaluation.queue}
+      KAFKA_TOPIC_EVALUATION_DLQ: ${KAFKA_TOPIC_EVALUATION_DLQ:-resume.evaluation.dlq}
+      KAFKA_CONSUMER_GROUP: ${KAFKA_CONSUMER_GROUP:-resume-evaluators}
+      KAFKA_EVALUATION_PARTITIONS: ${KAFKA_EVALUATION_PARTITIONS:-6}
+      # AI runs on the host machine, not inside this compose stack.
       AI_SERVICE_BASE_URL: http://host.docker.internal:8080
+      AI_SERVICE_TIMEOUT: ${AI_SERVICE_TIMEOUT:-60}
+      ATS_THRESHOLD_DEFAULT: ${ATS_THRESHOLD_DEFAULT:-70}
+      EVALUATION_MAX_ATTEMPTS: ${EVALUATION_MAX_ATTEMPTS:-3}
+      EVALUATION_MIN_RESUME_CHARS: ${EVALUATION_MIN_RESUME_CHARS:-100}
     extra_hosts:
       - "host.docker.internal:host-gateway"
+      - "host.containers.internal:host-gateway"
     command: >
       sh -c "
         alembic upgrade head &&
@@ -77,19 +98,30 @@ services:
       db:
         condition: service_healthy
       redpanda:
+        condition: service_healthy
+      app:
         condition: service_started
     deploy:
       replicas: 3
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@db:5432/talentos
+      DATABASE_URL: postgresql://postgres:root@host.containers.internal:5432/talentos
       APP_ENV: development
       LOG_LEVEL: INFO
-      SUPABASE_FUNCTIONS_BASE_URL: https://cohqewhcplvohyjxpyoc.supabase.co/functions/v1
+      SUPABASE_FUNCTIONS_BASE_URL: ${SUPABASE_FUNCTIONS_BASE_URL:-https://cohqewhcplvohyjxpyoc.supabase.co/functions/v1}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
       KAFKA_BOOTSTRAP_SERVERS: redpanda:29092
+      KAFKA_TOPIC_EVALUATION: ${KAFKA_TOPIC_EVALUATION:-resume.evaluation.queue}
+      KAFKA_TOPIC_EVALUATION_DLQ: ${KAFKA_TOPIC_EVALUATION_DLQ:-resume.evaluation.dlq}
+      KAFKA_CONSUMER_GROUP: ${KAFKA_CONSUMER_GROUP:-resume-evaluators}
+      KAFKA_EVALUATION_PARTITIONS: ${KAFKA_EVALUATION_PARTITIONS:-6}
       AI_SERVICE_BASE_URL: http://host.docker.internal:8080
+      AI_SERVICE_TIMEOUT: ${AI_SERVICE_TIMEOUT:-60}
+      ATS_THRESHOLD_DEFAULT: ${ATS_THRESHOLD_DEFAULT:-70}
+      EVALUATION_MAX_ATTEMPTS: ${EVALUATION_MAX_ATTEMPTS:-3}
+      EVALUATION_MIN_RESUME_CHARS: ${EVALUATION_MIN_RESUME_CHARS:-100}
     extra_hosts:
       - "host.docker.internal:host-gateway"
+      - "host.containers.internal:host-gateway"
     command: python3 -m app.workers.evaluation_worker
 
 volumes:
