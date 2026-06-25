@@ -36,6 +36,23 @@ def ingest_application(
     return service.ingest(payload)
 
 
+@router.post("/evaluate-sync", status_code=status.HTTP_200_OK)
+def evaluate_sync(
+    payload: SupabaseWebhookPayload,
+    x_webhook_secret: str | None = Header(default=None, alias="X-Webhook-Secret"),
+    db: Session = Depends(get_db),
+):
+    """Synchronous webhook — receives Supabase INSERT, evaluates resume via AI,
+    stores result in resume_evaluations, and returns the evaluation."""
+    svc = EvaluationService(db)
+    svc.verify_webhook_secret(x_webhook_secret)
+
+    from app.modules.applications.application_service import ApplicationService
+    app_svc = ApplicationService(db)
+    result = app_svc.evaluate_webhook(payload.record)
+    return result
+
+
 @candidates_router.get("/{job_id}/candidates/shortlisted", response_model=list[EvaluationResponse])
 def get_shortlisted_candidates(job_id: UUID, db: Session = Depends(get_db)):
     """HR view: candidates that scored at/above the ATS threshold for a job."""

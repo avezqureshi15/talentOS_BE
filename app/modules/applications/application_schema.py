@@ -34,3 +34,21 @@ class ApplicationResponse(BaseModel):
     job_listing: JobListingBrief | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class EvaluatedCandidate(BaseModel):
+    id: str
+    job_id: str
+    name: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    cover_letter: str | None = None
+    resume_url: str | None = None
+    status: str | None = None
+    fit_score: int | None = None
+    summary_md: str | None = None
+    evaluated_at: str | None = None
+
+
+class EvaluatedCandidatesResponse(BaseModel):
+    data: list[EvaluatedCandidate]
