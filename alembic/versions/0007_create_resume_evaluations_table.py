@@ -1,7 +1,7 @@
 """Create resume_evaluations table
 
-Revision ID: 0005
-Revises: 0004
+Revision ID: 0007
+Revises: 0006
 Create Date: 2026-06-17
 """
 from typing import Sequence, Union
@@ -9,13 +9,17 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0005"
-down_revision: Union[str, None] = "0004"
+revision: str = "0007"
+down_revision: Union[str, None] = "0006"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+    if sa.inspect(bind).has_table("resume_evaluations"):
+        return
+
     op.create_table(
         "resume_evaluations",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),

@@ -5,7 +5,7 @@
 #   2. Start talentOS_AI on the host: uvicorn … --port 8080
 #   3. docker compose up -d --build
 #
-# API: http://localhost:8001  |  Kafka: localhost:9092  |  DB: localhost:5432 (postgres/root)
+# API: http://localhost:8001  |  Kafka: localhost:9092  |  DB: localhost:5432 (postgres/postgres)
 # If `deploy.replicas` is ignored on your Docker version, run:
 #   docker compose up -d --build --scale worker=3
 
@@ -15,7 +15,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: root
+      POSTGRES_PASSWORD: postgres
       POSTGRES_DB: talentos
     ports:
       - "5432:5432"
@@ -62,7 +62,8 @@ services:
     ports:
       - "8001:8000"
     environment:
-      DATABASE_URL: postgresql://postgres:root@host.containers.internal:5432/talentos
+      # Use service name `db` inside the compose network (reliable on Windows/Mac/Linux).
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/talentos
       APP_ENV: development
       LOG_LEVEL: INFO
       SUPABASE_FUNCTIONS_BASE_URL: ${SUPABASE_FUNCTIONS_BASE_URL:-https://cohqewhcplvohyjxpyoc.supabase.co/functions/v1}
@@ -102,7 +103,7 @@ services:
     deploy:
       replicas: 3
     environment:
-      DATABASE_URL: postgresql://postgres:root@host.containers.internal:5432/talentos
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/talentos
       APP_ENV: development
       LOG_LEVEL: INFO
       SUPABASE_FUNCTIONS_BASE_URL: ${SUPABASE_FUNCTIONS_BASE_URL:-https://cohqewhcplvohyjxpyoc.supabase.co/functions/v1}
