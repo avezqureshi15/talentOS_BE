@@ -10,7 +10,7 @@ For one queued application this:
 
 Raises TransientEvaluationError for retryable failures (network/5xx) so the
 worker can retry / route to the DLQ. All terminal outcomes are written to the
-resume_evaluations table.
+candidates table.
 """
 from io import BytesIO
 

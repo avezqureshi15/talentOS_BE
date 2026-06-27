@@ -77,6 +77,9 @@ class HiringRequestRepository:
         self.db.refresh(record)
         return record
 
+    def count_active(self) -> int:
+        return self.db.query(HiringRequest).filter(HiringRequest.deleted_at.is_(None)).count()
+
     def get_distinct_types(self) -> list[str]:
         results = (
             self.db.query(HiringRequest.type)

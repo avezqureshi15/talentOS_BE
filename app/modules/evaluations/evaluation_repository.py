@@ -2,17 +2,17 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
-from app.modules.evaluations.evaluation_model import EvaluationStatus, ResumeEvaluation
+from app.modules.evaluations.evaluation_model import Candidate, EvaluationStatus
 
 
 class EvaluationRepository:
     def __init__(self, db: Session):
         self.db = db
 
-    def get_by_application_id(self, application_id: str) -> ResumeEvaluation | None:
+    def get_by_application_id(self, application_id: str) -> Candidate | None:
         return (
-            self.db.query(ResumeEvaluation)
-            .filter(ResumeEvaluation.application_id == application_id)
+            self.db.query(Candidate)
+            .filter(Candidate.application_id == application_id)
             .first()
         )
 
@@ -25,8 +25,15 @@ class EvaluationRepository:
         candidate_phone: str | None = None,
         cover_letter: str | None = None,
         resume_url: str | None = None,
-    ) -> ResumeEvaluation:
-        evaluation = ResumeEvaluation(
+        current_ctc: str | None = None,
+        expected_ctc: str | None = None,
+        location: str | None = None,
+        years_of_experience: str | None = None,
+        notice_period: str | None = None,
+        how_did_you_hear: str | None = None,
+        linkedin_url: str | None = None,
+    ) -> Candidate:
+        evaluation = Candidate(
             application_id=application_id,
             job_id=job_id,
             candidate_name=candidate_name,
@@ -34,6 +41,13 @@ class EvaluationRepository:
             candidate_phone=candidate_phone,
             cover_letter=cover_letter,
             resume_url=resume_url,
+            current_ctc=current_ctc,
+            expected_ctc=expected_ctc,
+            location=location,
+            years_of_experience=years_of_experience,
+            notice_period=notice_period,
+            how_did_you_hear=how_did_you_hear,
+            linkedin_url=linkedin_url,
             status=EvaluationStatus.QUEUED.value,
         )
         self.db.add(evaluation)
@@ -41,7 +55,7 @@ class EvaluationRepository:
         self.db.refresh(evaluation)
         return evaluation
 
-    def mark_processing(self, evaluation: ResumeEvaluation) -> ResumeEvaluation:
+    def mark_processing(self, evaluation: Candidate) -> Candidate:
         evaluation.status = EvaluationStatus.PROCESSING.value
         evaluation.attempts += 1
         self.db.commit()
@@ -50,13 +64,13 @@ class EvaluationRepository:
 
     def mark_result(
         self,
-        evaluation: ResumeEvaluation,
+        evaluation: Candidate,
         status: EvaluationStatus,
         fit_score: int | None = None,
         summary_md: str | None = None,
         ats_threshold_used: int | None = None,
         error_reason: str | None = None,
-    ) -> ResumeEvaluation:
+    ) -> Candidate:
         evaluation.status = status.value
         evaluation.fit_score = fit_score
         evaluation.summary_md = summary_md
@@ -67,8 +81,36 @@ class EvaluationRepository:
         self.db.refresh(evaluation)
         return evaluation
 
-    def get_by_job(self, job_id: str, status: str | None = None) -> list[ResumeEvaluation]:
-        query = self.db.query(ResumeEvaluation).filter(ResumeEvaluation.job_id == job_id)
+    def get_by_job(self, job_id: str, status: str | None = None) -> list[Candidate]:
+        query = self.db.query(Candidate).filter(Candidate.job_id == job_id)
         if status:
-            query = query.filter(ResumeEvaluation.status == status)
-        return query.order_by(ResumeEvaluation.fit_score.desc().nullslast()).all()
+            query = query.filter(Candidate.status == status)
+        return query.order_by(Candidate.fit_score.desc().nullslast()).all()
+
+    def get_by_job_paginated(
+        self,
+        job_id: str,
+        status: str | None = None,
+        min_score: int | None = None,
+        max_score: int | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> tuple[list[Candidate], int]:
+        query = self.db.query(Candidate).filter(Candidate.job_id == job_id)
+
+        if status:
+            query = query.filter(Candidate.status == status)
+        if min_score is not None:
+            query = query.filter(Candidate.fit_score >= min_score)
+        if max_score is not None:
+            query = query.filter(Candidate.fit_score <= max_score)
+
+        total = query.count()
+        items = (
+            query
+            .order_by(Candidate.fit_score.desc().nullslast())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+        return items, total

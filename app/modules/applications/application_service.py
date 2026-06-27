@@ -39,6 +39,40 @@ class ApplicationService:
             return raw
         return []
 
+    def get_applications_paginated(
+        self,
+        job_id: str | None = None,
+        status_filter: str | None = None,
+        min_score: int | None = None,
+        max_score: int | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> dict:
+        if not self.evaluation_repo:
+            logger.warning("No DB session")
+            return {"data": [], "total": 0, "limit": limit, "offset": offset}
+
+        status_upper = None
+        if status_filter:
+            status_upper = status_filter.upper().replace("-", "_")
+            if status_upper == "NON_SHORTLISTED":
+                status_upper = EvaluationStatus.REJECTED.value
+
+        items, total = self.evaluation_repo.get_by_job_paginated(
+            job_id=job_id,
+            status=status_upper,
+            min_score=min_score,
+            max_score=max_score,
+            limit=limit,
+            offset=offset,
+        )
+        return {
+            "data": [self._to_candidate_dict(e) for e in items],
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        }
+
     def get_all_applications(self, job_id: str | None = None, status_filter: str | None = None) -> dict:
         if not self.evaluation_repo:
             logger.warning("No DB session")
@@ -94,6 +128,13 @@ class ApplicationService:
             "phone": record.phone,
             "cover_letter": record.cover_letter,
             "resume_url": record.resume_url,
+            "current_ctc": record.current_ctc,
+            "expected_ctc": record.expected_ctc,
+            "location": record.location,
+            "years_of_experience": record.years_of_experience,
+            "notice_period": record.notice_period,
+            "how_did_you_hear": record.how_did_you_hear,
+            "linkedin_url": record.linkedin_url,
         }
         result = self._evaluate_single(app_dict)
         return result or {"error": "Evaluation returned no result"}
@@ -125,6 +166,13 @@ class ApplicationService:
                 candidate_phone=app.get("phone"),
                 cover_letter=app.get("cover_letter"),
                 resume_url=app.get("resume_url"),
+                current_ctc=app.get("current_ctc"),
+                expected_ctc=app.get("expected_ctc"),
+                location=app.get("location"),
+                years_of_experience=app.get("years_of_experience"),
+                notice_period=app.get("notice_period"),
+                how_did_you_hear=app.get("how_did_you_hear"),
+                linkedin_url=app.get("linkedin_url"),
             )
 
         resume_url = app.get("resume_url") or evaluation.resume_url
@@ -195,6 +243,13 @@ class ApplicationService:
             "phone": evaluation.candidate_phone,
             "cover_letter": evaluation.cover_letter,
             "resume_url": evaluation.resume_url,
+            "current_ctc": evaluation.current_ctc,
+            "expected_ctc": evaluation.expected_ctc,
+            "location": evaluation.location,
+            "years_of_experience": evaluation.years_of_experience,
+            "notice_period": evaluation.notice_period,
+            "how_did_you_hear": evaluation.how_did_you_hear,
+            "linkedin_url": evaluation.linkedin_url,
             "status": evaluation.status,
             "fit_score": evaluation.fit_score,
             "summary_md": evaluation.summary_md,

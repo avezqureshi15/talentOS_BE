@@ -68,13 +68,47 @@ async def stream_chat_to_ai(message: str, thread_id: str) -> AsyncGenerator[byte
                 yield chunk
 
 
-def list_chats_by_visitor(db: Session, visitor_id: str) -> list[Chat]:
-    return (
-        db.query(Chat)
-        .filter(Chat.visitor_id == visitor_id)
+def list_chats_by_visitor(
+    db: Session,
+    visitor_id: str,
+    limit: int = 5,
+    offset: int = 0,
+) -> tuple[list[Chat], bool]:
+    base = db.query(Chat).filter(Chat.visitor_id == visitor_id)
+    total = base.count()
+    chats = (
+        base
         .order_by(desc(Chat.updated_at))
+        .offset(offset)
+        .limit(limit + 1)
         .all()
     )
+    has_more = len(chats) > limit
+    if has_more:
+        chats = chats[:limit]
+    return chats, has_more
+
+
+def update_chat_title(db: Session, chat_id: uuid.UUID, title: str) -> Chat | None:
+    chat = db.query(Chat).filter(Chat.id == chat_id).first()
+    if not chat:
+        return None
+    chat.title = title[:500]
+    db.commit()
+    db.refresh(chat)
+    logger.info("Updated chat title id=%s", chat_id)
+    return chat
+
+
+def delete_chat(db: Session, chat_id: uuid.UUID) -> bool:
+    chat = db.query(Chat).filter(Chat.id == chat_id).first()
+    if not chat:
+        return False
+    db.query(Message).filter(Message.chat_id == chat_id).delete()
+    db.delete(chat)
+    db.commit()
+    logger.info("Deleted chat id=%s", chat_id)
+    return True
 
 
 def get_messages_by_chat(

@@ -11,6 +11,7 @@ from app.common.exceptions.hiring_request_exception import (
     HiringRequestNotUpdatedException,
 )
 from app.core.logger import get_logger
+from app.modules.hiring_requests.hiring_request_model import HiringRequest
 from app.modules.hiring_requests.hiring_request_repository import HiringRequestRepository
 from app.modules.hiring_requests.hiring_request_schema import (
     HiringRequestCreate,
@@ -28,8 +29,15 @@ class HiringRequestService:
         self.repository = HiringRequestRepository(db)
         self.job_service = JobService()
 
+    def _next_serial(self) -> int:
+        total = self.repository.count_active()
+        return total + 1
+
     def create_hiring_request(self, data: HiringRequestCreate) -> dict:
-        logger.info("Creating hiring request: title=%s", data.title)
+        serial = self._next_serial()
+        prefixed = f"#{serial} {data.title}"
+        logger.info("Creating hiring request: title=%s", prefixed)
+        data.title = prefixed
         job_payload = JobCreate(**data.model_dump(exclude={"custom_evaluation_criteria"}))
         job_response = self.job_service.create_job(job_payload)
         supabase_job_id = job_response.get("data", {}).get("id")
@@ -84,13 +92,15 @@ class HiringRequestService:
             per_page=per_page,
         )
         items = [HiringRequestResponse.model_validate(r).model_dump() for r in records]
+        total_pages = max(1, (total + per_page - 1) // per_page)
         return {
             "data": items,
             "count": len(items),
             "page": page,
             "per_page": per_page,
-            "total_pages": max(1, (total + per_page - 1) // per_page),
+            "total_pages": total_pages,
             "total": total,
+            "has_more": page < total_pages,
         }
 
     def update_hiring_request(self, hiring_request_id: UUID, data: HiringRequestUpdate) -> dict:
