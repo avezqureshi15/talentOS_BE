@@ -23,6 +23,7 @@ class UserResponse(BaseModel):
     date_of_birth: date
     internship_duration: int | None
     band: str
+    skills: str | None = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

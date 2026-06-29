@@ -89,16 +89,20 @@ class EvaluationRepository:
 
     def get_by_job_paginated(
         self,
-        job_id: str,
+        job_id: str | None = None,
         status: str | None = None,
         schedule: str | None = None,
         min_score: int | None = None,
         max_score: int | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
         limit: int = 20,
         offset: int = 0,
     ) -> tuple[list[Candidate], int]:
-        query = self.db.query(Candidate).filter(Candidate.job_id == job_id)
+        query = self.db.query(Candidate)
 
+        if job_id:
+            query = query.filter(Candidate.job_id == job_id)
         if status:
             query = query.filter(Candidate.status == status)
         if schedule == "scheduled":
@@ -109,6 +113,10 @@ class EvaluationRepository:
             query = query.filter(Candidate.fit_score >= min_score)
         if max_score is not None:
             query = query.filter(Candidate.fit_score <= max_score)
+        if date_from:
+            query = query.filter(Candidate.created_at >= date_from)
+        if date_to:
+            query = query.filter(Candidate.created_at <= date_to)
 
         total = query.count()
         items = (

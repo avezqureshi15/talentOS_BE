@@ -39,6 +39,15 @@ class ApplicationService:
             return raw
         return []
 
+    def get_application_by_id(self, application_id: str) -> dict | None:
+        if not self.evaluation_repo:
+            logger.warning("No DB session")
+            return None
+        evaluation = self.evaluation_repo.get_by_application_id(application_id)
+        if not evaluation:
+            return None
+        return self._to_candidate_dict(evaluation)
+
     def get_applications_paginated(
         self,
         job_id: str | None = None,
@@ -46,6 +55,8 @@ class ApplicationService:
         schedule_filter: str | None = None,
         min_score: int | None = None,
         max_score: int | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
         limit: int = 20,
         offset: int = 0,
     ) -> dict:
@@ -74,6 +85,8 @@ class ApplicationService:
             schedule=parsed_schedule,
             min_score=min_score,
             max_score=max_score,
+            date_from=date_from,
+            date_to=date_to,
             limit=limit,
             offset=offset,
         )
