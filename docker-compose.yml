@@ -1,13 +1,7 @@
-# talentOS Phase 2 — resume evaluation pipeline
-#
-# Start everything (Postgres + Redpanda + API + 3 workers):
-#   1. Copy .env.example → .env and fill SUPABASE_WEBHOOK_SECRET + SUPABASE_SERVICE_ROLE_KEY
-#   2. Start talentOS_AI on the host: uvicorn … --port 8080
-#   3. docker compose up -d --build
-#
-# API: http://localhost:8001  |  Kafka: localhost:9092  |  DB: localhost:5432 (postgres/postgres)
-# If `deploy.replicas` is ignored on your Docker version, run:
-#   docker compose up -d --build --scale worker=3
+# Prerequisites: copy .env.example → .env, start talentOS_AI on :8080, then:
+#   docker compose up -d --build
+# API: http://localhost:8001  |  Kafka: :9092  |  DB host: :5433 (container :5432)
+# Scale workers if needed: docker compose up -d --scale worker=3
 
 services:
   db:
@@ -18,7 +12,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: talentos
     ports:
-      - "5432:5432"
+      - "5433:5432"  # host 5433 avoids clash with local PostgreSQL on 5432
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -62,7 +56,6 @@ services:
     ports:
       - "8001:8000"
     environment:
-      # Use service name `db` inside the compose network (reliable on Windows/Mac/Linux).
       DATABASE_URL: postgresql://postgres:postgres@db:5432/talentos
       APP_ENV: development
       LOG_LEVEL: INFO
