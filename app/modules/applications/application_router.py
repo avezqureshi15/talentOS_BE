@@ -16,6 +16,7 @@ router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/applications", tags=["appli
 def get_all_applications(
     job_id: str | None = Query(default=None, description="Filter by job ID"),
     status: str | None = Query(default=None, description="Filter by evaluation status (SHORTLISTED, REJECTED, etc.)"),
+    schedule: str | None = Query(default=None, description="Filter by schedule status (scheduled, unscheduled)"),
     min_score: int | None = Query(default=None, ge=0, le=100, description="Minimum ATS score filter"),
     max_score: int | None = Query(default=None, ge=0, le=100, description="Maximum ATS score filter"),
     limit: int = Query(default=20, ge=1, le=100, description="Number of candidates to return"),
@@ -26,6 +27,7 @@ def get_all_applications(
     return service.get_applications_paginated(
         job_id=job_id,
         status_filter=status,
+        schedule_filter=schedule,
         min_score=min_score,
         max_score=max_score,
         limit=limit,

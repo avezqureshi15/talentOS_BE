@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from enum import Enum
 
-from sqlalchemy import DateTime, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -38,6 +38,7 @@ class Candidate(Base):
     notice_period: Mapped[str | None] = mapped_column(String(50), nullable=True)
     how_did_you_hear: Mapped[str | None] = mapped_column(String(100), nullable=True)
     linkedin_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    scheduled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     status: Mapped[str] = mapped_column(
         String(30), nullable=False, default=EvaluationStatus.QUEUED.value, index=True

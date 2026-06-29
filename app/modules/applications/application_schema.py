@@ -54,6 +54,7 @@ class EvaluatedCandidate(BaseModel):
     fit_score: int | None = None
     summary_md: str | None = None
     evaluated_at: str | None = None
+    scheduled: bool = False
 
 
 class EvaluatedCandidatesResponse(BaseModel):

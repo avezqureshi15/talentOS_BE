@@ -91,6 +91,7 @@ class EvaluationRepository:
         self,
         job_id: str,
         status: str | None = None,
+        schedule: str | None = None,
         min_score: int | None = None,
         max_score: int | None = None,
         limit: int = 20,
@@ -100,6 +101,10 @@ class EvaluationRepository:
 
         if status:
             query = query.filter(Candidate.status == status)
+        if schedule == "scheduled":
+            query = query.filter(Candidate.scheduled == True)
+        elif schedule == "unscheduled":
+            query = query.filter(Candidate.scheduled == False)
         if min_score is not None:
             query = query.filter(Candidate.fit_score >= min_score)
         if max_score is not None:

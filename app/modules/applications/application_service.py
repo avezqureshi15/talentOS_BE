@@ -43,6 +43,7 @@ class ApplicationService:
         self,
         job_id: str | None = None,
         status_filter: str | None = None,
+        schedule_filter: str | None = None,
         min_score: int | None = None,
         max_score: int | None = None,
         limit: int = 20,
@@ -53,14 +54,24 @@ class ApplicationService:
             return {"data": [], "total": 0, "limit": limit, "offset": offset}
 
         status_upper = None
+        parsed_schedule = None
         if status_filter:
             status_upper = status_filter.upper().replace("-", "_")
             if status_upper == "NON_SHORTLISTED":
                 status_upper = EvaluationStatus.REJECTED.value
+            elif status_upper == "SCHEDULED":
+                parsed_schedule = "scheduled"
+                status_upper = None
+            elif status_upper == "UNSCHEDULED":
+                parsed_schedule = "unscheduled"
+                status_upper = None
+        if schedule_filter and not parsed_schedule:
+            parsed_schedule = schedule_filter.lower()
 
         items, total = self.evaluation_repo.get_by_job_paginated(
             job_id=job_id,
             status=status_upper,
+            schedule=parsed_schedule,
             min_score=min_score,
             max_score=max_score,
             limit=limit,
@@ -254,6 +265,7 @@ class ApplicationService:
             "fit_score": evaluation.fit_score,
             "summary_md": evaluation.summary_md,
             "evaluated_at": evaluation.evaluated_at.isoformat() if evaluation.evaluated_at else None,
+            "scheduled": evaluation.scheduled,
         }
 
     def _extract_resume_text(self, resume_url: str) -> str:
