@@ -27,6 +27,8 @@ def upgrade() -> None:
         sa.Column("job_id", sa.String(length=255), nullable=False),
         sa.Column("candidate_name", sa.String(length=255), nullable=True),
         sa.Column("candidate_email", sa.String(length=255), nullable=True),
+        sa.Column("candidate_phone", sa.String(length=30), nullable=True),
+        sa.Column("cover_letter", sa.Text(), nullable=True),
         sa.Column("resume_url", sa.String(length=1024), nullable=True),
         sa.Column("status", sa.String(length=30), nullable=False, server_default="QUEUED"),
         sa.Column("fit_score", sa.Integer(), nullable=True),
