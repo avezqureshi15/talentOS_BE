@@ -11,6 +11,7 @@ from app.db.base import Base
 from app.db.session import engine
 from app.middleware import RequestLoggingMiddleware
 from app.modules.applications import router as applications_router
+from app.modules.auth.auth_router import router as auth_router
 from app.modules.chat.chat_router import router as chat_router
 from app.modules.designation import router as designation_router
 from app.modules.evaluations import candidates_router as evaluation_candidates_router
@@ -43,6 +44,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(RequestLoggingMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://localhost:4173"],
@@ -50,9 +53,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-app.add_middleware(RequestLoggingMiddleware)
 register_exception_handlers(app)
+app.include_router(auth_router)
 app.include_router(todo_router)
 app.include_router(jobs_router)
 app.include_router(applications_router)

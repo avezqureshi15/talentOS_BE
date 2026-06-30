@@ -35,6 +35,19 @@ class Settings(BaseSettings):
     EVALUATION_MAX_ATTEMPTS: int = 3
     EVALUATION_MIN_RESUME_CHARS: int = 100
 
+    # Google OAuth
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+
+    # Auth
+    ALLOWED_EMAIL_DOMAIN: str = ""
+
+    # JWT
+    JWT_SECRET: str = ""
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "case_sensitive": True}
 
 
