@@ -17,6 +17,7 @@ from app.modules.evaluations import candidates_router as evaluation_candidates_r
 from app.modules.evaluations import router as evaluations_router
 from app.modules.hiring_requests import router as hiring_requests_router
 from app.modules.jobs import router as jobs_router
+from app.modules.slots import router as slots_router
 from app.modules.todo import router as todo_router
 from app.modules.users import router as users_router
 
@@ -59,6 +60,7 @@ app.include_router(applications_router)
 app.include_router(chat_router)
 app.include_router(designation_router)
 app.include_router(hiring_requests_router)
+app.include_router(slots_router)
 app.include_router(users_router)
 app.include_router(evaluations_router)
 app.include_router(evaluation_candidates_router)
