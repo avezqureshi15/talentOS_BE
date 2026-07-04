@@ -547,9 +547,157 @@ class TodoService:
 
 ---
 
+## 10. Cross-Module Boundaries — ZERO Sideways Imports
+
+### 10.1 The Golden Rule
+
+A module **MUST NEVER** import from another sibling module. The only valid dependency direction is downward into `app/common/`:
+
+```
+app/modules/evaluations/                 app/modules/applications/
+        │                                       │
+        │  FORBIDDEN ←──────────────────────────│
+        ▼                                       ▼
+    app/common/exceptions/               app/common/clients/
+```
+
+### 10.2 What Counts as a Sideways Import
+
+```python
+# FORBIDDEN — importing repository from another module
+from app.modules.evaluations.evaluation_repository import EvaluationRepository
+
+# FORBIDDEN — importing service from another module
+from app.modules.jobs.job_service import JobService
+
+# FORBIDDEN — importing model from another module
+from app.modules.evaluations.evaluation_model import EvaluationStatus
+
+# FORBIDDEN — importing schema from another module
+from app.modules.evaluations.evaluation_schema import AIEvaluationRequest
+```
+
+### 10.3 Allowed Dependency Graph
+
+```
+app/
+├── common/           ← EVERY module may import from here
+│   ├── exceptions/     shared exception classes
+│   ├── schemas/        shared Pydantic models (if needed)
+│   ├── clients/        adapters for external APIs
+│   └── utils/          pure utility functions
+├── core/             ← EVERY module may import from here
+│   ├── config.py       settings
+│   ├── constants.py    ErrorCode, pagination defaults
+│   └── logger.py       log setup
+├── db/               ← EVERY module may import from here
+│   └── session.py      engine, get_db
+├── middleware/        ← no module imports from here
+├── modules/          ← NO module imports from another module
+│   ├── evaluations/
+│   ├── applications/
+│   ├── hiring_requests/
+│   ├── jobs/
+│   └── ...
+└── workers/          ← MAY import from modules (orchestration layer)
+```
+
+### 10.4 Sharing Types Between Modules
+
+If two modules need the same type (DTO, model, exception), the type belongs in `app/common/`:
+
+```python
+# app/common/schemas/evaluation.py
+class EvaluationResult(BaseModel):
+    application_id: str
+    fit_score: int
+    status: str
+
+# app/common/clients/ai_client.py
+class AIClient:
+    def evaluate_resume(self, ...) -> EvaluationResult: ...
+```
+
+### 10.5 Cross-Module Orchestration
+
+When one module's flow depends on another (e.g., `applications` needs to evaluate candidates), the orchestration lives in `app/workers/` or the router layer injects both services — but neither module imports the other.
+
+```python
+# ACCEPTABLE — worker imports multiple modules
+# app/workers/evaluation_worker.py
+from app.modules.evaluations.evaluation_service import EvaluationService
+from app.modules.applications.application_service import ApplicationService
+
+# ACCEPTABLE — router-level composition (only in the consuming router)
+# app/modules/evaluations/evaluation_router.py
+# (import ApplicationService only inside the endpoint function)
+```
+
+**Exception**: Workers and routers are the ONLY places where cross-module imports are tolerated, and only when strictly necessary.
+
 ---
 
-## 11. External API Integration (httpx)
+## 11. External API Integration — Adapter Pattern (httpx)
+
+### 11.1 One Adapter Per External Service
+
+Every external API **MUST** have a dedicated adapter class in `app/common/clients/`. No raw `httpx` calls in business logic.
+
+```python
+# app/common/clients/supabase_client.py
+class SupabaseClient:
+    """Single adapter for all Supabase Edge Function calls."""
+
+    def __init__(self, base_url: str, timeout: int = 30):
+        self.base_url = base_url.rstrip("/")
+        self.timeout = timeout
+
+    def _request(self, method: str, path: str, **kwargs) -> dict:
+        url = f"{self.base_url}/{path.lstrip('/')}"
+        with httpx.Client(timeout=self.timeout) as client:
+            response = client.request(method, url, **kwargs)
+            response.raise_for_status()
+            return response.json()
+
+    def get_job(self, job_id: str) -> dict:
+        return self._request("GET", f"/manage-job-listings", params={"id": job_id})
+
+    def create_job(self, data: dict) -> dict:
+        return self._request("POST", "/manage-job-listings", json=data)
+
+    def get_applications(self) -> dict:
+        return self._request("GET", "/get-applications")
+
+    def send_email(self, payload: dict) -> dict:
+        return self._request("POST", "/send-application-email", json=payload)
+```
+
+### 11.2 Why This Exists
+
+- If Supabase changes its base URL, auth headers, or response format — one file changes, not 7
+- The adapter is the **only** place that imports `httpx` for external calls
+- Services receive the adapter via constructor injection, making them testable with a mock
+- Every call has a typed method instead of raw URLs scattered across the codebase
+
+### 11.3 Enforcing the Rule
+
+```python
+# BAD — httpx call in service
+class JobService:
+    def create_job(self, data: JobCreate) -> dict:
+        with httpx.Client(timeout=30) as client:
+            response = client.post("https://supabase/manage-job-listings", ...)
+
+# GOOD — adapter injected
+class JobService:
+    def __init__(self, supabase: SupabaseClient):
+        self.supabase = supabase
+
+    def create_job(self, data: JobCreate) -> dict:
+        return self.supabase.create_job(data.model_dump())
+```
+
+---
 
 All outbound HTTP calls MUST use the `httpx` library:
 
@@ -577,7 +725,72 @@ except httpx.RequestError as exc:
 
 ---
 
-## 12. Module `__init__.py` Pattern
+## 12. Module Interfaces — Protocols for Testability
+
+### 12.1 Why Protocols
+
+Every repository and external client **MUST** define a Protocol (or ABC). This makes services unit-testable without touching the database or network.
+
+```python
+# app/modules/todo/todo_repository.py
+from typing import Protocol
+
+
+class TodoRepositoryProtocol(Protocol):
+    def get_by_id(self, todo_id: int) -> Todo | None: ...
+    def get_all(self) -> list[Todo]: ...
+    def create(self, data: dict) -> Todo: ...
+    def update(self, todo: Todo, data: dict) -> Todo: ...
+    def delete(self, todo: Todo) -> None: ...
+
+
+class TodoRepository:
+    def __init__(self, db: Session):
+        self.db = db
+
+    def get_by_id(self, todo_id: int) -> Todo | None:
+        ...
+```
+
+### 12.2 Service Injection
+
+Services accept protocols, not concrete classes:
+
+```python
+class TodoService:
+    def __init__(self, repo: TodoRepositoryProtocol):
+        self.repository = repo
+```
+
+### 12.3 Testing
+
+```python
+# tests/test_todo_service.py
+class FakeTodoRepo:
+    def get_by_id(self, todo_id: int) -> Todo | None:
+        return fake_todo if todo_id == 1 else None
+
+def test_get_todo_by_id():
+    service = TodoService(repo=FakeTodoRepo())
+    result = service.get_todo_by_id(1)
+    assert result.id == 1
+```
+
+### 12.4 External Clients
+
+Every external API adapter must also have a protocol:
+
+```python
+# app/common/clients/supabase_client.py
+
+class SupabaseClientProtocol(Protocol):
+    def get_job(self, job_id: str) -> dict: ...
+    def create_job(self, data: dict) -> dict: ...
+```
+
+---
+
+## 13. Module `__init__.py` Pattern
 
 Each module's `__init__.py` re-exports exactly one thing: the router.
 
@@ -599,15 +812,47 @@ app.include_router(todo_router)
 
 ---
 
-## 13. Adding a New Module — Step-by-Step
+## 14. Adding a New Module — Step-by-Step
 
-### DB-Backed Module (stores data in our PostgreSQL)
+### Standard Module Skeleton (Every module MUST use one of these two shapes)
+
+**DB-Backed Module (stores data in PostgreSQL):**
+
+```
+app/modules/<name>/
+├── __init__.py              # re-exports router
+├── <name>_model.py          # SQLAlchemy model
+├── <name>_schema.py         # Pydantic request/response DTOs
+├── <name>_repository.py     # ORM queries + Protocol
+├── <name>_service.py        # business logic (max 150 lines)
+└── <name>_router.py         # endpoints (max 80 lines)
+```
+
+**Proxy Module (external API only, no local DB):**
+
+```
+app/modules/<name>/
+├── __init__.py              # re-exports router
+├── <name>_schema.py         # Pydantic request/response DTOs
+├── <name>_service.py        # business logic (max 150 lines)
+└── <name>_router.py         # endpoints (max 80 lines)
+```
+
+**Rules:**
+- Every module MUST have ALL files listed above — no missing layers
+- No module is allowed to skip the repository layer (even if queries are trivial)
+- If a module needs types from another domain → the type goes in `app/common/schemas/`
+- File size limits: router ≤ 80 lines, service ≤ 150 lines, repository ≤ 100 lines
+
+### Step-by-Step
+
+#### DB-Backed Module
 
 1. Create `app/modules/<name>/` directory
-2. Create files (in order of dependency):
+2. Create files in order:
    - `<name>_model.py` — SQLAlchemy model
    - `<name>_schema.py` — Pydantic DTOs
-   - `<name>_repository.py` — ORM queries
+   - `<name>_repository.py` — ORM queries + Protocol
    - `<name>_service.py` — business logic + logging
    - `<name>_router.py` — endpoints
 3. Create `__init__.py` that re-exports the router
@@ -619,12 +864,12 @@ app.include_router(todo_router)
 9. Add new `ErrorCode` values to `app/core/constants.py` if needed
 10. Add seed data in `seed/` if needed
 
-### Proxy Module (calls external API, no local storage)
+#### Proxy Module
 
 1. Create `app/modules/<name>/` directory
 2. Create files:
    - `<name>_schema.py` — Pydantic request DTOs
-   - `<name>_service.py` — httpx calls to external API + error handling
+   - `<name>_service.py` — business logic + external API calls via adapter
    - `<name>_router.py` — endpoints
 3. Create `__init__.py` that re-exports the router
 4. Register the router in `app/main.py`
@@ -633,7 +878,92 @@ app.include_router(todo_router)
 
 ---
 
-## 14. Naming Conventions
+## 15. Response Format — Always Use Pydantic Models, Never Raw Dicts
+
+### 15.1 No `_to_candidate_dict` Patterns
+
+Returning raw dictionaries from services bypasses FastAPI's serialization, validation, and OpenAPI generation. Every response **MUST** use a Pydantic schema.
+
+```python
+# BAD — manually constructed dict
+def _to_candidate_dict(self, evaluation) -> dict:
+    return {
+        "id": evaluation.application_id,
+        "name": evaluation.candidate_name,
+        "status": evaluation.status,
+    }
+
+# GOOD — Pydantic model
+class CandidateResponse(BaseModel):
+    id: str
+    name: str | None
+    status: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+def to_response(self, evaluation: Candidate) -> CandidateResponse:
+    return CandidateResponse.model_validate(evaluation)
+```
+
+### 15.2 Benefits
+
+- FastAPI validates the response shape automatically
+- OpenAPI/Swagger docs reflect the real response schema
+- Breaking changes are caught at compile time (type errors) instead of at runtime
+- No manual field mapping — `model_validate()` handles ORM -> Pydantic automatically
+
+### 15.3 Envelope Pattern
+
+List endpoints MUST use the envelope pattern with a Pydantic wrapper:
+
+```python
+class PaginatedResponse(BaseModel):
+    data: list[CandidateResponse]
+    total: int
+    limit: int
+    offset: int
+
+    model_config = ConfigDict(from_attributes=True)
+```
+
+No endpoint returns a raw `list[...]` or a hand-crafted `{"data": ..., "count": ...}` dict.
+
+---
+
+## 16. Authentication — MUST Be Implemented Before Any Production Deployment
+
+### 16.1 Current Status
+
+The `auth/` module exists but is empty. JWT secrets, Google OAuth client ID/secret, and allowed email domain are already configured in `.env` but not wired into the application.
+
+### 16.2 Requirements
+
+Before going to production:
+
+- [ ] `app/modules/auth/` must contain: `auth_router.py`, `auth_service.py`, `auth_schema.py`
+- [ ] Google OAuth callback endpoint (`GET /api/v1/auth/google/callback`)
+- [ ] JWT access token (15 min) + refresh token (7 day) issuance
+- [ ] `Depends(get_current_user)` dependency that verifies the Bearer token
+- [ ] Email domain restriction (only `ALLOWED_EMAIL_DOMAIN`)
+- [ ] All protected endpoints require `get_current_user` dependency
+
+### 16.3 Router Protection Pattern
+
+Once auth is implemented:
+
+```python
+# Protected endpoint
+@router.get("/hiring-requests")
+def list_requests(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),  # ← required
+):
+    ...
+```
+
+---
+
+## 17. Naming Conventions
 
 | Element | Convention | Example |
 |---------|-----------|---------|
@@ -649,7 +979,7 @@ app.include_router(todo_router)
 
 ---
 
-## 15. Code Style
+## 18. Code Style
 
 - Line length: 120 characters maximum
 - Indentation: 4 spaces (no tabs)
@@ -658,18 +988,24 @@ app.include_router(todo_router)
 - No `print()` — use `logger`
 - No bare `except:` — catch specific exceptions
 - No wildcard imports (`from x import *`)
-- F-strings are allowed only in **exception messages** (where printf-style is not possible);
-
-  for logging always use printf-style
+- F-strings are allowed only in **exception messages** (where printf-style is not possible)
+- Logging MUST use printf-style formatting (`"message: var=%s", var`) — never f-strings in `logger.*` calls
+- **File size limits** (strictly enforced):
+  - Router files: **≤ 80 lines**
+  - Service files: **≤ 150 lines**
+  - Repository files: **≤ 100 lines**
+  - Model files: **≤ 60 lines**
+  - Schema files: **≤ 100 lines**
+  - If a file exceeds its limit, split it into multiple files or extract logic into a helper module
 
 ---
 
-## 16. Alembic Migrations
+## 19. Alembic Migrations
 
 Alembic is the **only** way to manage schema changes. Never use `Base.metadata.create_all()`
 in production (it's used in `main.py` only as a fallback for local dev).
 
-### 16.1 Creating a Migration
+### 19.1 Creating a Migration
 
 ```bash
 # After adding a new model, generate a migration:
@@ -680,7 +1016,7 @@ docker compose exec app alembic revision --autogenerate -m "create users table"
 docker compose exec app alembic upgrade head
 ```
 
-### 16.2 Migration Standards
+### 19.2 Migration Standards
 
 - Each migration file must have a descriptive message
 - Always provide both `upgrade()` and `downgrade()` functions
@@ -688,7 +1024,7 @@ docker compose exec app alembic upgrade head
 - Never edit an existing migration that has been committed — create a new one
 - Use `--autogenerate` only as a starting point; always review the output
 
-### 16.3 Wiring New Models
+### 19.3 Wiring New Models
 
 When you create a new SQLAlchemy model, import it in `alembic/env.py` so Alembic
 can detect it for autogenerate:
@@ -703,9 +1039,9 @@ target_metadata = Base.metadata
 
 ---
 
-## 17. Seeding
+## 20. Seeding
 
-### 17.1 Seed Files
+### 20.1 Seed Files
 
 Place seed data in `seed/<module>_seed.py`:
 
@@ -717,7 +1053,7 @@ USER_SEEDS = [
 ]
 ```
 
-### 17.2 Running Seeds
+### 20.2 Running Seeds
 
 ```bash
 # Via Docker:
@@ -727,7 +1063,7 @@ docker compose exec app python3 -m seed.run_seed
 python -m seed.run_seed
 ```
 
-### 17.3 Seed Runner Pattern
+### 20.3 Seed Runner Pattern
 
 The runner checks for existing data and skips if records already exist (idempotent):
 
@@ -742,9 +1078,9 @@ if existing > 0:
 
 ---
 
-## 18. Docker — The Only Setup Path
+## 21. Docker — The Only Setup Path
 
-### 18.1 Single Command
+### 21.1 Single Command
 
 ```bash
 cp .env.example .env        # edit DATABASE_URL if needed
@@ -759,7 +1095,7 @@ That single command does all of the following:
 5. Runs `python3 -m seed.run_seed` to seed initial data (idempotent)
 6. Starts the uvicorn server on port 8000
 
-### 18.2 Other Useful Commands
+### 21.2 Other Useful Commands
 
 ```bash
 docker compose logs -f                                   # tail logs
@@ -771,7 +1107,7 @@ docker compose exec app python3 -m seed.run_seed          # re-seed
 docker compose exec app python3 -c "from app.db.session import engine; engine.connect()"  # test DB
 ```
 
-### 18.3 Required Environment Variables
+### 21.3 Required Environment Variables
 
 ```
 DATABASE_URL=postgresql://postgres:postgres@db:5432/talentos
@@ -788,7 +1124,7 @@ sending if the key is not set.
 
 ---
 
-## 19. Testing Conventions (not yet implemented)
+## 22. Testing Conventions (not yet implemented)
 
 When tests are added:
 
@@ -800,7 +1136,7 @@ When tests are added:
 
 ---
 
-## 20. Summary — Checklist Before Committing
+## 23. Summary — Checklist Before Committing
 
 - [ ] Constants defined at the right level (global vs module)
 - [ ] Exceptions inherit `BaseAppException`, registered in `__init__.py`
@@ -819,3 +1155,11 @@ When tests are added:
 - [ ] New config vars added to `.env.example` and `Settings` class
 - [ ] Seed data added for new modules (if applicable)
 - [ ] httpx timeouts set for all external API calls
+- [ ] **Cross-module check**: zero imports from sibling modules
+- [ ] **Adapter check**: all external API calls go through `app/common/clients/`
+- [ ] **Protocol check**: repository and client protocols defined
+- [ ] **File size check**: router ≤ 80 lines, service ≤ 150 lines, repository ≤ 100 lines
+- [ ] **Response check**: no raw dicts — all responses use Pydantic models
+- [ ] **Module skeleton check**: all required files exist (model, schema, repo, service, router)
+- [ ] **Auth check**: protected endpoints include `Depends(get_current_user)` (when auth is live)
+- [ ] **No duplication check**: no repeated business logic across modules (extract to `common/`)
