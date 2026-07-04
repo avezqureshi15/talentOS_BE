@@ -219,6 +219,28 @@ class ApplicationService:
 
         self.evaluation_repo.mark_processing(evaluation)
 
+        logger.info("Raw extracted resume text for application_id=%s:\n%s", application_id, resume_text)
+
+        # Append candidate metadata from the evaluation record
+        candidate_meta_parts = []
+        for label, val in [
+            ("Years of Experience", evaluation.years_of_experience),
+            ("Current CTC", evaluation.current_ctc),
+            ("Expected CTC", evaluation.expected_ctc),
+            ("Location", evaluation.location),
+            ("Notice Period", evaluation.notice_period),
+        ]:
+            if val:
+                candidate_meta_parts.append(f"{label}: {val}")
+
+        if candidate_meta_parts:
+            resume_text += "\n\n--- Candidate Details ---\n" + "\n".join(candidate_meta_parts)
+            logger.info(
+                "Enriched resume with candidate details for application_id=%s", application_id
+            )
+
+        logger.info("Final resume text sent to AI for application_id=%s:\n%s", application_id, resume_text)
+
         jd_details = self._fetch_jd_details(job_id)
 
         try:

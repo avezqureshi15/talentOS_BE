@@ -39,3 +39,10 @@ class UserService:
         has_more = (page * per_page) < total
         logger.debug("Found %d users (total=%d, has_more=%s)", len(data), total, has_more)
         return PaginatedUserResponse(data=data, total=total, page=page, per_page=per_page, has_more=has_more)
+
+    def list_users(self, page: int = 1, per_page: int = 20, q: str | None = None) -> PaginatedUserResponse:
+        logger.info("Listing users: page=%d per_page=%d q=%s", page, per_page, q)
+        users, total = self.repository.list_all(page, per_page, q)
+        data = [UserResponse.model_validate(u) for u in users]
+        has_more = (page * per_page) < total
+        return PaginatedUserResponse(data=data, total=total, page=page, per_page=per_page, has_more=has_more)

@@ -14,6 +14,7 @@ from app.modules.applications import router as applications_router
 from app.modules.auth.auth_router import router as auth_router
 from app.modules.chat.chat_router import router as chat_router
 from app.modules.designation import router as designation_router
+from app.modules.email.email_router import router as email_router
 from app.modules.evaluations import candidates_router as evaluation_candidates_router
 from app.modules.evaluations import router as evaluations_router
 from app.modules.hiring_requests import router as hiring_requests_router
@@ -64,6 +65,7 @@ app.include_router(hiring_requests_router)
 app.include_router(users_router)
 app.include_router(evaluations_router)
 app.include_router(evaluation_candidates_router)
+app.include_router(email_router)
 
 
 @app.get("/health", tags=["health"])
