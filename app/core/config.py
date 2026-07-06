@@ -35,10 +35,14 @@ class Settings(BaseSettings):
     EVALUATION_MAX_ATTEMPTS: int = 3
     EVALUATION_MIN_RESUME_CHARS: int = 100
 
-    # Auth / JWT
+    # Google OAuth
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
+
+    # Auth
     ALLOWED_EMAIL_DOMAIN: str = ""
+
+    # JWT
     JWT_SECRET: str = ""
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
