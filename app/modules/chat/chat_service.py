@@ -29,22 +29,22 @@ def _parse_ndjson_line(line: str) -> str:
     return ""
 
 
-def get_or_create_chat(db: Session, chat_id: str | None, visitor_id: str | None, message: str) -> Chat:
+def get_or_create_chat(db: Session, chat_id: str | None, user_id: int, message: str) -> Chat:
     if chat_id:
-        chat = db.query(Chat).filter(Chat.id == chat_id).first()
+        chat = db.query(Chat).filter(Chat.id == chat_id, Chat.user_id == user_id).first()
         if chat:
             return chat
 
     title = message[:500] if message else "New chat"
     chat = Chat(
         id=uuid.uuid4() if not chat_id else uuid.UUID(chat_id),
-        visitor_id=visitor_id or "unknown",
+        user_id=user_id,
         title=title,
     )
     db.add(chat)
     db.commit()
     db.refresh(chat)
-    logger.info("Created chat id=%s visitor=%s title=%s", chat.id, chat.visitor_id, chat.title[:50])
+    logger.info("Created chat id=%s user=%d title=%s", chat.id, chat.user_id, chat.title[:50])
     return chat
 
 
@@ -68,13 +68,51 @@ async def stream_chat_to_ai(message: str, thread_id: str) -> AsyncGenerator[byte
                 yield chunk
 
 
-def list_chats_by_visitor(db: Session, visitor_id: str) -> list[Chat]:
-    return (
-        db.query(Chat)
-        .filter(Chat.visitor_id == visitor_id)
+def list_chats_by_user(
+    db: Session,
+    user_id: int,
+    limit: int = 5,
+    offset: int = 0,
+) -> tuple[list[Chat], bool]:
+    base = db.query(Chat).filter(Chat.user_id == user_id)
+    total = base.count()
+    chats = (
+        base
         .order_by(desc(Chat.updated_at))
+        .offset(offset)
+        .limit(limit + 1)
         .all()
     )
+    has_more = len(chats) > limit
+    if has_more:
+        chats = chats[:limit]
+    return chats, has_more
+
+
+def get_chat_owned_by_user(db: Session, chat_id: uuid.UUID, user_id: int) -> Chat | None:
+    return db.query(Chat).filter(Chat.id == chat_id, Chat.user_id == user_id).first()
+
+
+def update_chat_title(db: Session, chat_id: uuid.UUID, title: str) -> Chat | None:
+    chat = db.query(Chat).filter(Chat.id == chat_id).first()
+    if not chat:
+        return None
+    chat.title = title[:500]
+    db.commit()
+    db.refresh(chat)
+    logger.info("Updated chat title id=%s", chat_id)
+    return chat
+
+
+def delete_chat(db: Session, chat_id: uuid.UUID) -> bool:
+    chat = db.query(Chat).filter(Chat.id == chat_id).first()
+    if not chat:
+        return False
+    db.query(Message).filter(Message.chat_id == chat_id).delete()
+    db.delete(chat)
+    db.commit()
+    logger.info("Deleted chat id=%s", chat_id)
+    return True
 
 
 def get_messages_by_chat(

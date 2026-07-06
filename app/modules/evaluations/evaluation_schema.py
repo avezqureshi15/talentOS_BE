@@ -14,6 +14,13 @@ class WebhookRecord(BaseModel):
     phone: str | None = Field(None)
     cover_letter: str | None = Field(None)
     resume_url: str | None = Field(None)
+    current_ctc: str | None = Field(None)
+    expected_ctc: str | None = Field(None)
+    location: str | None = Field(None)
+    years_of_experience: str | None = Field(None)
+    notice_period: str | None = Field(None)
+    how_did_you_hear: str | None = Field(None)
+    linkedin_url: str | None = Field(None)
     status: str | None = Field(None)
     created_at: datetime | None = Field(None)
 

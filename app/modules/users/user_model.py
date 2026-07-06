@@ -1,6 +1,7 @@
 from datetime import date, datetime, timezone
+from typing import Optional
 
-from sqlalchemy import Date, DateTime, Integer, String
+from sqlalchemy import Date, DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -28,6 +29,7 @@ class User(Base):
     date_of_birth: Mapped[date] = mapped_column(Date, nullable=False)
     internship_duration: Mapped[int | None] = mapped_column(Integer, nullable=True)
     band: Mapped[str] = mapped_column(String(50), nullable=False)
+    skills: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

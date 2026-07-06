@@ -1,7 +1,7 @@
 """Create resume_evaluations table
 
-Revision ID: 0007
-Revises: 0006
+Revision ID: 0005
+Revises: 0004
 Create Date: 2026-06-17
 """
 from typing import Sequence, Union
@@ -9,17 +9,13 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0007"
-down_revision: Union[str, None] = "0006"
+revision: str = "0005b"
+down_revision: Union[str, None] = "0004"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    bind = op.get_bind()
-    if sa.inspect(bind).has_table("resume_evaluations"):
-        return
-
     op.create_table(
         "resume_evaluations",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
@@ -27,8 +23,6 @@ def upgrade() -> None:
         sa.Column("job_id", sa.String(length=255), nullable=False),
         sa.Column("candidate_name", sa.String(length=255), nullable=True),
         sa.Column("candidate_email", sa.String(length=255), nullable=True),
-        sa.Column("candidate_phone", sa.String(length=30), nullable=True),
-        sa.Column("cover_letter", sa.Text(), nullable=True),
         sa.Column("resume_url", sa.String(length=1024), nullable=True),
         sa.Column("status", sa.String(length=30), nullable=False, server_default="QUEUED"),
         sa.Column("fit_score", sa.Integer(), nullable=True),

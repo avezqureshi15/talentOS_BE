@@ -43,7 +43,7 @@ def evaluate_sync(
     db: Session = Depends(get_db),
 ):
     """Synchronous webhook — receives Supabase INSERT, evaluates resume via AI,
-    stores result in resume_evaluations, and returns the evaluation."""
+    stores result in candidates, and returns the evaluation."""
     svc = EvaluationService(db)
     svc.verify_webhook_secret(x_webhook_secret)
 

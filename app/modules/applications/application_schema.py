@@ -44,11 +44,25 @@ class EvaluatedCandidate(BaseModel):
     phone: str | None = None
     cover_letter: str | None = None
     resume_url: str | None = None
+    current_ctc: str | None = None
+    expected_ctc: str | None = None
+    location: str | None = None
+    years_of_experience: str | None = None
+    notice_period: str | None = None
+    how_did_you_hear: str | None = None
     status: str | None = None
     fit_score: int | None = None
     summary_md: str | None = None
     evaluated_at: str | None = None
+    scheduled: bool = False
 
 
 class EvaluatedCandidatesResponse(BaseModel):
     data: list[EvaluatedCandidate]
+
+
+class PaginatedEvaluatedCandidatesResponse(BaseModel):
+    data: list[EvaluatedCandidate]
+    total: int
+    limit: int
+    offset: int

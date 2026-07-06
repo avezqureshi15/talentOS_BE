@@ -39,6 +39,64 @@ class ApplicationService:
             return raw
         return []
 
+    def get_application_by_id(self, application_id: str) -> dict | None:
+        if not self.evaluation_repo:
+            logger.warning("No DB session")
+            return None
+        evaluation = self.evaluation_repo.get_by_application_id(application_id)
+        if not evaluation:
+            return None
+        return self._to_candidate_dict(evaluation)
+
+    def get_applications_paginated(
+        self,
+        job_id: str | None = None,
+        status_filter: str | None = None,
+        schedule_filter: str | None = None,
+        min_score: int | None = None,
+        max_score: int | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> dict:
+        if not self.evaluation_repo:
+            logger.warning("No DB session")
+            return {"data": [], "total": 0, "limit": limit, "offset": offset}
+
+        status_upper = None
+        parsed_schedule = None
+        if status_filter:
+            status_upper = status_filter.upper().replace("-", "_")
+            if status_upper == "NON_SHORTLISTED":
+                status_upper = EvaluationStatus.REJECTED.value
+            elif status_upper == "SCHEDULED":
+                parsed_schedule = "scheduled"
+                status_upper = None
+            elif status_upper == "UNSCHEDULED":
+                parsed_schedule = "unscheduled"
+                status_upper = None
+        if schedule_filter and not parsed_schedule:
+            parsed_schedule = schedule_filter.lower()
+
+        items, total = self.evaluation_repo.get_by_job_paginated(
+            job_id=job_id,
+            status=status_upper,
+            schedule=parsed_schedule,
+            min_score=min_score,
+            max_score=max_score,
+            date_from=date_from,
+            date_to=date_to,
+            limit=limit,
+            offset=offset,
+        )
+        return {
+            "data": [self._to_candidate_dict(e) for e in items],
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        }
+
     def get_all_applications(self, job_id: str | None = None, status_filter: str | None = None) -> dict:
         if not self.evaluation_repo:
             logger.warning("No DB session")
@@ -94,6 +152,13 @@ class ApplicationService:
             "phone": record.phone,
             "cover_letter": record.cover_letter,
             "resume_url": record.resume_url,
+            "current_ctc": record.current_ctc,
+            "expected_ctc": record.expected_ctc,
+            "location": record.location,
+            "years_of_experience": record.years_of_experience,
+            "notice_period": record.notice_period,
+            "how_did_you_hear": record.how_did_you_hear,
+            "linkedin_url": record.linkedin_url,
         }
         result = self._evaluate_single(app_dict)
         return result or {"error": "Evaluation returned no result"}
@@ -125,6 +190,13 @@ class ApplicationService:
                 candidate_phone=app.get("phone"),
                 cover_letter=app.get("cover_letter"),
                 resume_url=app.get("resume_url"),
+                current_ctc=app.get("current_ctc"),
+                expected_ctc=app.get("expected_ctc"),
+                location=app.get("location"),
+                years_of_experience=app.get("years_of_experience"),
+                notice_period=app.get("notice_period"),
+                how_did_you_hear=app.get("how_did_you_hear"),
+                linkedin_url=app.get("linkedin_url"),
             )
 
         resume_url = app.get("resume_url") or evaluation.resume_url
@@ -146,6 +218,28 @@ class ApplicationService:
             return self._to_candidate_dict(evaluation)
 
         self.evaluation_repo.mark_processing(evaluation)
+
+        logger.info("Raw extracted resume text for application_id=%s:\n%s", application_id, resume_text)
+
+        # Append candidate metadata from the evaluation record
+        candidate_meta_parts = []
+        for label, val in [
+            ("Years of Experience", evaluation.years_of_experience),
+            ("Current CTC", evaluation.current_ctc),
+            ("Expected CTC", evaluation.expected_ctc),
+            ("Location", evaluation.location),
+            ("Notice Period", evaluation.notice_period),
+        ]:
+            if val:
+                candidate_meta_parts.append(f"{label}: {val}")
+
+        if candidate_meta_parts:
+            resume_text += "\n\n--- Candidate Details ---\n" + "\n".join(candidate_meta_parts)
+            logger.info(
+                "Enriched resume with candidate details for application_id=%s", application_id
+            )
+
+        logger.info("Final resume text sent to AI for application_id=%s:\n%s", application_id, resume_text)
 
         jd_details = self._fetch_jd_details(job_id)
 
@@ -195,10 +289,18 @@ class ApplicationService:
             "phone": evaluation.candidate_phone,
             "cover_letter": evaluation.cover_letter,
             "resume_url": evaluation.resume_url,
+            "current_ctc": evaluation.current_ctc,
+            "expected_ctc": evaluation.expected_ctc,
+            "location": evaluation.location,
+            "years_of_experience": evaluation.years_of_experience,
+            "notice_period": evaluation.notice_period,
+            "how_did_you_hear": evaluation.how_did_you_hear,
+            "linkedin_url": evaluation.linkedin_url,
             "status": evaluation.status,
             "fit_score": evaluation.fit_score,
             "summary_md": evaluation.summary_md,
             "evaluated_at": evaluation.evaluated_at.isoformat() if evaluation.evaluated_at else None,
+            "scheduled": evaluation.scheduled,
         }
 
     def _extract_resume_text(self, resume_url: str) -> str:
