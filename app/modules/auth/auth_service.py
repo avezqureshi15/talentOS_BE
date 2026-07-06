@@ -10,7 +10,9 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.constants import ErrorCode
 from app.core.logger import get_logger
+from app.common.exceptions.base_exception import BaseAppException
 from app.modules.auth.auth_model import RefreshToken
 from app.modules.auth.auth_schema import UserInfo
 from app.modules.users.user_model import User
@@ -18,10 +20,9 @@ from app.modules.users.user_model import User
 logger = get_logger(__name__)
 
 
-class AuthError(Exception):
+class AuthError(BaseAppException):
     def __init__(self, message: str, status_code: int = 401):
-        self.message = message
-        self.status_code = status_code
+        super().__init__(message=message, code=ErrorCode.UNAUTHORIZED, status_code=status_code)
 
 
 class AuthService:

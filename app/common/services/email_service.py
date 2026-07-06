@@ -18,12 +18,14 @@ class EmailService:
         self.password = password
         self.use_tls = use_tls
 
-    def send(self, to_email: str, subject: str, body: str) -> None:
-        msg = MIMEMultipart()
+    def send(self, to_email: str, subject: str, body: str, html: str | None = None) -> None:
+        msg = MIMEMultipart("alternative")
         msg["From"] = self.username
         msg["To"] = to_email
         msg["Subject"] = subject
         msg.attach(MIMEText(body, "plain"))
+        if html:
+            msg.attach(MIMEText(html, "html"))
 
         with smtplib.SMTP(self.smtp_host, self.smtp_port) as server:
             if self.use_tls:

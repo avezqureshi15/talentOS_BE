@@ -32,7 +32,7 @@ def send_email(body: SendEmailRequest):
 
     try:
         service = get_email_service()
-        service.send(to_email=body.to_email, subject=body.subject, body=body.body)
+        service.send(to_email=body.to_email, subject=body.subject, body=body.body, html=body.html)
         logger.info("Email sent to %s | subject=%s", body.to_email, body.subject)
         return SendEmailResponse(success=True, message="Email sent successfully")
     except Exception as exc:

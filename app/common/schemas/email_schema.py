@@ -5,6 +5,7 @@ class SendEmailRequest(BaseModel):
     to_email: str
     subject: str
     body: str
+    html: str | None = None
 
 
 class SendEmailResponse(BaseModel):
