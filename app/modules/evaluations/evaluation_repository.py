@@ -32,6 +32,7 @@ class EvaluationRepository:
         notice_period: str | None = None,
         how_did_you_hear: str | None = None,
         linkedin_url: str | None = None,
+        willing_to_relocate: bool = False,
     ) -> Candidate:
         evaluation = Candidate(
             application_id=application_id,
@@ -48,6 +49,7 @@ class EvaluationRepository:
             notice_period=notice_period,
             how_did_you_hear=how_did_you_hear,
             linkedin_url=linkedin_url,
+            willing_to_relocate=willing_to_relocate,
             status=EvaluationStatus.QUEUED.value,
         )
         self.db.add(evaluation)

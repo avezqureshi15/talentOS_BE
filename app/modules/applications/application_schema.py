@@ -50,6 +50,8 @@ class EvaluatedCandidate(BaseModel):
     years_of_experience: str | None = None
     notice_period: str | None = None
     how_did_you_hear: str | None = None
+    linkedin_url: str | None = None
+    willing_to_relocate: bool = False
     status: str | None = None
     fit_score: int | None = None
     summary_md: str | None = None

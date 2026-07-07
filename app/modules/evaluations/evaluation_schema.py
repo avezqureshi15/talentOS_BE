@@ -21,6 +21,7 @@ class WebhookRecord(BaseModel):
     notice_period: str | None = Field(None)
     how_did_you_hear: str | None = Field(None)
     linkedin_url: str | None = Field(None)
+    willing_to_relocate: bool = False
     status: str | None = Field(None)
     created_at: datetime | None = Field(None)
 

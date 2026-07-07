@@ -39,6 +39,7 @@ class Candidate(Base):
     how_did_you_hear: Mapped[str | None] = mapped_column(String(100), nullable=True)
     linkedin_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     scheduled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    willing_to_relocate: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     status: Mapped[str] = mapped_column(
         String(30), nullable=False, default=EvaluationStatus.QUEUED.value, index=True
