@@ -1,8 +1,10 @@
 from contextlib import asynccontextmanager
+import asyncio
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.cron import run_hourly_jobs_forever
 from app.common.handlers import register_exception_handlers
 from app.core.config import settings
 from app.core.kafka import ensure_topics
@@ -11,12 +13,15 @@ from app.db.base import Base
 from app.db.session import engine
 from app.middleware import RequestLoggingMiddleware
 from app.modules.applications import router as applications_router
+from app.modules.alerts import router as alerts_router
 from app.modules.auth.auth_router import router as auth_router
 from app.modules.chat.chat_router import router as chat_router
 from app.modules.designation import router as designation_router
 from app.modules.email.email_router import router as email_router
+from app.modules.employees import router as employees_router
 from app.modules.evaluations import candidates_router as evaluation_candidates_router
 from app.modules.evaluations import router as evaluations_router
+from app.modules.forms import ask_router, form_router
 from app.modules.hiring_requests import router as hiring_requests_router
 from app.modules.jobs import router as jobs_router
 from app.modules.slots import router as slots_router
@@ -36,7 +41,11 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.warning("Database unavailable — running in proxy-only mode: %s", str(exc))
     ensure_topics()
+    cron_stop_event = asyncio.Event()
+    cron_task = asyncio.create_task(run_hourly_jobs_forever(cron_stop_event))
     yield
+    cron_stop_event.set()
+    await cron_task
     logger.info("Shutting down %s", settings.APP_NAME)
 
 
@@ -64,6 +73,10 @@ app.include_router(chat_router)
 app.include_router(designation_router)
 app.include_router(hiring_requests_router)
 app.include_router(slots_router)
+app.include_router(ask_router)
+app.include_router(form_router)
+app.include_router(alerts_router)
+app.include_router(employees_router)
 app.include_router(users_router)
 app.include_router(evaluations_router)
 app.include_router(evaluation_candidates_router)

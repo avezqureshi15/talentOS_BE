@@ -1,24 +1,23 @@
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
-from uuid import UUID
-
 from sqlalchemy import exc as sa_exc
 from sqlalchemy.orm import Session
 
 from app.common.exceptions.slot_exception import (
     EmployeeNotFoundException,
-    SlotBookedException,
-    SlotInvalidStatusException,
-    SlotNotFoundException,
 )
 from app.core.logger import get_logger
+from app.modules.forms.form_service import FormService
 from app.modules.slots.slot_model import Slot, SlotStatus
+from app.modules.slots.slot_presenter import now_ist, present_slot_item, to_ist
 from app.modules.slots.slot_repository import SlotRepository
 from app.modules.slots.slot_schema import (
+    BatchEmployeeSlotsResponse,
     EmployeeSlotsResponse,
     SkippedSlot,
     SlotResponse,
+    SlotListItemResponse,
     SlotTimeRangeCreate,
     SlotsCreateRequest,
     SlotsCreateResponse,
@@ -27,7 +26,7 @@ from app.modules.users.user_repository import UserRepository
 
 logger = get_logger(__name__)
 
-SkipReason = Literal["duplicate", "contained", "overlap", "booked_conflict"]
+SkipReason = Literal["duplicate", "contained", "overlap", "booked_conflict", "not_in_future"]
 
 
 def _overlaps(start_a: datetime, end_a: datetime, start_b: datetime, end_b: datetime) -> bool:
@@ -48,22 +47,6 @@ def _exact_match(
 
 def _same_start(inc_start: datetime, ex_start: datetime) -> bool:
     return inc_start == ex_start
-
-
-_VALID_STATUS_FILTERS = {s.value for s in SlotStatus}
-
-
-def _resolve_status_filter(status: str | None) -> str | None:
-    """Map query param to repository filter: None = all, str = specific status."""
-    if status is None:
-        return SlotStatus.AVAILABLE.value
-    if status == "":
-        return None
-    if status not in _VALID_STATUS_FILTERS:
-        raise SlotInvalidStatusException(
-            f"status must be one of: {', '.join(sorted(_VALID_STATUS_FILTERS))}, or empty for all"
-        )
-    return status
 
 
 @dataclass
@@ -154,6 +137,7 @@ class SlotService:
         self.db = db
         self.repository = SlotRepository(db)
         self.user_repository = UserRepository(db)
+        self.form_service = FormService(db)
 
     def create_slots(self, data: SlotsCreateRequest) -> SlotsCreateResponse:
         if not self.user_repository.get_by_emp_id(data.emp_id):
@@ -161,17 +145,28 @@ class SlotService:
 
         logger.info("Creating %d slot(s) for emp_id=%s", len(data.slots), data.emp_id)
 
-        schedule = self.repository.get_schedule_by_emp_id(data.emp_id)
-        working_slots: list[Slot] = (
-            self.repository.get_slots_by_ids(list(schedule.slot_ids)) if schedule and schedule.slot_ids else []
+        working_slots: list[Slot] = self.repository.get_slots_for_employee(
+            data.emp_id,
+            status=None,
+            include_past=True,
         )
 
         result: list[SlotResponse] = []
         skipped: list[SkippedSlot] = []
-        new_ids: list[UUID] = []
 
         try:
+            current_ist = now_ist()
             for slot_data in data.slots:
+                if to_ist(slot_data.start_at) <= current_ist:
+                    skipped.append(
+                        SkippedSlot(
+                            start_at=slot_data.start_at,
+                            end_at=slot_data.end_at,
+                            reason="not_in_future",
+                        )
+                    )
+                    continue
+
                 action = _resolve_slot_action(slot_data, working_slots)
 
                 if action.kind == "skip":
@@ -196,20 +191,15 @@ class SlotService:
                     continue
 
                 slot = self.repository.create_slot(
+                    emp_id=data.emp_id,
                     start_at=slot_data.start_at,
                     end_at=slot_data.end_at,
                 )
-                new_ids.append(slot.id)
                 working_slots.append(slot)
                 result.append(SlotResponse.model_validate(slot))
 
-            if new_ids:
-                if schedule:
-                    self.repository.append_slot_ids(schedule, new_ids)
-                else:
-                    self.repository.create_schedule(data.emp_id, new_ids)
-
             self.db.commit()
+            self.form_service.mark_slots_form_submitted(data.emp_id)
         except sa_exc.SQLAlchemyError as exc:
             self.db.rollback()
             logger.error("Failed to create slots for emp_id=%s: %s", data.emp_id, str(exc))
@@ -224,71 +214,24 @@ class SlotService:
         )
         return SlotsCreateResponse(data=result, skipped=skipped)
 
-    def get_slots_for_employee(self, emp_id: str, status: str | None = None) -> EmployeeSlotsResponse:
-        status_filter = _resolve_status_filter(status)
-        logger.info("Fetching slots for emp_id=%s status_filter=%s", emp_id, status_filter)
-
-        if not self.user_repository.get_by_emp_id(emp_id):
-            raise EmployeeNotFoundException(emp_id)
-
-        schedule = self.repository.get_schedule_by_emp_id(emp_id)
-        if not schedule or not schedule.slot_ids:
-            return EmployeeSlotsResponse(emp_id=emp_id, slots=[])
-
-        slots = self.repository.get_slots_by_ids(list(schedule.slot_ids), status=status_filter)
-        return EmployeeSlotsResponse(
-            emp_id=emp_id,
-            slots=[SlotResponse.model_validate(s) for s in slots],
-        )
-
-    def update_slot_status(self, slot_id: UUID, status: str) -> SlotResponse:
-        logger.info("Updating slot status: id=%s status=%s", slot_id, status)
-
-        slot = self.repository.get_slot_by_id(slot_id)
-        if not slot:
-            raise SlotNotFoundException(str(slot_id))
-
-        if slot.status == SlotStatus.BOOKED.value:
-            raise SlotBookedException()
-
-        if slot.status == status:
-            return SlotResponse.model_validate(slot)
-
-        allowed = {SlotStatus.AVAILABLE.value, SlotStatus.INACTIVE.value}
-        if slot.status not in allowed or status not in allowed:
-            raise SlotInvalidStatusException()
-
-        try:
-            updated = self.repository.update_slot_status(slot, status)
-            self.db.commit()
-            self.db.refresh(updated)
-        except sa_exc.SQLAlchemyError as exc:
-            self.db.rollback()
-            logger.error("Failed to update slot status id=%s: %s", slot_id, str(exc))
-            raise
-
-        return SlotResponse.model_validate(updated)
-
-    def delete_slot(self, slot_id: UUID) -> None:
-        logger.info("Deleting slot: id=%s", slot_id)
-
-        slot = self.repository.get_slot_by_id(slot_id)
-        if not slot:
-            raise SlotNotFoundException(str(slot_id))
-
-        if slot.status == SlotStatus.BOOKED.value:
-            raise SlotBookedException("Cannot delete a booked slot")
-
-        schedule = self.repository.get_schedule_by_slot_id(slot_id)
-
-        try:
-            if schedule:
-                self.repository.remove_slot_id(schedule, slot_id)
-            self.repository.delete_slot(slot)
-            self.db.commit()
-        except sa_exc.SQLAlchemyError as exc:
-            self.db.rollback()
-            logger.error("Failed to delete slot id=%s: %s", slot_id, str(exc))
-            raise
-
-        logger.info("Deleted slot: id=%s", slot_id)
+    def get_slots_for_employees(self, emp_ids: list[str]) -> BatchEmployeeSlotsResponse:
+        data: list[EmployeeSlotsResponse] = []
+        for emp_id in emp_ids:
+            if not self.user_repository.get_by_emp_id(emp_id):
+                data.append(EmployeeSlotsResponse(emp_id=emp_id, slots=[]))
+                continue
+            slots = self.repository.get_slots_for_employee(
+                emp_id,
+                status=SlotStatus.AVAILABLE.value,
+                include_past=False,
+            )
+            data.append(
+                EmployeeSlotsResponse(
+                    emp_id=emp_id,
+                    slots=[
+                        SlotListItemResponse.model_validate(present_slot_item(s).__dict__)
+                        for s in slots
+                    ],
+                )
+            )
+        return BatchEmployeeSlotsResponse(data=data)

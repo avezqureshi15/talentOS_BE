@@ -39,7 +39,7 @@ class SlotResponse(BaseModel):
 class SkippedSlot(BaseModel):
     start_at: datetime
     end_at: datetime
-    reason: Literal["duplicate", "contained", "overlap", "booked_conflict"]
+    reason: Literal["duplicate", "contained", "overlap", "booked_conflict", "not_in_future"]
 
 
 class SlotsCreateResponse(BaseModel):
@@ -47,6 +47,16 @@ class SlotsCreateResponse(BaseModel):
     skipped: list[SkippedSlot] = Field(default_factory=list)
 
 
+class SlotListItemResponse(BaseModel):
+    id: str
+    label: str
+    day: str
+
+
 class EmployeeSlotsResponse(BaseModel):
     emp_id: str
-    slots: list[SlotResponse]
+    slots: list[SlotListItemResponse]
+
+
+class BatchEmployeeSlotsResponse(BaseModel):
+    data: list[EmployeeSlotsResponse]

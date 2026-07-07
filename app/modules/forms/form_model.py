@@ -8,22 +8,27 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base import Base
 
 
-class SlotStatus(str, Enum):
-    AVAILABLE = "available"
-    BOOKED = "booked"
-    INACTIVE = "inactive"
+class FormType(str, Enum):
+    SLOTS = "SLOTS"
+    REVIEW = "REVIEW"
 
 
-class Slot(Base):
-    __tablename__ = "slots"
+class FormStatus(str, Enum):
+    SENT = "SENT"
+    SUBMITTED = "SUBMITTED"
+    EXPIRED = "EXPIRED"
+
+
+class Form(Base):
+    __tablename__ = "forms"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     emp_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
-    start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    end_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    type: Mapped[str] = mapped_column(String(10), nullable=False, default=FormType.SLOTS.value)
     status: Mapped[str] = mapped_column(
-        String(20), nullable=False, default=SlotStatus.AVAILABLE.value
+        String(10), nullable=False, default=FormStatus.SENT.value
     )
+    last_sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

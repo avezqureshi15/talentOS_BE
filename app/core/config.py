@@ -54,6 +54,7 @@ class Settings(BaseSettings):
     SMTP_USERNAME: str = ""
     SMTP_PASSWORD: str = ""
     SMTP_USE_TLS: bool = True
+    FRONTEND_BASE_URL: str = "http://localhost:5173"
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "case_sensitive": True}
 
