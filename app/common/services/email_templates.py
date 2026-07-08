@@ -35,7 +35,7 @@ def render_talentos_email(
           </tr>
         </table>"""
 
-    footer = footer_note or "webHire.ai — AI-powered recruitment intelligence."
+    footer = footer_note or "webHyre.ai — AI-powered recruitment intelligence."
 
     return f"""<!DOCTYPE html>
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
@@ -145,7 +145,7 @@ def render_talentos_email(
                   <td style="font-size:12px;line-height:1.5;color:rgba(255,255,255,0.35);">
                     {footer}
                     <br>
-                    <span style="color:rgba(255,255,255,0.2);">© 2026 webHire AI. All rights reserved.</span>
+                    <span style="color:rgba(255,255,255,0.2);">© 2026 webHyre AI. All rights reserved.</span>
                   </td>
                 </tr>
               </table>

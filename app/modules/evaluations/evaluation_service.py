@@ -73,7 +73,10 @@ class EvaluationService:
             job_id=str(record.job_id),
             candidate_name=record.name,
             candidate_email=record.email,
+            candidate_phone=record.phone,
+            cover_letter=record.cover_letter,
             resume_url=record.resume_url,
+            willing_to_relocate=record.willing_to_relocate,
         )
 
         message = EvaluationMessage(

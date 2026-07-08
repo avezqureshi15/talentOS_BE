@@ -159,6 +159,7 @@ class ApplicationService:
             "notice_period": record.notice_period,
             "how_did_you_hear": record.how_did_you_hear,
             "linkedin_url": record.linkedin_url,
+            "willing_to_relocate": record.willing_to_relocate,
         }
         result = self._evaluate_single(app_dict)
         return result or {"error": "Evaluation returned no result"}
@@ -197,6 +198,7 @@ class ApplicationService:
                 notice_period=app.get("notice_period"),
                 how_did_you_hear=app.get("how_did_you_hear"),
                 linkedin_url=app.get("linkedin_url"),
+                willing_to_relocate=app.get("willing_to_relocate", False),
             )
 
         resume_url = app.get("resume_url") or evaluation.resume_url
@@ -296,6 +298,7 @@ class ApplicationService:
             "notice_period": evaluation.notice_period,
             "how_did_you_hear": evaluation.how_did_you_hear,
             "linkedin_url": evaluation.linkedin_url,
+            "willing_to_relocate": evaluation.willing_to_relocate if evaluation.willing_to_relocate is not None else False,
             "status": evaluation.status,
             "fit_score": evaluation.fit_score,
             "summary_md": evaluation.summary_md,

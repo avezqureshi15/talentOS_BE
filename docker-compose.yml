@@ -1,4 +1,6 @@
-version: "3.9"
+# Uses Supabase cloud DB (no local postgres).
+#   docker compose up -d --build
+# API: http://localhost:8001  |  Kafka: :9092
 
 services:
   redpanda:
@@ -19,31 +21,41 @@ services:
     ports:
       - "9092:9092"
       - "9644:9644"
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy:.*true'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   app:
     build: .
     restart: unless-stopped
     depends_on:
       redpanda:
-        condition: service_started
+        condition: service_healthy
     ports:
-      - "8001:8000"
-
+      - "8001:8001"
+    env_file:
+      - .env
     environment:
-      DATABASE_URL: postgresql://postgres.orzlfvephejxfztrkjfj:talentOS-dev-1234@aws-0-ap-south-1.pooler.supabase.com:6543/postgres?sslmode=require
-      APP_ENV: development
-      LOG_LEVEL: INFO
-      SUPABASE_FUNCTIONS_BASE_URL: https://cohqewhcplvohyjxpyoc.supabase.co/functions/v1
-      RESEND_API_KEY: ${RESEND_API_KEY:-}
-      SUPABASE_WEBHOOK_SECRET: ${SUPABASE_WEBHOOK_SECRET:-}
       KAFKA_BOOTSTRAP_SERVERS: redpanda:29092
-      AI_SERVICE_BASE_URL: http://host.containers.internal:8080
-
+      KAFKA_TOPIC_EVALUATION: ${KAFKA_TOPIC_EVALUATION:-resume.evaluation.queue}
+      KAFKA_TOPIC_EVALUATION_DLQ: ${KAFKA_TOPIC_EVALUATION_DLQ:-resume.evaluation.dlq}
+      KAFKA_CONSUMER_GROUP: ${KAFKA_CONSUMER_GROUP:-resume-evaluators}
+      KAFKA_EVALUATION_PARTITIONS: ${KAFKA_EVALUATION_PARTITIONS:-6}
+      AI_SERVICE_BASE_URL: ${AI_SERVICE_BASE_URL:-http://host.docker.internal:8080}
+      AI_SERVICE_TIMEOUT: ${AI_SERVICE_TIMEOUT:-60}
+      ATS_THRESHOLD_DEFAULT: ${ATS_THRESHOLD_DEFAULT:-70}
+      EVALUATION_MAX_ATTEMPTS: ${EVALUATION_MAX_ATTEMPTS:-3}
+      EVALUATION_MIN_RESUME_CHARS: ${EVALUATION_MIN_RESUME_CHARS:-100}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     command: >
       sh -c "
+        alembic stamp --purge 0013 2>/dev/null;
         alembic upgrade head &&
         python3 -m seed.run_seed &&
-        uvicorn app.main:app --host 0.0.0.0 --port 8000
+        uvicorn app.main:app --host 0.0.0.0 --port 8001
       "
 
   worker:
@@ -51,15 +63,24 @@ services:
     restart: unless-stopped
     depends_on:
       redpanda:
+        condition: service_healthy
+      app:
         condition: service_started
-
+    deploy:
+      replicas: 1
+    env_file:
+      - .env
     environment:
-      DATABASE_URL: postgresql://postgres.orzlfvephejxfztrkjfj:talentOS-dev-1234@aws-0-ap-south-1.pooler.supabase.com:6543/postgres?sslmode=require
-      APP_ENV: development
-      LOG_LEVEL: INFO
-      SUPABASE_FUNCTIONS_BASE_URL: https://cohqewhcplvohyjxpyoc.supabase.co/functions/v1
-      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
       KAFKA_BOOTSTRAP_SERVERS: redpanda:29092
-      AI_SERVICE_BASE_URL: http://host.containers.internal:8080
-
+      KAFKA_TOPIC_EVALUATION: ${KAFKA_TOPIC_EVALUATION:-resume.evaluation.queue}
+      KAFKA_TOPIC_EVALUATION_DLQ: ${KAFKA_TOPIC_EVALUATION_DLQ:-resume.evaluation.dlq}
+      KAFKA_CONSUMER_GROUP: ${KAFKA_CONSUMER_GROUP:-resume-evaluators}
+      KAFKA_EVALUATION_PARTITIONS: ${KAFKA_EVALUATION_PARTITIONS:-6}
+      AI_SERVICE_BASE_URL: ${AI_SERVICE_BASE_URL:-http://host.docker.internal:8080}
+      AI_SERVICE_TIMEOUT: ${AI_SERVICE_TIMEOUT:-60}
+      ATS_THRESHOLD_DEFAULT: ${ATS_THRESHOLD_DEFAULT:-70}
+      EVALUATION_MAX_ATTEMPTS: ${EVALUATION_MAX_ATTEMPTS:-3}
+      EVALUATION_MIN_RESUME_CHARS: ${EVALUATION_MIN_RESUME_CHARS:-100}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     command: python3 -m app.workers.evaluation_worker

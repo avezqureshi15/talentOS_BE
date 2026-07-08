@@ -5,12 +5,13 @@ import httpx
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.logger import get_logger
 from app.modules.chat.chat_model import Chat, Message
 
 logger = get_logger(__name__)
 
-AI_STREAM_URL = "http://localhost:8003/api/v1/chat/stream"
+AI_STREAM_URL = settings.AI_SERVICE_BASE_URL + "/api/v1/chat/stream"
 
 
 def _parse_ndjson_line(line: str) -> str:
