@@ -34,7 +34,7 @@ services:
       redpanda:
         condition: service_healthy
     ports:
-      - "8001:8000"
+      - "8001:8001"
     env_file:
       - .env
     environment:
@@ -55,7 +55,7 @@ services:
         alembic stamp --purge 0013 2>/dev/null;
         alembic upgrade head &&
         python3 -m seed.run_seed &&
-        uvicorn app.main:app --host 0.0.0.0 --port 8000
+        uvicorn app.main:app --host 0.0.0.0 --port 8001
       "
 
   worker:
