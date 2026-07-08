@@ -8,6 +8,8 @@ venv/
 
 # Environment
 .env
+secrets/
+*-service-account.json
 
 # IDE
 .vscode/

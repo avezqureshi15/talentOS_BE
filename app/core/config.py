@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
 
+    # Google Calendar (service account + domain-wide delegation)
+    GOOGLE_SERVICE_ACCOUNT_JSON: str = ""
+    GOOGLE_IMPERSONATION_EMAIL: str = ""
+    GOOGLE_CALENDAR_TIMEZONE: str = "Asia/Kolkata"
+
     # Auth
     ALLOWED_EMAIL_DOMAIN: str = ""
 
