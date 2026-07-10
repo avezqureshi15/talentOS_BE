@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 from app.common.utils.list_utils import unique_preserve_order
 from app.core.logger import get_logger
 from app.modules.alerts.alert_model import AlertType
-from app.modules.alerts.alert_service import AlertService
 from app.modules.forms.form_mail import (
     DETAIL_NEW_LINK,
     DETAIL_RESENT,
@@ -36,6 +35,7 @@ logger = get_logger(__name__)
 
 class FormService:
     def __init__(self, db: Session):
+        from app.modules.alerts.alert_service import AlertService
         self.db = db
         self.repository = FormRepository(db)
         self.user_repository = UserRepository(db)

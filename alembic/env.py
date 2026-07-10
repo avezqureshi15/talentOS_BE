@@ -21,6 +21,7 @@ from app.modules.designation.designation_model import Band, Designation, KpiDefi
 from app.modules.evaluations.evaluation_model import Candidate  # noqa: E402, F401
 from app.modules.forms.form_model import Form  # noqa: E402, F401
 from app.modules.hiring_requests.hiring_request_model import HiringRequest  # noqa: E402, F401
+from app.modules.interviews.interview_model import Round, RoundInterviewer, Review  # noqa: E402, F401
 from app.modules.slots.slot_model import Slot  # noqa: E402, F401
 from app.modules.todo.todo_model import Todo  # noqa: E402, F401
 from app.modules.users.user_model import User  # noqa: E402, F401

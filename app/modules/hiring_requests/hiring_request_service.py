@@ -61,7 +61,7 @@ class HiringRequestService:
 
     def get_hiring_request_by_id(self, hiring_request_id: UUID) -> dict:
         logger.info("Fetching hiring request: id=%s", hiring_request_id)
-        record = self.repository.get_by_id(hiring_request_id)
+        record = self.repository.resolve_to_supabase_job_id(hiring_request_id)
         if not record:
             raise HiringRequestNotFoundException(str(hiring_request_id))
         response = HiringRequestResponse.model_validate(record).model_dump()
@@ -105,7 +105,7 @@ class HiringRequestService:
 
     def update_hiring_request(self, hiring_request_id: UUID, data: HiringRequestUpdate) -> dict:
         logger.info("Updating hiring request: id=%s", hiring_request_id)
-        record = self.repository.get_by_id(hiring_request_id)
+        record = self.repository.resolve_to_supabase_job_id(hiring_request_id)
         if not record:
             raise HiringRequestNotFoundException(str(hiring_request_id))
 
@@ -124,7 +124,7 @@ class HiringRequestService:
 
     def toggle_hiring_request_status(self, hiring_request_id: UUID) -> dict:
         logger.info("Toggling hiring request status: id=%s", hiring_request_id)
-        record = self.repository.get_by_id(hiring_request_id)
+        record = self.repository.resolve_to_supabase_job_id(hiring_request_id)
         if not record:
             raise HiringRequestNotFoundException(str(hiring_request_id))
 
@@ -157,7 +157,7 @@ class HiringRequestService:
 
     def delete_hiring_request(self, hiring_request_id: UUID) -> dict:
         logger.info("Deleting hiring request: id=%s", hiring_request_id)
-        record = self.repository.get_by_id(hiring_request_id)
+        record = self.repository.resolve_to_supabase_job_id(hiring_request_id)
         if not record:
             raise HiringRequestNotFoundException(str(hiring_request_id))
 
