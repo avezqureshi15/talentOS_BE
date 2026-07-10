@@ -18,6 +18,7 @@ from app.modules.evaluations.evaluation_schema import (
     WebhookRecord,
 )
 from app.modules.evaluations.evaluation_processor import TransientEvaluationError
+from app.modules.hiring_requests.hiring_request_model import HiringRequest
 
 logger = get_logger(__name__)
 
@@ -64,6 +65,10 @@ class ApplicationService:
             logger.warning("No DB session")
             return {"data": [], "total": 0, "limit": limit, "offset": offset}
 
+        resolved_job_id = self._resolve_job_id(job_id) if job_id else None
+        if job_id and not resolved_job_id:
+            return {"data": [], "total": 0, "limit": limit, "offset": offset}
+
         status_upper = None
         parsed_schedule = None
         if status_filter:
@@ -80,7 +85,7 @@ class ApplicationService:
             parsed_schedule = schedule_filter.lower()
 
         items, total = self.evaluation_repo.get_by_job_paginated(
-            job_id=job_id,
+            job_id=resolved_job_id,
             status=status_upper,
             schedule=parsed_schedule,
             min_score=min_score,
@@ -97,10 +102,23 @@ class ApplicationService:
             "offset": offset,
         }
 
+    def _resolve_job_id(self, job_id: str) -> str | None:
+        try:
+            hr_uuid = UUID(job_id)
+            hiring_request = self.db.query(HiringRequest).filter(HiringRequest.id == hr_uuid).first()
+            if hiring_request and hiring_request.supabase_job_id:
+                return str(hiring_request.supabase_job_id)
+            return None
+        except (ValueError, TypeError):
+            return None
+
     def get_all_applications(self, job_id: str | None = None, status_filter: str | None = None) -> dict:
         if not self.evaluation_repo:
             logger.warning("No DB session")
             return {"data": []}
+
+        resolved_job_id = self._resolve_job_id(job_id) if job_id else None
+        job_id = resolved_job_id or job_id
 
         if status_filter and job_id:
             status_upper = status_filter.upper().replace("-", "_")
