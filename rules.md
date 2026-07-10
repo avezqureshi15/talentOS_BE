@@ -192,7 +192,7 @@ logger.error("Todo not found: id=%d", todo_id)
 |-------|-------------|
 | Router | Nothing (middleware handles request/response logging) |
 | Service | Entry/exit of key operations, errors before raising exceptions |
-| Repository | Nothing (SQLAlchemy logs at DEBUG level in `setup_logging()`) |
+| Repository | `INFO` on mutations (create, update status, mark result, delete); `DEBUG` on queries (list, get, count) |
 | Middleware | Every request IN/OUT with method, path, status, duration, request ID |
 
 ### 3.5 Request ID in Logs
@@ -344,17 +344,50 @@ class TodoRepository:
 
 **Allowed:**
 - SQLAlchemy ORM queries (`query`, `filter`, `order_by`, `all`, `first`)
-- `commit`, `refresh`, `add`, `delete`
+- `add`, `delete`, `flush` (intermediate persistence — see §6.5)
+- `commit`, `refresh` (only if the repository owns the full unit of work — preferred)
 - Accepting/returning model instances only
+- Logging (`INFO` on mutations, `DEBUG` on queries — see §3.4)
+- Accepting/returning model instances only
+- Logging (`INFO` on mutations, `DEBUG` on queries — see §3.4)
 
 **Forbidden:**
 - Business logic (`if`, `for` that contains domain logic)
-- Logging
 - Raising exceptions (return `None` for not-found instead)
 - Pydantic schema imports
 - Accessing `request` or HTTP context
 
-### 6.4 Schema — Pydantic DTOs
+### 6.5 Transaction Ownership
+
+The transaction boundary lives in the **service layer**, not the repository.
+
+```python
+# Repository — uses flush() for intermediate persistence
+class TodoRepository:
+    def mark_completed(self, todo: Todo) -> Todo:
+        todo.status = "completed"
+        self.db.flush()
+        return todo
+
+# Service — owns the commit/rollback
+class TodoService:
+    def complete_todo(self, todo_id: int) -> TodoResponse:
+        todo = self.repository.get_by_id(todo_id)
+        if not todo:
+            raise TodoNotFoundException(todo_id)
+        self.repository.mark_completed(todo)
+        self.db.commit()          # ← service commits
+        return TodoResponse.model_validate(todo)
+```
+
+**Rules:**
+- Repositories use `flush()` for partial persistence (same transaction, not committed yet)
+- The service calls `commit()` after all repository operations in a unit of work succeed
+- The service calls `rollback()` in `except` blocks to abort on failure
+- This pattern allows a single service method to coordinate multiple repository calls atomically
+- The alternative (full `commit()` inside the repository) is acceptable only for simple, single-repository operations
+
+### 6.6 Schema — Pydantic DTOs
 
 ```python
 # app/modules/todo/todo_schema.py
@@ -571,7 +604,7 @@ from app.modules.evaluations.evaluation_repository import EvaluationRepository
 from app.modules.jobs.job_service import JobService
 
 # FORBIDDEN — importing model from another module
-from app.modules.evaluations.evaluation_model import EvaluationStatus
+from app.modules.evaluations.evaluation_model import Candidate
 
 # FORBIDDEN — importing schema from another module
 from app.modules.evaluations.evaluation_schema import AIEvaluationRequest
@@ -604,7 +637,23 @@ app/
 
 ### 10.4 Sharing Types Between Modules
 
-If two modules need the same type (DTO, model, exception), the type belongs in `app/common/`:
+**Enums** shared across modules belong in `app/core/constants.py`:
+
+```python
+# app/core/constants.py
+class EvaluationStatus(str, Enum):
+    QUEUED = "QUEUED"
+    PROCESSING = "PROCESSING"
+    SHORTLISTED = "SHORTLISTED"
+    ...
+
+# Import in any module:
+from app.core.constants import EvaluationStatus
+```
+
+Never define a shared enum inside a `_model.py` file — that forces other modules to import from a sibling module, which is forbidden.
+
+**DTOs / Schemas** shared across modules belong in `app/common/schemas/`:
 
 ```python
 # app/common/schemas/evaluation.py
@@ -617,6 +666,8 @@ class EvaluationResult(BaseModel):
 class AIClient:
     def evaluate_resume(self, ...) -> EvaluationResult: ...
 ```
+
+**ORM Models** that genuinely need to be queried by another module (rare — prefer orchestration) are a known exception. The import is tolerated but should be flagged in code review and ideally resolved by pushing the query down through the owning module's repository.
 
 ### 10.5 Cross-Module Orchestration
 

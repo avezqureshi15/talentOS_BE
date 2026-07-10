@@ -16,8 +16,8 @@ from sqlalchemy.orm import Session
 
 from app.common.clients import AIClient, AIClientError, ResumeClient, SupabaseClient
 from app.core.config import settings
+from app.core.constants import EvaluationStatus
 from app.core.logger import get_logger
-from app.modules.evaluations.evaluation_model import EvaluationStatus
 from app.modules.evaluations.evaluation_repository import EvaluationRepository
 from app.modules.evaluations.evaluation_schema import EvaluationMessage
 

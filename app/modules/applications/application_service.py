@@ -5,11 +5,10 @@ from sqlalchemy.orm import Session
 from app.common.clients import AIClient, AIClientError, ResumeClient, SupabaseClient
 from app.common.exceptions.base_exception import BaseAppException
 from app.core.config import settings
-from app.core.constants import ErrorCode
+from app.core.constants import ErrorCode, EvaluationStatus
 from app.core.logger import get_logger
 from app.modules.applications.application_repository import ApplicationRepository
 from app.modules.applications.application_schema import ApplicationCreate
-from app.modules.evaluations.evaluation_model import EvaluationStatus
 from app.modules.evaluations.evaluation_schema import WebhookRecord
 
 logger = get_logger(__name__)

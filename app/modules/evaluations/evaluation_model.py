@@ -1,19 +1,10 @@
 from datetime import datetime, timezone
-from enum import Enum
 
 from sqlalchemy import Boolean, DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.core.constants import EvaluationStatus
 from app.db.base import Base
-
-
-class EvaluationStatus(str, Enum):
-    QUEUED = "QUEUED"
-    PROCESSING = "PROCESSING"
-    SHORTLISTED = "SHORTLISTED"
-    REJECTED = "REJECTED"
-    INVALID = "INVALID"
-    FAILED = "FAILED"
 
 
 class Candidate(Base):

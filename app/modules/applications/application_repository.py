@@ -3,8 +3,9 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from app.core.constants import EvaluationStatus
 from app.core.logger import get_logger
-from app.modules.evaluations.evaluation_model import Candidate, EvaluationStatus
+from app.modules.evaluations.evaluation_model import Candidate
 from app.modules.hiring_requests.hiring_request_model import HiringRequest
 
 logger = get_logger(__name__)

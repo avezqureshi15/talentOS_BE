@@ -29,5 +29,14 @@ class ErrorCode(str, Enum):
     UNAUTHORIZED = "UNAUTHORIZED"
 
 
+class EvaluationStatus(str, Enum):
+    QUEUED = "QUEUED"
+    PROCESSING = "PROCESSING"
+    SHORTLISTED = "SHORTLISTED"
+    REJECTED = "REJECTED"
+    INVALID = "INVALID"
+    FAILED = "FAILED"
+
+
 DEFAULT_PAGE_SIZE: int = 20
 MAX_PAGE_SIZE: int = 100

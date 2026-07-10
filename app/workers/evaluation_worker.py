@@ -84,7 +84,7 @@ def _route_to_dlq(message: EvaluationMessage, reason: str) -> None:
     logger.error("Routing application_id=%s to DLQ: %s", message.application_id, reason)
     db = SessionLocal()
     try:
-        from app.modules.evaluations.evaluation_model import EvaluationStatus
+        from app.core.constants import EvaluationStatus
         from app.modules.evaluations.evaluation_repository import EvaluationRepository
 
         repo = EvaluationRepository(db)

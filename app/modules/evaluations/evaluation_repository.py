@@ -2,8 +2,9 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
+from app.core.constants import EvaluationStatus
 from app.core.logger import get_logger
-from app.modules.evaluations.evaluation_model import Candidate, EvaluationStatus
+from app.modules.evaluations.evaluation_model import Candidate
 
 logger = get_logger(__name__)
 
