@@ -2,7 +2,10 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
+from app.core.logger import get_logger
 from app.modules.evaluations.evaluation_model import Candidate, EvaluationStatus
+
+logger = get_logger(__name__)
 
 
 class EvaluationRepository:
@@ -55,6 +58,7 @@ class EvaluationRepository:
         self.db.add(evaluation)
         self.db.commit()
         self.db.refresh(evaluation)
+        logger.info("Created queued evaluation: application_id=%s | job_id=%s", application_id, job_id)
         return evaluation
 
     def mark_processing(self, evaluation: Candidate) -> Candidate:
@@ -62,6 +66,7 @@ class EvaluationRepository:
         evaluation.attempts += 1
         self.db.commit()
         self.db.refresh(evaluation)
+        logger.info("Marked evaluation processing: id=%s | attempt=%d", evaluation.application_id, evaluation.attempts)
         return evaluation
 
     def mark_result(
@@ -81,6 +86,10 @@ class EvaluationRepository:
         evaluation.evaluated_at = datetime.now(timezone.utc)
         self.db.commit()
         self.db.refresh(evaluation)
+        logger.info(
+            "Evaluation result: application_id=%s | status=%s | score=%s | error=%s",
+            evaluation.application_id, status.value, fit_score, error_reason,
+        )
         return evaluation
 
     def get_by_job(self, job_id: str, status: str | None = None) -> list[Candidate]:

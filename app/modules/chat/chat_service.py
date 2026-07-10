@@ -1,17 +1,13 @@
 import uuid
-from collections.abc import AsyncGenerator
 
-import httpx
-from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
+from app.common.clients import AIClient
 from app.core.logger import get_logger
+from app.modules.chat.chat_repository import ChatRepository
 from app.modules.chat.chat_model import Chat, Message
 
 logger = get_logger(__name__)
-
-AI_STREAM_URL = settings.AI_SERVICE_BASE_URL + "/api/v1/chat/stream"
 
 
 def _parse_ndjson_line(line: str) -> str:
@@ -31,42 +27,24 @@ def _parse_ndjson_line(line: str) -> str:
 
 
 def get_or_create_chat(db: Session, chat_id: str | None, user_id: int, message: str) -> Chat:
+    repo = ChatRepository(db)
     if chat_id:
-        chat = db.query(Chat).filter(Chat.id == chat_id, Chat.user_id == user_id).first()
+        chat = repo.get_chat_by_id_and_user(uuid.UUID(chat_id), user_id)
         if chat:
             return chat
-
     title = message[:500] if message else "New chat"
-    chat = Chat(
-        id=uuid.uuid4() if not chat_id else uuid.UUID(chat_id),
-        user_id=user_id,
-        title=title,
-    )
-    db.add(chat)
-    db.commit()
-    db.refresh(chat)
-    logger.info("Created chat id=%s user=%d title=%s", chat.id, chat.user_id, chat.title[:50])
-    return chat
+    chat_id_uuid = uuid.UUID(chat_id) if chat_id else None
+    return repo.create_chat(chat_id_uuid, user_id, title)
 
 
 def save_message(db: Session, chat_id: uuid.UUID, role: str, content: str) -> Message:
-    msg = Message(chat_id=chat_id, role=role, content=content)
-    db.add(msg)
-    db.commit()
-    db.refresh(msg)
-    return msg
+    return ChatRepository(db).save_message(chat_id, role, content)
 
 
-async def stream_chat_to_ai(message: str, thread_id: str) -> AsyncGenerator[bytes, None]:
-    async with httpx.AsyncClient(timeout=httpx.Timeout(300.0)) as client:
-        async with client.stream(
-            "POST",
-            AI_STREAM_URL,
-            json={"message": message, "thread_id": thread_id},
-        ) as response:
-            response.raise_for_status()
-            async for chunk in response.aiter_bytes():
-                yield chunk
+async def stream_chat_to_ai(message: str, thread_id: str):
+    client = AIClient()
+    async for chunk in client.stream_chat(message, thread_id):
+        yield chunk
 
 
 def list_chats_by_user(
@@ -75,45 +53,19 @@ def list_chats_by_user(
     limit: int = 5,
     offset: int = 0,
 ) -> tuple[list[Chat], bool]:
-    base = db.query(Chat).filter(Chat.user_id == user_id)
-    total = base.count()
-    chats = (
-        base
-        .order_by(desc(Chat.updated_at))
-        .offset(offset)
-        .limit(limit + 1)
-        .all()
-    )
-    has_more = len(chats) > limit
-    if has_more:
-        chats = chats[:limit]
-    return chats, has_more
+    return ChatRepository(db).list_chats_by_user(user_id, limit, offset)
 
 
 def get_chat_owned_by_user(db: Session, chat_id: uuid.UUID, user_id: int) -> Chat | None:
-    return db.query(Chat).filter(Chat.id == chat_id, Chat.user_id == user_id).first()
+    return ChatRepository(db).get_chat_by_id_and_user(chat_id, user_id)
 
 
 def update_chat_title(db: Session, chat_id: uuid.UUID, title: str) -> Chat | None:
-    chat = db.query(Chat).filter(Chat.id == chat_id).first()
-    if not chat:
-        return None
-    chat.title = title[:500]
-    db.commit()
-    db.refresh(chat)
-    logger.info("Updated chat title id=%s", chat_id)
-    return chat
+    return ChatRepository(db).update_chat_title(chat_id, title)
 
 
 def delete_chat(db: Session, chat_id: uuid.UUID) -> bool:
-    chat = db.query(Chat).filter(Chat.id == chat_id).first()
-    if not chat:
-        return False
-    db.query(Message).filter(Message.chat_id == chat_id).delete()
-    db.delete(chat)
-    db.commit()
-    logger.info("Deleted chat id=%s", chat_id)
-    return True
+    return ChatRepository(db).delete_chat(chat_id)
 
 
 def get_messages_by_chat(
@@ -122,17 +74,4 @@ def get_messages_by_chat(
     limit: int = 20,
     before: int | None = None,
 ) -> tuple[list[Message], bool]:
-    query = db.query(Message).filter(Message.chat_id == chat_id)
-
-    if before is not None:
-        query = query.filter(Message.id < before)
-
-    query = query.order_by(Message.id.desc()).limit(limit + 1)
-    results = query.all()
-
-    has_more = len(results) > limit
-    if has_more:
-        results = results[:limit]
-
-    results.reverse()
-    return results, has_more
+    return ChatRepository(db).get_messages_by_chat(chat_id, limit, before)

@@ -1,18 +1,14 @@
 import io
 from uuid import UUID
 
-import httpx
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 
-from app.core.config import settings
+from app.common.clients import SupabaseClient
 from app.core.logger import get_logger
 
 logger = get_logger(__name__)
-
-_APPLICATIONS_ENDPOINT: str = f"{settings.SUPABASE_FUNCTIONS_BASE_URL}/get-applications"
-_TIMEOUT: int = 30
 
 _HEADER_FILL = PatternFill(start_color="1F2937", end_color="1F2937", fill_type="solid")
 _HEADER_FONT = Font(name="Calibri", bold=True, color="FFFFFF", size=11)
@@ -111,15 +107,7 @@ def build_applicants_sheet(wb: Workbook, applicants: list[dict]) -> None:
 def fetch_applications() -> list[dict]:
     logger.info("Fetching all applications from Supabase for export")
     try:
-        with httpx.Client(timeout=_TIMEOUT) as client:
-            response = client.get(_APPLICATIONS_ENDPOINT)
-            response.raise_for_status()
-            data = response.json()
-            if isinstance(data, dict):
-                return data.get("data", data.get("applications", []))
-            if isinstance(data, list):
-                return data
-            return []
+        return SupabaseClient().get_applications()
     except Exception as exc:
         logger.error("Failed to fetch applications for export: %s", str(exc))
         return []

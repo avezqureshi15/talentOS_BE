@@ -12,21 +12,14 @@ Raises TransientEvaluationError for retryable failures (network/5xx) so the
 worker can retry / route to the DLQ. All terminal outcomes are written to the
 candidates table.
 """
-from io import BytesIO
-
-import httpx
-from pypdf import PdfReader
 from sqlalchemy.orm import Session
 
+from app.common.clients import AIClient, AIClientError, ResumeClient, SupabaseClient
 from app.core.config import settings
 from app.core.logger import get_logger
 from app.modules.evaluations.evaluation_model import EvaluationStatus
 from app.modules.evaluations.evaluation_repository import EvaluationRepository
-from app.modules.evaluations.evaluation_schema import (
-    AIEvaluationRequest,
-    AIEvaluationResponse,
-    EvaluationMessage,
-)
+from app.modules.evaluations.evaluation_schema import EvaluationMessage
 
 logger = get_logger(__name__)
 
@@ -39,6 +32,9 @@ class EvaluationProcessor:
     def __init__(self, db: Session):
         self.db = db
         self.repository = EvaluationRepository(db)
+        self.supabase = SupabaseClient()
+        self.ai = AIClient()
+        self.resume = ResumeClient()
 
     def process(self, message: EvaluationMessage) -> None:
         evaluation = self.repository.get_by_application_id(message.application_id)
@@ -68,8 +64,8 @@ class EvaluationProcessor:
                 evaluation, EvaluationStatus.INVALID, error_reason="No resume_url provided"
             )
             return
-       
-        resume_text = self._extract_resume_text(message.resume_url)
+
+        resume_text = self.resume.extract_text(message.resume_url)
         if len(resume_text.strip()) < settings.EVALUATION_MIN_RESUME_CHARS:
             logger.info("Non-text/empty PDF for application_id=%s — marking INVALID", message.application_id)
             self.repository.mark_result(
@@ -79,9 +75,8 @@ class EvaluationProcessor:
             )
             return
 
-        logger.info("Raw extracted resume text for application_id=%s:\n%s", message.application_id, resume_text)
+        logger.debug("Raw extracted resume text for application_id=%s:\n%s", message.application_id, resume_text)
 
-        # Append candidate metadata from the evaluation record
         candidate_meta_parts = []
         for label, val in [
             ("Years of Experience", evaluation.years_of_experience),
@@ -99,14 +94,23 @@ class EvaluationProcessor:
                 "Enriched resume with candidate details for application_id=%s", message.application_id
             )
 
-        logger.info("Final resume text sent to AI for application_id=%s:\n%s", message.application_id, resume_text)
+        logger.debug("Final resume text sent to AI for application_id=%s:\n%s", message.application_id, resume_text)
 
-        jd_details = self._fetch_jd_details(message.job_id)
-        ai_result = self._call_ai_service(
-            resume_txt=resume_text,
-            jd_details=jd_details,
-            custom_evaluation_criteria="",  # TODO: source per-job HR criteria when available
-        )
+        try:
+            jd_details = self.supabase.fetch_jd_details(message.job_id)
+        except Exception as exc:
+            raise TransientEvaluationError(f"JD fetch failed: {exc}") from exc
+
+        try:
+            ai_result = self.ai.evaluate_resume(
+                resume_txt=resume_text,
+                jd_details=jd_details,
+                custom_evaluation_criteria="",
+            )
+        except AIClientError as exc:
+            raise TransientEvaluationError(str(exc)) from exc
+        except Exception as exc:
+            raise TransientEvaluationError(f"AI evaluation failed: {exc}") from exc
 
         threshold = settings.ATS_THRESHOLD_DEFAULT
         is_shortlisted = ai_result.overall_score_percentage >= threshold
@@ -126,64 +130,3 @@ class EvaluationProcessor:
             threshold,
             status.value,
         )
-
-    def _extract_resume_text(self, resume_url: str) -> str:
-        headers = {}
-        if settings.SUPABASE_SERVICE_ROLE_KEY:
-            headers["Authorization"] = f"Bearer {settings.SUPABASE_SERVICE_ROLE_KEY}"
-        try:
-            with httpx.Client(timeout=30) as client:
-                response = client.get(resume_url, headers=headers)
-                response.raise_for_status()
-                content = response.content
-        except httpx.HTTPError as exc:
-            raise TransientEvaluationError(f"Resume download failed: {exc}") from exc
-
-        try:
-            reader = PdfReader(BytesIO(content))
-            return "".join(page.extract_text() or "" for page in reader.pages)
-        except Exception as exc:  # noqa: BLE001 — corrupt PDF is terminal, not retryable
-            logger.warning("PDF parse error: %s", str(exc))
-            return ""
-
-    def _fetch_jd_details(self, job_id: str) -> str:
-        endpoint = f"{settings.SUPABASE_FUNCTIONS_BASE_URL}/manage-job-listings"
-        try:
-            with httpx.Client(timeout=30) as client:
-                response = client.get(endpoint, params={"id": job_id})
-                response.raise_for_status()
-                body = response.json()
-        except httpx.HTTPError as exc:
-            raise TransientEvaluationError(f"JD fetch failed: {exc}") from exc
-
-        data = body.get("data", body) if isinstance(body, dict) else {}
-        title = data.get("title", "")
-        description = data.get("description", "")
-        requirements = data.get("requirements") or []
-        req_text = "\n".join(f"- {r}" for r in requirements) if isinstance(requirements, list) else str(requirements)
-        return f"Title: {title}\n\nDescription:\n{description}\n\nRequirements:\n{req_text}".strip()
-
-    def _call_ai_service(
-        self, resume_txt: str, jd_details: str, custom_evaluation_criteria: str
-    ) -> AIEvaluationResponse:
-        if not settings.AI_SERVICE_BASE_URL:
-            raise TransientEvaluationError("AI_SERVICE_BASE_URL not configured")
-
-        url = f"{settings.AI_SERVICE_BASE_URL.rstrip('/')}/api/v1/evaluation/evaluate-resume"
-        request = AIEvaluationRequest(
-            resume_txt=resume_txt,
-            custom_evaluation_criteria=custom_evaluation_criteria,
-            jd_details=jd_details,
-        )
-        try:
-            with httpx.Client(timeout=settings.AI_SERVICE_TIMEOUT) as client:
-                response = client.post(url, json=request.model_dump())
-                response.raise_for_status()
-                return AIEvaluationResponse.model_validate(response.json())
-        except httpx.HTTPStatusError as exc:
-            # 5xx is retryable; 4xx is a contract problem (still retry-limited by worker).
-            if exc.response.status_code >= 500:
-                raise TransientEvaluationError(f"AI service 5xx: {exc}") from exc
-            raise TransientEvaluationError(f"AI service error {exc.response.status_code}: {exc}") from exc
-        except httpx.HTTPError as exc:
-            raise TransientEvaluationError(f"AI service unreachable: {exc}") from exc

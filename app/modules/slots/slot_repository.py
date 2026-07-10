@@ -4,7 +4,10 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from app.core.logger import get_logger
 from app.modules.slots.slot_model import Slot, SlotStatus
+
+logger = get_logger(__name__)
 
 
 class SlotRepository:
@@ -15,14 +18,17 @@ class SlotRepository:
         slot = Slot(emp_id=emp_id, start_at=start_at, end_at=end_at, status=status)
         self.db.add(slot)
         self.db.flush()
+        logger.info("Created slot: id=%s | emp_id=%s", slot.id, emp_id)
         return slot
 
     def get_slot_by_id(self, slot_id: UUID) -> Slot | None:
         return self.db.query(Slot).filter(Slot.id == slot_id).first()
 
     def update_slot_status(self, slot: Slot, status: str) -> Slot:
+        old_status = slot.status
         slot.status = status
         self.db.flush()
+        logger.info("Updated slot status: id=%s | %s -> %s", slot.id, old_status, status)
         return slot
 
     def get_slots_for_employee(
@@ -49,5 +55,6 @@ class SlotRepository:
         if status is not None:
             slot.status = status
         self.db.flush()
+        logger.debug("Updated slot: id=%s | end_at=%s | status=%s", slot.id, slot.end_at, slot.status)
         return slot
 

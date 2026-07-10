@@ -4,7 +4,10 @@ from uuid import UUID
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
+from app.core.logger import get_logger
 from app.modules.forms.form_model import Form, FormStatus, FormType
+
+logger = get_logger(__name__)
 
 FORM_VALIDITY_HOURS = 24
 
@@ -47,25 +50,29 @@ class FormRepository:
         )
         self.db.add(form)
         self.db.flush()
+        logger.info("Created form: id=%s | emp_id=%s | type=%s", form.id, emp_id, form_type)
         return form
 
     def touch_last_sent_at(self, form: Form, last_sent_at: datetime) -> Form:
         form.last_sent_at = last_sent_at
         self.db.flush()
+        logger.debug("Touched form last_sent_at: id=%s", form.id)
         return form
 
     def mark_submitted(self, form: Form) -> Form:
         form.status = FormStatus.SUBMITTED.value
         self.db.flush()
+        logger.info("Marked form submitted: id=%s | emp_id=%s", form.id, form.emp_id)
         return form
 
     def mark_expired(self, form: Form) -> Form:
         form.status = FormStatus.EXPIRED.value
         self.db.flush()
+        logger.info("Marked form expired: id=%s | emp_id=%s", form.id, form.emp_id)
         return form
 
     def list_due_for_reminder(self) -> list[Form]:
-        return (
+        rows = (
             self.db.query(Form)
             .filter(
                 Form.type == FormType.SLOTS.value,
@@ -75,9 +82,11 @@ class FormRepository:
             )
             .all()
         )
+        logger.debug("Forms due for reminder: count=%s", len(rows))
+        return rows
 
     def list_due_for_escalation(self) -> list[Form]:
-        return (
+        rows = (
             self.db.query(Form)
             .filter(
                 Form.type == FormType.SLOTS.value,
@@ -86,9 +95,11 @@ class FormRepository:
             )
             .all()
         )
+        logger.debug("Forms due for escalation: count=%s", len(rows))
+        return rows
 
     def list_expired(self) -> list[Form]:
-        return (
+        rows = (
             self.db.query(Form)
             .filter(
                 Form.type == FormType.SLOTS.value,
@@ -97,3 +108,5 @@ class FormRepository:
             )
             .all()
         )
+        logger.debug("Forms expired: count=%s", len(rows))
+        return rows

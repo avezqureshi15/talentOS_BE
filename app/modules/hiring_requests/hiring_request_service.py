@@ -47,10 +47,9 @@ class HiringRequestService:
             payload["supabase_job_id"] = supabase_job_id
             local_record = self.repository.create(payload)
         except sa_exc.SQLAlchemyError as exc:
-            logger.critical(
-                "Hiring request created in Supabase but DB write failed: title=%s | error=%s",
+            logger.exception(
+                "Hiring request created in Supabase but DB write failed: title=%s",
                 data.title,
-                str(exc),
             )
             raise HiringRequestNotCreatedException(
                 "Job listing created in Supabase but failed to save locally"
@@ -116,7 +115,7 @@ class HiringRequestService:
         try:
             updated = self.repository.update(record, data.model_dump(exclude_unset=True))
         except sa_exc.SQLAlchemyError as exc:
-            logger.critical("Hiring request DB update failed: id=%s | error=%s", hiring_request_id, str(exc))
+            logger.exception("Hiring request DB update failed: id=%s", hiring_request_id)
             raise HiringRequestNotUpdatedException("Failed to save updated hiring request locally") from exc
 
         response = HiringRequestResponse.model_validate(updated).model_dump()
@@ -137,7 +136,7 @@ class HiringRequestService:
         try:
             updated = self.repository.update(record, {"is_active": new_status})
         except sa_exc.SQLAlchemyError as exc:
-            logger.critical("Hiring request DB update failed: id=%s | error=%s", hiring_request_id, str(exc))
+            logger.exception("Hiring request DB update failed: id=%s", hiring_request_id)
             raise HiringRequestNotUpdatedException("Failed to update hiring request status locally") from exc
 
         response = HiringRequestResponse.model_validate(updated).model_dump()
@@ -167,7 +166,7 @@ class HiringRequestService:
         try:
             self.repository.soft_delete(record)
         except sa_exc.SQLAlchemyError as exc:
-            logger.critical("Hiring request DB soft delete failed: id=%s | error=%s", hiring_request_id, str(exc))
+            logger.exception("Hiring request DB soft delete failed: id=%s", hiring_request_id)
             raise HiringRequestNotDeletedException("Failed to soft delete hiring request locally") from exc
 
         logger.info("Hiring request soft deleted: id=%s", hiring_request_id)
