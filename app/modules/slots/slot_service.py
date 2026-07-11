@@ -140,13 +140,14 @@ class SlotService:
         self.form_service = FormService(db)
 
     def create_slots(self, data: SlotsCreateRequest) -> SlotsCreateResponse:
-        if not self.user_repository.get_by_emp_id(data.emp_id):
+        user = self.user_repository.get_by_emp_id(data.emp_id)
+        if not user:
             raise EmployeeNotFoundException(data.emp_id)
 
         logger.info("Creating %d slot(s) for emp_id=%s", len(data.slots), data.emp_id)
 
         working_slots: list[Slot] = self.repository.get_slots_for_employee(
-            data.emp_id,
+            user.id,
             status=None,
             include_past=True,
         )
@@ -191,7 +192,7 @@ class SlotService:
                     continue
 
                 slot = self.repository.create_slot(
-                    emp_id=data.emp_id,
+                    employee_id=user.id,
                     start_at=slot_data.start_at,
                     end_at=slot_data.end_at,
                 )
@@ -217,11 +218,12 @@ class SlotService:
     def get_slots_for_employees(self, emp_ids: list[str]) -> BatchEmployeeSlotsResponse:
         data: list[EmployeeSlotsResponse] = []
         for emp_id in emp_ids:
-            if not self.user_repository.get_by_emp_id(emp_id):
+            user = self.user_repository.get_by_emp_id(emp_id)
+            if not user:
                 data.append(EmployeeSlotsResponse(emp_id=emp_id, slots=[]))
                 continue
             slots = self.repository.get_slots_for_employee(
-                emp_id,
+                user.id,
                 status=SlotStatus.AVAILABLE.value,
                 include_past=False,
             )

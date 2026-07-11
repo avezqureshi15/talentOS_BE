@@ -1,7 +1,14 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
+
+
+class RatingItem(BaseModel):
+    label: str
+    score: float
+    max_score: float
+    entity_type: str | None = None
 
 
 class RoundCreate(BaseModel):
@@ -20,4 +27,27 @@ class RoundResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = {"from_attributes": True}
+
+
+class RoundDetailResponse(BaseModel):
+    id: uuid.UUID
+    round: str | None = None
+    duration: str | None = None
+    interview_type: str | None = None
+    occurred_on: str | None = None
+    slot: str | None = None
+    status: str | None = None
+    candidate: str | None = None
+    role: str | None = None
+    jd_label: str | None = None
+    interviewer: str | None = None
+    decisions: dict[str, str] = {}
+    ai_summary: str | None = None
+    strong_matches: list[str] = []
+    gaps_and_concerns: list[str] = []
+    ratings: list[RatingItem] = []
+    skills: list[str] = []
+    notes: str | None = None
+    remarks_hr: str | None = None
+    remarks_interviewer: str | None = None

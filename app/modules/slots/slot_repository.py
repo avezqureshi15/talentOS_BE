@@ -14,11 +14,11 @@ class SlotRepository:
     def __init__(self, db: Session):
         self.db = db
 
-    def create_slot(self, emp_id: str, start_at, end_at, status: str = SlotStatus.AVAILABLE.value) -> Slot:
-        slot = Slot(emp_id=emp_id, start_at=start_at, end_at=end_at, status=status)
+    def create_slot(self, employee_id: int, start_at, end_at, status: str = SlotStatus.AVAILABLE.value) -> Slot:
+        slot = Slot(employee_id=employee_id, start_at=start_at, end_at=end_at, status=status)
         self.db.add(slot)
         self.db.flush()
-        logger.info("Created slot: id=%s | emp_id=%s", slot.id, emp_id)
+        logger.info("Created slot: id=%s | employee_id=%s", slot.id, employee_id)
         return slot
 
     def get_slot_by_id(self, slot_id: UUID) -> Slot | None:
@@ -33,11 +33,11 @@ class SlotRepository:
 
     def get_slots_for_employee(
         self,
-        emp_id: str,
+        employee_id: int,
         status: str | None = None,
         include_past: bool = False,
     ) -> list[Slot]:
-        query = self.db.query(Slot).filter(Slot.emp_id == emp_id)
+        query = self.db.query(Slot).filter(Slot.employee_id == employee_id)
         if status is not None:
             query = query.filter(Slot.status == status)
         if not include_past:

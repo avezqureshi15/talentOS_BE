@@ -1,4 +1,5 @@
 from typing import Protocol
+from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -14,6 +15,7 @@ class RoundRepositoryProtocol(Protocol):
     def create(self, round_obj: Round) -> Round: ...
     def get_by_candidate(self, candidate_id: int) -> list[Round]: ...
     def get_by_external_application(self, application_id: str) -> list[Round]: ...
+    def get_by_id(self, round_id: UUID) -> Round | None: ...
 
 
 class RoundRepository:
@@ -42,3 +44,6 @@ class RoundRepository:
             .order_by(Round.created_at)
         )
         return list(self.db.execute(stmt).scalars().all())
+
+    def get_by_id(self, round_id: UUID) -> Round | None:
+        return self.db.query(Round).filter(Round.id == round_id).first()
