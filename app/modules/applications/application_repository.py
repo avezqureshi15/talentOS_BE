@@ -28,6 +28,15 @@ class ApplicationRepository:
         except (ValueError, TypeError):
             return None
 
+    def resolve_hiring_request_id(self, external_job_id: str) -> UUID | None:
+        """Resolve a Supabase external_job_id to the internal hiring_request.id UUID."""
+        try:
+            uuid_val = UUID(external_job_id)
+            hr = self.db.query(HiringRequest).filter(HiringRequest.external_job_id == uuid_val).first()
+            return hr.id if hr else None
+        except (ValueError, TypeError):
+            return None
+
     # ── candidate lookups ────────────────────────────────────────
 
     def get_candidate_by_application_id(self, application_id: str) -> Candidate | None:
@@ -153,6 +162,13 @@ class ApplicationRepository:
         candidate.evaluated_at = datetime.now(timezone.utc)
         self.db.commit()
         self.db.refresh(candidate)
+        return candidate
+
+    def set_current_round_id(self, candidate: Candidate, round_id: UUID) -> Candidate:
+        candidate.current_round_id = round_id
+        self.db.commit()
+        self.db.refresh(candidate)
+        logger.info("Set current_round_id: candidate_id=%s | round_id=%s", candidate.id, round_id)
         return candidate
 
     # ── response mapping ─────────────────────────────────────────

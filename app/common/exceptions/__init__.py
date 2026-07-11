@@ -10,6 +10,8 @@ from .hiring_request_exception import (
     HiringRequestNotFoundException,
     HiringRequestNotUpdatedException,
 )
+from .round_exception import RoundNotFoundException
+from .review_exception import ReviewNotFoundException
 
 __all__ = [
     "BaseAppException",
@@ -22,4 +24,6 @@ __all__ = [
     "HiringRequestNotCreatedException",
     "HiringRequestNotUpdatedException",
     "HiringRequestNotDeletedException",
+    "RoundNotFoundException",
+    "ReviewNotFoundException",
 ]

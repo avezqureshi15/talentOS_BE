@@ -2,7 +2,7 @@
 
 **17 tables** across **11 modules**, managed via SQLAlchemy + Alembic on PostgreSQL (Supabase).
 
-> **Last migration:** `0026_add_round_name` — added `rounds.name` (String, nullable).
+> **Last migration:** `0028_drop_reviews_employee_id` — dropped `reviews.employee_id`.
 
 ---
 
@@ -225,9 +225,9 @@ Status enum: `SENT`, `SUBMITTED`, `EXPIRED`
 | Column | Type | Nullable | Default | PK | FK |
 |--------|------|----------|---------|----|----|
 | id | UUID | NO | `uuid4` | YES | |
-| candidate_id | Integer | NO | | | `candidates.id` |
-| slot_id | UUID | NO | | | `slots.id` |
-| jd_id | UUID | NO | | | `hiring_requests.id` |
+| candidate_id | Integer | YES | | | `candidates.id` |
+| slot_id | UUID | YES | | | `slots.id` |
+| jd_id | UUID | YES | | | `hiring_requests.id` |
 | name | String(255) | YES | | | | Round display name (e.g. "Technical Round 1") |
 | created_at | Timestamptz | NO | `now()` | | |
 | updated_at | Timestamptz | NO | `now()` | | |
@@ -248,7 +248,6 @@ Status enum: `SENT`, `SUBMITTED`, `EXPIRED`
 |--------|------|----------|---------|----|----|-------|
 | id | UUID | NO | `uuid4` | YES | | |
 | round_id | UUID | NO | | | `rounds.id` | |
-| employee_id | Integer | YES | | | `users.id` | NULL for AI/HR reviews |
 | entity_type | String(50) | NO | `INTERVIEWER` | | | `AI`, `HR`, or `INTERVIEWER` |
 | reviews | JSONB | YES | | | | Arbitrary JSON — review content from AI/HR/interviewer |
 | verdict | String(50) | YES | | | | AI/HR/interviewer decision |

@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from uuid import UUID
 
 from sqlalchemy.orm import Session
 
@@ -10,6 +11,10 @@ from app.core.logger import get_logger
 from app.modules.applications.application_repository import ApplicationRepository
 from app.modules.applications.application_schema import ApplicationCreate
 from app.modules.evaluations.evaluation_schema import WebhookRecord
+from app.modules.reviews.review_schema import ReviewCreate
+from app.modules.reviews.review_service import ReviewService
+from app.modules.rounds.round_schema import RoundCreate
+from app.modules.rounds.round_service import RoundService
 
 logger = get_logger(__name__)
 
@@ -207,13 +212,45 @@ class ApplicationService:
         threshold = settings.ATS_THRESHOLD_DEFAULT
         is_shortlisted = ai_result.overall_score_percentage >= threshold
         status = EvaluationStatus.SHORTLISTED if is_shortlisted else EvaluationStatus.REJECTED
+        verdict = "shortlisted" if is_shortlisted else "rejected"
 
+        # Keep legacy columns populated for backward FE compat.
         candidate = self.repo.mark_result(
             candidate, status=status,
             fit_score=ai_result.overall_score_percentage,
             summary_md=ai_result.resume_summary,
             ats_threshold_used=threshold,
         )
+
+        # Create round + AI review (new modular path).
+        try:
+            jd_uuid = self.repo.resolve_hiring_request_id(job_id)
+            round_svc = RoundService(self.db)
+            round_resp = round_svc.create_round(RoundCreate(
+                name="AI Screening",
+                candidate_id=candidate.id,
+                jd_id=jd_uuid,
+            ))
+
+            self.db.refresh(candidate)
+            self.repo.set_current_round_id(candidate, round_resp.id)
+
+            review_svc = ReviewService(self.db)
+            review_svc.create_review(ReviewCreate(
+                round_id=round_resp.id,
+                entity_type="AI",
+                reviews={
+                    "fitscore": ai_result.overall_score_percentage,
+                    "summary_md": ai_result.resume_summary,
+                },
+                verdict=verdict,
+            ))
+        except Exception as exc:
+            logger.error(
+                "Round/review creation failed for candidate_id=%s: %s",
+                candidate.id, exc,
+            )
+
         return self.repo.to_candidate_dict(candidate)
 
     def _to_camel_case(self, snake_data: dict) -> dict:

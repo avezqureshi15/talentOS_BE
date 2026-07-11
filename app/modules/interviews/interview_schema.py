@@ -23,26 +23,6 @@ class ScheduleMeetResponse(BaseModel):
     calendar_link: str
 
 
-class ReviewCreate(BaseModel):
-    round_id: str
-    employee_id: int | None = None
-    entity_type: str
-    reviews: dict | None = None
-    verdict: str | None = None
-
-
-class ReviewResponse(BaseModel):
-    id: str
-    round_id: str
-    employee_id: int | None = None
-    entity_type: str
-    reviews: dict | None = None
-    verdict: str | None = None
-    created_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
 class InterviewCreate(BaseModel):
     round_id: str
     interviewer_id: int

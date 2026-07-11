@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
@@ -68,6 +70,13 @@ class EvaluationRepository:
         self.db.commit()
         self.db.refresh(evaluation)
         logger.info("Marked evaluation processing: id=%s | attempt=%d", evaluation.external_application_id, evaluation.attempts)
+        return evaluation
+
+    def set_current_round_id(self, evaluation: Candidate, round_id: UUID) -> Candidate:
+        evaluation.current_round_id = round_id
+        self.db.commit()
+        self.db.refresh(evaluation)
+        logger.info("Set current_round_id: candidate_id=%s | round_id=%s", evaluation.id, round_id)
         return evaluation
 
     def mark_result(
