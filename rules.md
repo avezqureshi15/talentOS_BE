@@ -607,7 +607,7 @@ from app.modules.jobs.job_service import JobService
 from app.modules.evaluations.evaluation_model import Candidate
 
 # FORBIDDEN — importing schema from another module
-from app.modules.evaluations.evaluation_schema import AIEvaluationRequest
+from app.common.schemas.evaluation import AIEvaluationRequest
 ```
 
 ### 10.3 Allowed Dependency Graph

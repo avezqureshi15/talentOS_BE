@@ -5,7 +5,7 @@ import httpx
 from app.common.clients.base_client import BaseClient, ClientError
 from app.core.config import settings
 from app.core.logger import get_logger
-from app.modules.evaluations.evaluation_schema import AIEvaluationRequest, AIEvaluationResponse
+from app.common.schemas.evaluation import AIEvaluationRequest, AIEvaluationResponse
 
 logger = get_logger(__name__)
 

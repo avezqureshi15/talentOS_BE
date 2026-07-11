@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.common.clients import AIClient, AIClientError, ResumeClient, SupabaseClient
 from app.common.exceptions.base_exception import BaseAppException
 from app.core.config import settings
-from app.core.constants import ErrorCode, EvaluationStatus
+from app.core.constants import EvaluationStatus
 from app.core.logger import get_logger
 from app.modules.applications.application_repository import ApplicationRepository
 from app.modules.applications.application_schema import ApplicationCreate
@@ -83,37 +83,6 @@ class ApplicationService:
             "limit": limit,
             "offset": offset,
         }
-
-    def get_all_applications(self, job_id: str | None = None, status_filter: str | None = None) -> dict:
-        if not self.repo:
-            logger.warning("No DB session")
-            return {"data": []}
-
-        resolved_job_id = self.repo.resolve_supabase_job_id(job_id) if job_id else None
-        actual_job_id = resolved_job_id or job_id
-
-        if status_filter and actual_job_id:
-            status_upper = status_filter.upper().replace("-", "_")
-            if status_upper == "NON_SHORTLISTED":
-                filtered = self.repo.get_candidates_by_job(actual_job_id, status=EvaluationStatus.REJECTED.value)
-            else:
-                filtered = self.repo.get_candidates_by_job(actual_job_id, status=status_upper)
-            return {"data": [self.repo.to_candidate_dict(e) for e in filtered]}
-
-        logger.info("Fetching applications from Supabase")
-        try:
-            all_applications = self.supabase.get_applications()
-        except BaseAppException:
-            raise
-
-        if job_id:
-            all_applications = [a for a in all_applications if str(a.get("job_id", "")) == job_id]
-
-        for app in all_applications:
-            self._evaluate_single(app)
-
-        result = [self.repo.to_candidate_dict(e) for e in (self.repo.get_candidates_by_job(actual_job_id) if actual_job_id else [])]
-        return {"data": result}
 
     def evaluate_webhook(self, record: WebhookRecord) -> dict:
         app_dict = {

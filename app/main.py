@@ -9,8 +9,6 @@ from app.common.handlers import register_exception_handlers
 from app.core.config import settings
 from app.core.kafka import ensure_topics
 from app.core.logger import get_logger, setup_logging
-from app.db.base import Base
-from app.db.session import engine
 from app.middleware import RequestLoggingMiddleware
 from app.modules.applications import router as applications_router
 from app.modules.alerts import router as alerts_router
@@ -36,11 +34,6 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI):
     setup_logging()
     logger.info("Starting %s v%s | env=%s", settings.APP_NAME, settings.APP_VERSION, settings.APP_ENV)
-    try:
-        Base.metadata.create_all(bind=engine)
-        logger.info("Database tables created")
-    except Exception as exc:
-        logger.warning("Database unavailable — running in proxy-only mode: %s", str(exc))
     ensure_topics()
     cron_stop_event = asyncio.Event()
     cron_task = asyncio.create_task(run_hourly_jobs_forever(cron_stop_event))
