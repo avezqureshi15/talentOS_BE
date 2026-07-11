@@ -177,6 +177,7 @@ class ApplicationRepository:
     def to_candidate_dict(candidate: Candidate) -> dict:
         return {
             "id": candidate.external_application_id,
+            "candidate_id": candidate.id,
             "job_id": candidate.external_job_id,
             "name": candidate.candidate_name,
             "email": candidate.candidate_email,

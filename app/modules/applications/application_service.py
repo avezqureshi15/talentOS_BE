@@ -227,7 +227,7 @@ class ApplicationService:
             jd_uuid = self.repo.resolve_hiring_request_id(job_id)
             round_svc = RoundService(self.db)
             round_resp = round_svc.create_round(RoundCreate(
-                name="AI Screening",
+                name="Resume Shortlisting",
                 candidate_id=candidate.id,
                 jd_id=jd_uuid,
             ))

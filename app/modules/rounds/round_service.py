@@ -28,3 +28,13 @@ class RoundService:
         self.db.refresh(round_obj)
 
         return RoundResponse.model_validate(round_obj)
+
+    def get_rounds_by_candidate(self, candidate_id: int) -> list[RoundResponse]:
+        logger.info("Fetching rounds for candidate_id=%s", candidate_id)
+        rounds = self.repository.get_by_candidate(candidate_id)
+        return [RoundResponse.model_validate(r) for r in rounds]
+
+    def get_rounds_by_external_application(self, application_id: str) -> list[RoundResponse]:
+        logger.info("Fetching rounds for external_application_id=%s", application_id)
+        rounds = self.repository.get_by_external_application(application_id)
+        return [RoundResponse.model_validate(r) for r in rounds]

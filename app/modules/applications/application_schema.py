@@ -38,6 +38,7 @@ class ApplicationResponse(BaseModel):
 
 class EvaluatedCandidate(BaseModel):
     id: str
+    candidate_id: int
     job_id: str
     name: str | None = None
     email: str | None = None

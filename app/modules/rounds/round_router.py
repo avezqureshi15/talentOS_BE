@@ -13,3 +13,9 @@ router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/rounds", tags=["rounds"])
 def create_round(data: RoundCreate, db: Session = Depends(get_db)):
     service = RoundService(db)
     return service.create_round(data)
+
+
+@router.get("/candidate/{candidate_id}", response_model=list[RoundResponse])
+def get_rounds_by_candidate(candidate_id: int, db: Session = Depends(get_db)):
+    service = RoundService(db)
+    return service.get_rounds_by_candidate(candidate_id)
