@@ -17,13 +17,13 @@ class ApplicationRepository:
 
     # ── hiring request resolution ────────────────────────────────
 
-    def resolve_supabase_job_id(self, job_id: str) -> str | None:
-        """Resolve a hiring_request.id to its supabase_job_id."""
+    def resolve_external_job_id(self, job_id: str) -> str | None:
+        """Resolve a hiring_request.id to its external_job_id."""
         try:
             hr_uuid = UUID(job_id)
             hr = self.db.query(HiringRequest).filter(HiringRequest.id == hr_uuid).first()
-            if hr and hr.supabase_job_id:
-                return str(hr.supabase_job_id)
+            if hr and hr.external_job_id:
+                return str(hr.external_job_id)
             return None
         except (ValueError, TypeError):
             return None
@@ -33,14 +33,14 @@ class ApplicationRepository:
     def get_candidate_by_application_id(self, application_id: str) -> Candidate | None:
         return (
             self.db.query(Candidate)
-            .filter(Candidate.application_id == application_id)
+            .filter(Candidate.external_application_id == application_id)
             .first()
         )
 
     def get_candidates_by_job(
         self, job_id: str, status: str | None = None
     ) -> list[Candidate]:
-        query = self.db.query(Candidate).filter(Candidate.job_id == job_id)
+        query = self.db.query(Candidate).filter(Candidate.external_job_id == job_id)
         if status:
             query = query.filter(Candidate.status == status)
         return query.order_by(Candidate.fit_score.desc().nullslast()).all()
@@ -60,7 +60,7 @@ class ApplicationRepository:
         query = self.db.query(Candidate)
 
         if job_id:
-            query = query.filter(Candidate.job_id == job_id)
+            query = query.filter(Candidate.external_job_id == job_id)
         if status:
             query = query.filter(Candidate.status == status)
         if schedule == "scheduled":
@@ -106,8 +106,8 @@ class ApplicationRepository:
         willing_to_relocate: bool = False,
     ) -> Candidate:
         candidate = Candidate(
-            application_id=application_id,
-            job_id=job_id,
+            external_application_id=application_id,
+            external_job_id=job_id,
             candidate_name=candidate_name,
             candidate_email=candidate_email,
             candidate_phone=candidate_phone,
@@ -126,7 +126,7 @@ class ApplicationRepository:
         self.db.add(candidate)
         self.db.commit()
         self.db.refresh(candidate)
-        logger.info("Created queued candidate: application_id=%s | job_id=%s", application_id, job_id)
+        logger.info("Created queued candidate: external_application_id=%s | external_job_id=%s", application_id, job_id)
         return candidate
 
     def mark_processing(self, candidate: Candidate) -> Candidate:
@@ -160,8 +160,8 @@ class ApplicationRepository:
     @staticmethod
     def to_candidate_dict(candidate: Candidate) -> dict:
         return {
-            "id": candidate.application_id,
-            "job_id": candidate.job_id,
+            "id": candidate.external_application_id,
+            "job_id": candidate.external_job_id,
             "name": candidate.candidate_name,
             "email": candidate.candidate_email,
             "phone": candidate.candidate_phone,

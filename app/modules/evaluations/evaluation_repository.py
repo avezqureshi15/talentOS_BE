@@ -16,7 +16,7 @@ class EvaluationRepository:
     def get_by_application_id(self, application_id: str) -> Candidate | None:
         return (
             self.db.query(Candidate)
-            .filter(Candidate.application_id == application_id)
+            .filter(Candidate.external_application_id == application_id)
             .first()
         )
 
@@ -39,8 +39,8 @@ class EvaluationRepository:
         willing_to_relocate: bool = False,
     ) -> Candidate:
         evaluation = Candidate(
-            application_id=application_id,
-            job_id=job_id,
+            external_application_id=application_id,
+            external_job_id=job_id,
             candidate_name=candidate_name,
             candidate_email=candidate_email,
             candidate_phone=candidate_phone,
@@ -59,7 +59,7 @@ class EvaluationRepository:
         self.db.add(evaluation)
         self.db.commit()
         self.db.refresh(evaluation)
-        logger.info("Created queued evaluation: application_id=%s | job_id=%s", application_id, job_id)
+        logger.info("Created queued evaluation: external_application_id=%s | external_job_id=%s", application_id, job_id)
         return evaluation
 
     def mark_processing(self, evaluation: Candidate) -> Candidate:
@@ -67,7 +67,7 @@ class EvaluationRepository:
         evaluation.attempts += 1
         self.db.commit()
         self.db.refresh(evaluation)
-        logger.info("Marked evaluation processing: id=%s | attempt=%d", evaluation.application_id, evaluation.attempts)
+        logger.info("Marked evaluation processing: id=%s | attempt=%d", evaluation.external_application_id, evaluation.attempts)
         return evaluation
 
     def mark_result(
@@ -88,13 +88,13 @@ class EvaluationRepository:
         self.db.commit()
         self.db.refresh(evaluation)
         logger.info(
-            "Evaluation result: application_id=%s | status=%s | score=%s | error=%s",
-            evaluation.application_id, status.value, fit_score, error_reason,
+            "Evaluation result: external_application_id=%s | status=%s | score=%s | error=%s",
+            evaluation.external_application_id, status.value, fit_score, error_reason,
         )
         return evaluation
 
     def get_by_job(self, job_id: str, status: str | None = None) -> list[Candidate]:
-        query = self.db.query(Candidate).filter(Candidate.job_id == job_id)
+        query = self.db.query(Candidate).filter(Candidate.external_job_id == job_id)
         if status:
             query = query.filter(Candidate.status == status)
         return query.order_by(Candidate.fit_score.desc().nullslast()).all()
@@ -114,7 +114,7 @@ class EvaluationRepository:
         query = self.db.query(Candidate)
 
         if job_id:
-            query = query.filter(Candidate.job_id == job_id)
+            query = query.filter(Candidate.external_job_id == job_id)
         if status:
             query = query.filter(Candidate.status == status)
         if schedule == "scheduled":

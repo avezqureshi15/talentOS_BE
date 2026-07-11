@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
+from typing import Annotated
 
 
 class WebhookRecord(BaseModel):
@@ -59,8 +60,8 @@ class EvaluationMessage(BaseModel):
 
 class EvaluationResponse(BaseModel):
     id: int
-    application_id: str
-    job_id: str
+    application_id: Annotated[str, Field(validation_alias="external_application_id")]
+    job_id: Annotated[str, Field(validation_alias="external_job_id")]
     candidate_name: str | None
     candidate_email: str | None
     resume_url: str | None

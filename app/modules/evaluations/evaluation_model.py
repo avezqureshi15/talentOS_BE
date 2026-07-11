@@ -14,8 +14,8 @@ class Candidate(Base):
 
     # Dedup / idempotency key — the Supabase job_applications.id.
     # Stored as string to stay agnostic to Supabase's id type (int/uuid).
-    application_id: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
-    job_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    external_application_id: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+    external_job_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
 
     candidate_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     candidate_email: Mapped[str | None] = mapped_column(String(255), nullable=True)

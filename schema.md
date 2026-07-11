@@ -92,7 +92,7 @@
 | benefits | JSON | YES | | | | |
 | is_active | Boolean | NO | `false` | | | |
 | custom_evaluation_criteria | Text | YES | | | | |
-| supabase_job_id | UUID | YES | | | YES | |
+| external_job_id | UUID | YES | | | YES | |
 | deleted_at | Timestamptz | YES | | | | Soft delete |
 | created_at | Timestamptz | NO | `now()` | | | |
 | updated_at | Timestamptz | NO | `now()` | | | |
@@ -104,8 +104,8 @@
 | Column | Type | Nullable | Default | PK | Unique | Index |
 |--------|------|----------|---------|----|--------|-------|
 | id | Integer | NO | autoincrement | YES | | |
-| application_id | String(255) | NO | | | YES | YES |
-| job_id | String(255) | NO | | | | YES |
+| external_application_id | String(255) | NO | | | YES | YES |
+| external_job_id | String(255) | NO | | | | YES |
 | candidate_name | String(255) | YES | | | | |
 | candidate_email | String(255) | YES | | | | |
 | candidate_phone | String(30) | YES | | | | |

@@ -47,7 +47,7 @@ class ApplicationService:
             logger.warning("No DB session")
             return {"data": [], "total": 0, "limit": limit, "offset": offset}
 
-        resolved_job_id = self.repo.resolve_supabase_job_id(job_id) if job_id else None
+        resolved_job_id = self.repo.resolve_external_job_id(job_id) if job_id else None
         if job_id and not resolved_job_id:
             return {"data": [], "total": 0, "limit": limit, "offset": offset}
 

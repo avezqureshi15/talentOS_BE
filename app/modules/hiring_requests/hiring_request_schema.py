@@ -39,7 +39,7 @@ class HiringRequestResponse(BaseModel):
     benefits: list[str] | None
     is_active: bool
     custom_evaluation_criteria: str | None
-    supabase_job_id: UUID | None
+    external_job_id: UUID | None
     deleted_at: datetime | None
     created_at: datetime
     updated_at: datetime

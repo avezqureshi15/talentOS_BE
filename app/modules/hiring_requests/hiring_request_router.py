@@ -94,11 +94,11 @@ def export_hiring_request_excel(hiring_request_id: UUID, db: Session = Depends(g
     service = HiringRequestService(db)
     job_data = service.get_hiring_request_by_id(hiring_request_id)
     job = job_data["data"]
-    supabase_job_id = job.get("supabase_job_id")
+    external_job_id = job.get("external_job_id")
 
     all_apps = fetch_applications()
-    if supabase_job_id:
-        filtered = [a for a in all_apps if str(a.get("job_id", "")) == str(supabase_job_id)]
+    if external_job_id:
+        filtered = [a for a in all_apps if str(a.get("job_id", "")) == str(external_job_id)]
     else:
         filtered = []
 

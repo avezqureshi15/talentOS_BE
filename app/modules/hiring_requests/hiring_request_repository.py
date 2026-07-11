@@ -21,9 +21,9 @@ class HiringRequestRepository:
     def get_by_id(self, hiring_request_id: UUID) -> HiringRequest | None:
         return self.db.query(HiringRequest).filter(HiringRequest.id == hiring_request_id).first()
 
-    def resolve_to_supabase_job_id(self, identifier: UUID) -> HiringRequest | None:
+    def resolve_to_external_job_id(self, identifier: UUID) -> HiringRequest | None:
         return self.db.query(HiringRequest).filter(
-            (HiringRequest.id == identifier) | (HiringRequest.supabase_job_id == identifier)
+            (HiringRequest.id == identifier) | (HiringRequest.external_job_id == identifier)
         ).first()
 
     def get_all(

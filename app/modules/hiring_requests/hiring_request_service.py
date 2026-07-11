@@ -40,11 +40,11 @@ class HiringRequestService:
         data.title = prefixed
         job_payload = JobCreate(**data.model_dump(exclude={"custom_evaluation_criteria"}))
         job_response = self.job_service.create_job(job_payload)
-        supabase_job_id = job_response.get("data", {}).get("id")
+        external_job_id = job_response.get("data", {}).get("id")
 
         try:
             payload = data.model_dump()
-            payload["supabase_job_id"] = supabase_job_id
+            payload["external_job_id"] = external_job_id
             local_record = self.repository.create(payload)
         except sa_exc.SQLAlchemyError as exc:
             logger.exception(
@@ -60,7 +60,7 @@ class HiringRequestService:
 
     def get_hiring_request_by_id(self, hiring_request_id: UUID) -> dict:
         logger.info("Fetching hiring request: id=%s", hiring_request_id)
-        record = self.repository.resolve_to_supabase_job_id(hiring_request_id)
+        record = self.repository.resolve_to_external_job_id(hiring_request_id)
         if not record:
             raise HiringRequestNotFoundException(str(hiring_request_id))
         response = HiringRequestResponse.model_validate(record).model_dump()
@@ -104,13 +104,13 @@ class HiringRequestService:
 
     def update_hiring_request(self, hiring_request_id: UUID, data: HiringRequestUpdate) -> dict:
         logger.info("Updating hiring request: id=%s", hiring_request_id)
-        record = self.repository.resolve_to_supabase_job_id(hiring_request_id)
+        record = self.repository.resolve_to_external_job_id(hiring_request_id)
         if not record:
             raise HiringRequestNotFoundException(str(hiring_request_id))
 
-        if record.supabase_job_id:
+        if record.external_job_id:
             job_payload = JobUpdate(**data.model_dump(exclude={"custom_evaluation_criteria"}, exclude_unset=True))
-            self.job_service.update_job(record.supabase_job_id, job_payload)
+            self.job_service.update_job(record.external_job_id, job_payload)
 
         try:
             updated = self.repository.update(record, data.model_dump(exclude_unset=True))
@@ -123,15 +123,15 @@ class HiringRequestService:
 
     def toggle_hiring_request_status(self, hiring_request_id: UUID) -> dict:
         logger.info("Toggling hiring request status: id=%s", hiring_request_id)
-        record = self.repository.resolve_to_supabase_job_id(hiring_request_id)
+        record = self.repository.resolve_to_external_job_id(hiring_request_id)
         if not record:
             raise HiringRequestNotFoundException(str(hiring_request_id))
 
         new_status = not record.is_active
 
-        if record.supabase_job_id:
+        if record.external_job_id:
             job_payload = JobUpdate(is_active=new_status)
-            self.job_service.update_job(record.supabase_job_id, job_payload)
+            self.job_service.update_job(record.external_job_id, job_payload)
 
         try:
             updated = self.repository.update(record, {"is_active": new_status})
@@ -156,12 +156,12 @@ class HiringRequestService:
 
     def delete_hiring_request(self, hiring_request_id: UUID) -> dict:
         logger.info("Deleting hiring request: id=%s", hiring_request_id)
-        record = self.repository.resolve_to_supabase_job_id(hiring_request_id)
+        record = self.repository.resolve_to_external_job_id(hiring_request_id)
         if not record:
             raise HiringRequestNotFoundException(str(hiring_request_id))
 
-        if record.supabase_job_id:
-            self.job_service.delete_job(record.supabase_job_id)
+        if record.external_job_id:
+            self.job_service.delete_job(record.external_job_id)
 
         try:
             self.repository.soft_delete(record)
