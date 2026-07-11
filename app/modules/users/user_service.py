@@ -32,10 +32,21 @@ class UserService:
         query: str | None = None,
         page: int = 1,
         per_page: int = DEFAULT_PAGE_SIZE,
+        slots_info: bool = False,
     ) -> PaginatedUserResponse:
-        logger.info("Searching users: query=%s page=%d per_page=%d", query, page, per_page)
-        users, total = self.repository.search_paginated(query, page, per_page)
-        data = [UserResponse.model_validate(u) for u in users]
+        logger.info("Searching users: query=%s page=%d per_page=%d slots_info=%s", query, page, per_page, slots_info)
+        result, total = self.repository.search_paginated(query, page, per_page, slots_info)
+
+        if slots_info:
+            data = []
+            for u, count in result:
+                user_data = UserResponse.model_validate(u)
+                user_data.slots_count = count
+                user_data.has_slots = count > 0
+                data.append(user_data)
+        else:
+            data = [UserResponse.model_validate(u) for u in result]
+
         has_more = (page * per_page) < total
         logger.debug("Found %d users (total=%d, has_more=%s)", len(data), total, has_more)
         return PaginatedUserResponse(data=data, total=total, page=page, per_page=per_page, has_more=has_more)

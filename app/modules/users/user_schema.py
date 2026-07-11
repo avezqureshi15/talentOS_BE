@@ -25,6 +25,8 @@ class UserResponse(BaseModel):
     band: str
     skills: str | None = None
     created_at: datetime
+    slots_count: int = 0
+    has_slots: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 

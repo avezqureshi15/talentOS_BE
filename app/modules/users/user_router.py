@@ -47,7 +47,8 @@ def list_users(
     q: str | None = Query(None, description="Search query"),
     page: int = Query(1, ge=1),
     per_page: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+    slotsInfo: bool = Query(False, description="Include slot availability info and sort by slot count"),
     db: Session = Depends(get_db),
 ):
     service = UserService(db)
-    return service.search_users(query=q, page=page, per_page=per_page)
+    return service.search_users(query=q, page=page, per_page=per_page, slots_info=slotsInfo)

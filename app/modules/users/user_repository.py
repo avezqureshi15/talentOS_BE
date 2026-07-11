@@ -1,4 +1,4 @@
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.modules.users.user_model import User
@@ -21,8 +21,9 @@ class UserRepository:
         query: str | None = None,
         page: int = 1,
         per_page: int = 20,
-    ) -> tuple[list[User], int]:
-        stmt = self.db.query(User)
+        slots_info: bool = False,
+    ) -> tuple[list[User] | list[tuple[User, int]], int]:
+        base_query = self.db.query(User)
 
         if query:
             filter_condition = or_(
@@ -32,10 +33,29 @@ class UserRepository:
                 User.designation.ilike(f"%{query}%"),
                 User.department.ilike(f"%{query}%"),
             )
-            stmt = stmt.filter(filter_condition)
+            base_query = base_query.filter(filter_condition)
 
-        total = stmt.count()
-        users = stmt.order_by(User.name).offset((page - 1) * per_page).limit(per_page).all()
+        total = base_query.count()
+
+        if slots_info:
+            from app.modules.slots.slot_model import Slot
+            results = (
+                base_query.outerjoin(Slot, Slot.employee_id == User.id)
+                .add_columns(func.count(Slot.id).label("slots_count"))
+                .group_by(User.id)
+                .order_by(func.count(Slot.id).desc(), User.name.asc())
+                .offset((page - 1) * per_page)
+                .limit(per_page)
+                .all()
+            )
+            return results, total
+
+        users = (
+            base_query.order_by(User.name)
+            .offset((page - 1) * per_page)
+            .limit(per_page)
+            .all()
+        )
         return users, total
 
     def get_by_id(self, user_id: int) -> User | None:
