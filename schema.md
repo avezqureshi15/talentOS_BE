@@ -1,6 +1,8 @@
 # talentOS Database Schema
 
-**16 tables** across **11 modules**, managed via SQLAlchemy + Alembic on PostgreSQL (Supabase).
+**17 tables** across **11 modules**, managed via SQLAlchemy + Alembic on PostgreSQL (Supabase).
+
+> **Last migration:** `0026_add_round_name` — added `rounds.name` (String, nullable).
 
 ---
 
@@ -128,6 +130,8 @@
 | created_at | Timestamptz | NO | `now()` | | | |
 | updated_at | Timestamptz | NO | `now()` | | | |
 | evaluated_at | Timestamptz | YES | | | | |
+| current_round_id | UUID | YES | | | `rounds.id` | FK to the candidate's active round |
+| final_verdict | String(50) | YES | | | | Final verdict for the candidate |
 
 Status enum: `QUEUED`, `PROCESSING`, `SHORTLISTED`, `REJECTED`, `INVALID`, `FAILED`
 
@@ -224,8 +228,7 @@ Status enum: `SENT`, `SUBMITTED`, `EXPIRED`
 | candidate_id | Integer | NO | | | `candidates.id` |
 | slot_id | UUID | NO | | | `slots.id` |
 | jd_id | UUID | NO | | | `hiring_requests.id` |
-| ai_verdict | Text | YES | | | |
-| hr_verdict | Text | YES | | | |
+| name | String(255) | YES | | | | Round display name (e.g. "Technical Round 1") |
 | created_at | Timestamptz | NO | `now()` | | |
 | updated_at | Timestamptz | NO | `now()` | | |
 
@@ -236,21 +239,38 @@ Status enum: `SENT`, `SUBMITTED`, `EXPIRED`
 | id | UUID | NO | `uuid4` | YES | |
 | round_id | UUID | NO | | | `rounds.id` |
 | employee_id | Integer | NO | | | `users.id` |
-| verdict | Text | YES | | | |
 | created_at | Timestamptz | NO | `now()` | | |
 | updated_at | Timestamptz | NO | `now()` | | |
 
 ## 16. reviews
 
-| Column | Type | Nullable | Default | PK | FK |
-|--------|------|----------|---------|----|----|
-| id | UUID | NO | `uuid4` | YES | |
-| round_id | UUID | NO | | | `rounds.id` |
-| employee_id | Integer | NO | | | `users.id` |
-| summary | Text | YES | | | |
-| status | String(50) | NO | | | |
-| created_at | Timestamptz | NO | `now()` | | |
-| updated_at | Timestamptz | NO | `now()` | | |
+| Column | Type | Nullable | Default | PK | FK | Notes |
+|--------|------|----------|---------|----|----|-------|
+| id | UUID | NO | `uuid4` | YES | | |
+| round_id | UUID | NO | | | `rounds.id` | |
+| employee_id | Integer | YES | | | `users.id` | NULL for AI/HR reviews |
+| entity_type | String(50) | NO | `INTERVIEWER` | | | `AI`, `HR`, or `INTERVIEWER` |
+| reviews | JSONB | YES | | | | Arbitrary JSON — review content from AI/HR/interviewer |
+| verdict | String(50) | YES | | | | AI/HR/interviewer decision |
+| created_at | Timestamptz | NO | `now()` | | | |
+| updated_at | Timestamptz | NO | `now()` | | | |
+
+---
+
+## 17. interviews
+
+| Column | Type | Nullable | Default | PK | FK | Notes |
+|--------|------|----------|---------|----|----|-------|
+| id | UUID | NO | `uuid4` | YES | | |
+| round_id | UUID | NO | | | `rounds.id` | |
+| interviewer_id | Integer | NO | | | `users.id` | |
+| slot_id | UUID | YES | | | `slots.id` | |
+| event_id | String(500) | YES | | | | Google Calendar event ID |
+| start_time | Timestamptz | NO | | | | |
+| end_time | Timestamptz | NO | | | | |
+| status | String(50) | NO | `SCHEDULED` | | | `SCHEDULED`, `COMPLETED`, `CANCELLED`, `RESCHEDULED` |
+| created_at | Timestamptz | NO | `now()` | | | |
+| updated_at | Timestamptz | NO | `now()` | | | |
 
 ---
 
@@ -262,7 +282,7 @@ bands.id                     <──  kpi_definitions.band_id
 
 users.id                     <──  chats.user_id
 users.id                     <──  round_interviewers.employee_id
-users.id                     <──  reviews.employee_id
+users.id                     <──  reviews.employee_id          (nullable — only for INTERVIEWER reviews)
 
 candidates.id                <──  rounds.candidate_id
 slots.id                     <──  rounds.slot_id
@@ -270,6 +290,10 @@ hiring_requests.id           <──  rounds.jd_id
 
 rounds.id                    <──  round_interviewers.round_id
 rounds.id                    <──  reviews.round_id
+rounds.id                    <──  interviews.round_id
+rounds.id                    <──  candidates.current_round_id    (nullable — tracks the candidate's active round)
+users.id                     <──  interviews.interviewer_id
+slots.id                     <──  interviews.slot_id             (nullable)
 ```
 
 ---
@@ -288,4 +312,4 @@ rounds.id                    <──  reviews.round_id
 | forms | `forms` |
 | auth | `refresh_tokens` |
 | chat | `chats`, `messages` |
-| interviews | `rounds`, `round_interviewers`, `reviews` |
+| interviews | `rounds`, `round_interviewers`, `reviews`, `interviews` |

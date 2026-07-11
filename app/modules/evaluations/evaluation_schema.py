@@ -71,6 +71,8 @@ class EvaluationResponse(BaseModel):
     ats_threshold_used: int | None
     attempts: int
     error_reason: str | None
+    current_round_id: str | None
+    final_verdict: str | None
     created_at: datetime
     updated_at: datetime
     evaluated_at: datetime | None
