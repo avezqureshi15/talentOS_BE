@@ -102,6 +102,10 @@ class EvaluationRepository:
         )
         return evaluation
 
+    def get_final_verdict(self, candidate_id: int) -> str | None:
+        candidate = self.db.query(Candidate).filter(Candidate.id == candidate_id).first()
+        return candidate.final_verdict if candidate else None
+
     def get_by_job(self, job_id: str, status: str | None = None) -> list[Candidate]:
         query = self.db.query(Candidate).filter(Candidate.external_job_id == job_id)
         if status:

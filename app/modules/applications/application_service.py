@@ -5,12 +5,17 @@ from sqlalchemy.orm import Session
 
 from app.common.clients import AIClient, AIClientError, ResumeClient, SupabaseClient
 from app.common.exceptions.base_exception import BaseAppException
+from app.common.exceptions.application_exception import (
+    ApplicationNotFoundException,
+    CandidateFinalizedException,
+)
 from app.core.config import settings
+
 from app.core.constants import EvaluationStatus
 from app.core.logger import get_logger
 from app.modules.applications.application_repository import ApplicationRepository
 from app.modules.applications.application_schema import ApplicationCreate
-from app.modules.evaluations.evaluation_schema import WebhookRecord
+from app.modules.evaluations.evaluation_schema import EvaluationResponse, WebhookRecord
 from app.modules.reviews.review_schema import ReviewCreate
 from app.modules.reviews.review_service import ReviewService
 from app.modules.rounds.round_schema import RoundCreate
@@ -264,6 +269,27 @@ class ApplicationService:
             mapped = mapping.get(key, key)
             camel[mapped] = value
         return camel
+
+    def set_final_verdict(self, candidate_id: int, verdict: str) -> EvaluationResponse:
+        existing = self.repo.get_final_verdict(candidate_id)
+        if existing:
+            raise CandidateFinalizedException(candidate_id, existing)
+        candidate = self.repo.set_final_verdict(candidate_id, verdict)
+        if not candidate:
+            raise ApplicationNotFoundException(candidate_id)
+        return EvaluationResponse.model_validate(candidate)
+
+    def update_candidate_status(self, candidate_id: int, new_status: str) -> EvaluationResponse:
+        candidate = self.repo.update_status(candidate_id, new_status)
+        if not candidate:
+            existing = self.repo.get_by_candidate_id(candidate_id)
+            if not existing:
+                raise ApplicationNotFoundException(candidate_id)
+            raise CandidateFinalizedException(candidate_id, existing.final_verdict)
+        self.db.commit()
+        self.db.refresh(candidate)
+        logger.info("Candidate status updated: candidate_id=%s | status=%s", candidate_id, new_status)
+        return EvaluationResponse.model_validate(candidate)
 
     def create_application(self, data: ApplicationCreate) -> dict:
         logger.info("Creating application: job_id=%s | name=%s", data.job_id, data.name)

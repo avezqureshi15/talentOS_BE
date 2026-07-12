@@ -171,6 +171,34 @@ class ApplicationRepository:
         logger.info("Set current_round_id: candidate_id=%s | round_id=%s", candidate.id, round_id)
         return candidate
 
+    def get_by_candidate_id(self, candidate_id: int) -> Candidate | None:
+        return self.db.query(Candidate).filter(Candidate.id == candidate_id).first()
+
+    def get_final_verdict(self, candidate_id: int) -> str | None:
+        candidate = self.get_by_candidate_id(candidate_id)
+        return candidate.final_verdict if candidate else None
+
+    def set_final_verdict(self, candidate_id: int, verdict: str) -> Candidate | None:
+        candidate = self.get_by_candidate_id(candidate_id)
+        if not candidate:
+            return None
+        candidate.final_verdict = verdict
+        self.db.commit()
+        self.db.refresh(candidate)
+        logger.info("Set final_verdict: candidate_id=%s | verdict=%s", candidate_id, verdict)
+        return candidate
+
+    def update_status(self, candidate_id: int, new_status: str) -> Candidate | None:
+        candidate = self.get_by_candidate_id(candidate_id)
+        if not candidate:
+            return None
+        if candidate.final_verdict is not None:
+            return None
+        candidate.status = new_status
+        self.db.flush()
+        logger.info("Updated candidate status: candidate_id=%s | status=%s", candidate_id, new_status)
+        return candidate
+
     # ── response mapping ─────────────────────────────────────────
 
     @staticmethod
@@ -197,4 +225,6 @@ class ApplicationRepository:
             "summary_md": candidate.summary_md,
             "evaluated_at": candidate.evaluated_at.isoformat() if candidate.evaluated_at else None,
             "scheduled": candidate.scheduled,
+            "current_round_id": str(candidate.current_round_id) if candidate.current_round_id else None,
+            "final_verdict": candidate.final_verdict,
         }

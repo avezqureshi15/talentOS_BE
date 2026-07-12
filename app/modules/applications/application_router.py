@@ -6,9 +6,11 @@ from app.db.session import get_db
 from app.modules.applications.application_schema import (
     ApplicationCreate,
     EvaluatedCandidate,
+    FinalVerdictUpdate,
     PaginatedEvaluatedCandidatesResponse,
 )
 from app.modules.applications.application_service import ApplicationService
+from app.modules.evaluations.evaluation_schema import EvaluationResponse
 
 router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/applications", tags=["applications"])
 
@@ -50,6 +52,16 @@ def get_all_applications(
         limit=limit,
         offset=offset,
     )
+
+
+@router.patch("/{candidate_id}/final-verdict", response_model=EvaluationResponse)
+def update_final_verdict(
+    candidate_id: int,
+    data: FinalVerdictUpdate,
+    db: Session = Depends(get_db),
+):
+    service = ApplicationService(db)
+    return service.set_final_verdict(candidate_id, data.verdict)
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED)

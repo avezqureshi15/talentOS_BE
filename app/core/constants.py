@@ -29,6 +29,7 @@ class ErrorCode(str, Enum):
     ROUND_NOT_FOUND = "ROUND_NOT_FOUND"
     REVIEW_NOT_FOUND = "REVIEW_NOT_FOUND"
     UNAUTHORIZED = "UNAUTHORIZED"
+    CANDIDATE_FINALIZED = "CANDIDATE_FINALIZED"
 
 
 class EvaluationStatus(str, Enum):

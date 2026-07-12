@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -58,10 +59,16 @@ class EvaluatedCandidate(BaseModel):
     summary_md: str | None = None
     evaluated_at: str | None = None
     scheduled: bool = False
+    current_round_id: str | None = None
+    final_verdict: str | None = None
 
 
 class EvaluatedCandidatesResponse(BaseModel):
     data: list[EvaluatedCandidate]
+
+
+class FinalVerdictUpdate(BaseModel):
+    verdict: Literal["SELECTED", "REJECTED"]
 
 
 class PaginatedEvaluatedCandidatesResponse(BaseModel):

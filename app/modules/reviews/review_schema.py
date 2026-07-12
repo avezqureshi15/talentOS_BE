@@ -26,3 +26,9 @@ class ReviewResponse(BaseModel):
 class ReviewUpdate(BaseModel):
     reviews: dict | None = None
     verdict: str | None = None
+
+
+class ReviewUpdateByRound(BaseModel):
+    entity_type: str
+    reviews: dict
+    verdict: str | None = None
