@@ -1,4 +1,4 @@
-from sqlalchemy import func, or_
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
 from app.modules.users.user_model import User
@@ -38,9 +38,13 @@ class UserRepository:
         total = base_query.count()
 
         if slots_info:
-            from app.modules.slots.slot_model import Slot
+            from app.modules.slots.slot_model import Slot, SlotStatus
             results = (
-                base_query.outerjoin(Slot, Slot.employee_id == User.id)
+                base_query.outerjoin(Slot, and_(
+                    Slot.employee_id == User.id,
+                    Slot.status == SlotStatus.AVAILABLE.value,
+                    Slot.start_at > func.now(),
+                ))
                 .add_columns(func.count(Slot.id).label("slots_count"))
                 .group_by(User.id)
                 .order_by(func.count(Slot.id).desc(), User.name.asc())
