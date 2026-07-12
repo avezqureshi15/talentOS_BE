@@ -9,6 +9,7 @@ def get_candidates_by_job_paginated(
     job_id: str | None = None,
     status: str | None = None,
     schedule: str | None = None,
+    round_verdict: str | None = None,
     min_score: int | None = None,
     max_score: int | None = None,
     date_from: str | None = None,
@@ -37,6 +38,10 @@ def get_candidates_by_job_paginated(
         query = query.filter(Candidate.created_at <= date_to)
     if exclude_finalized:
         query = query.filter(Candidate.final_verdict.is_(None))
+    if round_verdict:
+        from app.modules.rounds.round_model import Round
+        query = query.join(Round, Candidate.current_round_id == Round.id)
+        query = query.filter(Round.round_verdict == round_verdict)
 
     total = query.count()
     items = (

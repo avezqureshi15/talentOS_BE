@@ -42,6 +42,7 @@ def get_all_applications(
     limit: int = Query(default=20, ge=1, le=100, description="Number of candidates to return"),
     offset: int = Query(default=0, ge=0, description="Number of candidates to skip"),
     final_verdict: str | None = Query(default=None, description='Set to "false" to exclude finalized candidates'),
+    round_verdict: str | None = Query(default=None, description="Filter by round verdict (selected, rejected)"),
     db: Session = Depends(get_db),
 ):
     service = ApplicationService(db)
@@ -49,6 +50,7 @@ def get_all_applications(
         job_id=job_id,
         status_filter=status,
         schedule_filter=schedule,
+        round_verdict=round_verdict,
         min_score=min_score,
         max_score=max_score,
         date_from=date_from,

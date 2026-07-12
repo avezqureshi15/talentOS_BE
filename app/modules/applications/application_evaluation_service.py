@@ -140,5 +140,10 @@ class ApplicationEvaluationService:
                 },
                 verdict=verdict,
             ))
+            from app.modules.rounds.round_model import Round
+            round_obj = self.db.query(Round).filter(Round.id == round_resp.id).first()
+            if round_obj:
+                round_obj.round_verdict = "selected" if verdict == "shortlisted" else "rejected"
+                self.db.flush()
         except Exception as exc:
             logger.error("Round/review creation failed for candidate_id=%s: %s", candidate.id, exc)

@@ -24,6 +24,7 @@ class RoundResponse(BaseModel):
     slot_id: uuid.UUID | None = None
     jd_id: uuid.UUID | None = None
     name: str | None = None
+    round_verdict: str | None = None
     created_at: datetime
     updated_at: datetime
 

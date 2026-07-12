@@ -31,6 +31,25 @@ class ReviewService:
 
         return ReviewResponse.model_validate(review)
 
+    def _update_round_verdict(self, round_id: uuid.UUID) -> None:
+        from app.modules.rounds.round_model import Round
+        reviews = self.repository.get_by_round(str(round_id))
+        _PRIORITY: dict[str, int] = {"hr": 3, "interviewer": 2, "ai": 1}
+        best, best_p = None, -1
+        for r in reviews:
+            p = _PRIORITY.get(r.entity_type.lower(), 0)
+            if p > best_p:
+                best, best_p = r.verdict, p
+        _VERDICT_MAP: dict[str, str] = {
+            "shortlisted": "selected", "selected": "selected",
+            "rejected": "rejected", "advance": "advance", "hold": "hold",
+        }
+        mapped = _VERDICT_MAP.get(best) if best else None
+        round_obj = self.db.query(Round).filter(Round.id == round_id).first()
+        if round_obj and round_obj.round_verdict != mapped:
+            round_obj.round_verdict = mapped
+            self.db.flush()
+
     def get_reviews_by_round(self, round_id: str) -> list[ReviewResponse]:
         reviews = self.repository.get_by_round(round_id)
         return [ReviewResponse.model_validate(r) for r in reviews]
@@ -53,4 +72,5 @@ class ReviewService:
             self.repository.create(review)
         self.db.commit()
         self.db.refresh(review)
+        self._update_round_verdict(round_id)
         return ReviewResponse.model_validate(review)
