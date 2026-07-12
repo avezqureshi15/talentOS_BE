@@ -1,6 +1,7 @@
 import os
 
 from googleapiclient.errors import HttpError
+from sqlalchemy.orm import Session
 
 from app.common.exceptions.calendar_exception import (
     CalendarApiFailedException,
@@ -9,12 +10,25 @@ from app.common.exceptions.calendar_exception import (
 from app.common.services.google_calendar_service import GoogleCalendarService
 from app.core.config import settings
 from app.core.logger import get_logger
-from app.modules.interviews.interview_schema import ScheduleMeetRequest, ScheduleMeetResponse
+from app.modules.interviews.interview_repository import InterviewRepository, InterviewRepositoryProtocol
+from app.modules.interviews.interview_schema import (
+    InterviewListResponse,
+    InterviewListItem,
+    InterviewPagination,
+    InterviewsData,
+    ScheduleMeetRequest,
+    ScheduleMeetResponse,
+)
+
 
 logger = get_logger(__name__)
 
 
 class InterviewService:
+    def __init__(self, db: Session | None = None, repo: InterviewRepositoryProtocol | None = None):
+        self.db = db
+        self.repository = repo or (InterviewRepository(db) if db else None)
+
     @staticmethod
     def is_configured() -> bool:
         path = settings.GOOGLE_SERVICE_ACCOUNT_JSON.strip()
@@ -54,3 +68,25 @@ class InterviewService:
             raise CalendarApiFailedException("Failed to create calendar event") from exc
 
         return ScheduleMeetResponse(**result)
+
+    def list_interviews(
+        self,
+        status_filter: str | None = None,
+        page: int = 1,
+        per_page: int = 20,
+    ) -> InterviewListResponse:
+        if not self.repository:
+            return InterviewListResponse(data=InterviewsData(
+                interviews=[], pagination=InterviewPagination(
+                    current_page=page, per_page=per_page, total_records=0, has_more=False,
+                ),
+            ))
+        items, total = self.repository.list_paginated(
+            status_filter=status_filter, page=page, per_page=per_page,
+        )
+        interviews = [InterviewListItem(**item) for item in items]
+        pagination = InterviewRepository.build_pagination(page, per_page, total)
+        return InterviewListResponse(data=InterviewsData(
+            interviews=interviews,
+            pagination=InterviewPagination(**pagination),
+        ))
