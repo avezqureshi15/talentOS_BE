@@ -13,6 +13,7 @@ class ScheduleMeetRequest(BaseModel):
 
 class ScheduleMeetResponse(BaseModel):
     event_id: str | None = None
+    meet_link: str | None = None
     html_link: str | None = None
     start: datetime | None = None
     end: datetime | None = None
@@ -22,9 +23,6 @@ class ScheduleMeetResponse(BaseModel):
 
 class InterviewCreate(BaseModel):
     round_id: str
-    interviewer_id: int
-    start_time: datetime
-    end_time: datetime
     event_id: str | None = None
     status: str = "scheduled"
 
@@ -32,11 +30,8 @@ class InterviewCreate(BaseModel):
 class InterviewResponse(BaseModel):
     id: str
     round_id: str
-    interviewer_id: int
     slot_id: str | None = None
     event_id: str | None = None
-    start_time: datetime
-    end_time: datetime
     status: str
     created_at: datetime
     updated_at: datetime
@@ -48,6 +43,43 @@ class InterviewStatusUpdate(BaseModel):
     status: str
     event_id: str | None = None
 
+
+# ── Scheduling DTOs ──────────────────────────────────────
+
+class ScheduleInterviewRequest(BaseModel):
+    round_id: str
+    slot_id: str
+
+
+class ScheduleInterviewResponse(BaseModel):
+    id: str
+    round_id: str
+    slot_id: str | None = None
+    event_id: str | None = None
+    meet_link: str | None = None
+    status: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RescheduleInterviewRequest(BaseModel):
+    slot_id: str
+
+
+class BookInterviewRequest(BaseModel):
+    round_name: str
+    slot_id: str
+    jd_id: str
+    candidate_id: int
+    interviewer_ids: list[int]
+    create_google_meet: bool = True
+
+
+class CancelInterviewResponse(BaseModel):
+    id: str
+    status: str
+
+    model_config = ConfigDict(from_attributes=True)
 
 # ── List interviews DTOs ───────────────────────────────────
 

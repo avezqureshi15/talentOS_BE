@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Uuid
+from sqlalchemy import DateTime, ForeignKey, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -12,11 +12,9 @@ class Interview(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     round_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("rounds.id"), nullable=False)
-    interviewer_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
     slot_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), ForeignKey("slots.id"), nullable=True)
     event_id: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    start_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    end_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    meet_link: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="SCHEDULED")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

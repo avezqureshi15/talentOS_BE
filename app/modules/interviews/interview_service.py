@@ -7,6 +7,7 @@ from app.common.exceptions.calendar_exception import (
     CalendarApiFailedException,
     CalendarNotConfiguredException,
 )
+from app.common.schemas.calendar_schema import CalendarEventResponse
 from app.common.services.google_calendar_service import GoogleCalendarService
 from app.core.config import settings
 from app.core.logger import get_logger
@@ -52,7 +53,7 @@ class InterviewService:
     ) -> ScheduleMeetResponse:
         calendar = self._get_calendar_service()
         try:
-            result = calendar.create_meet(
+            result: CalendarEventResponse = calendar.create_meet(
                 title=data.title,
                 start=data.start,
                 end=data.end,
@@ -67,7 +68,13 @@ class InterviewService:
             logger.error("Unexpected calendar error: %s", exc)
             raise CalendarApiFailedException("Failed to create calendar event") from exc
 
-        return ScheduleMeetResponse(**result)
+        return ScheduleMeetResponse(
+            event_id=result.event_id,
+            meet_link=result.meet_link,
+            html_link=result.calendar_link,
+            start=data.start,
+            end=data.end,
+        )
 
     def list_interviews(
         self,
