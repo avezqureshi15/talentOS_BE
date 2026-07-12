@@ -1,6 +1,7 @@
+import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from typing import Annotated
 
 
@@ -78,3 +79,10 @@ class EvaluationResponse(BaseModel):
     evaluated_at: datetime | None
 
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("current_round_id", mode="before")
+    @classmethod
+    def coerce_uuid(cls, v: object) -> object:
+        if isinstance(v, uuid.UUID):
+            return str(v)
+        return v

@@ -26,4 +26,11 @@ def get_reviews_by_round(round_id: str, db: Session = Depends(get_db)):
 @router.put("/round/{round_id}", response_model=ReviewResponse)
 def update_review_by_round(round_id: uuid.UUID, data: ReviewUpdateByRound, db: Session = Depends(get_db)):
     service = ReviewService(db)
-    return service.upsert_review(round_id, data)
+    result = service.upsert_review(round_id, data)
+
+    if data.entity_type == "hr":
+        from app.modules.applications.application_service import ApplicationService
+
+        ApplicationService(db).handle_hr_verdict(round_id, data.verdict)
+
+    return result
