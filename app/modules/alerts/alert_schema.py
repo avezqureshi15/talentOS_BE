@@ -25,3 +25,45 @@ class PaginatedAlertResponse(BaseModel):
     page: int
     per_page: int
     has_more: bool
+
+
+# ── Enriched list response ──────────────────────────────────
+
+class EmployeeBrief(BaseModel):
+    id: str
+    name: str
+    email: str
+    phone: str
+
+
+class InterviewBrief(BaseModel):
+    id: str
+    candidate_name: str
+    position: str
+
+
+class AlertListItem(BaseModel):
+    id: str
+    type: str
+    employee: EmployeeBrief
+    slot_link: str | None = None
+    review_link: str | None = None
+    interview: InterviewBrief | None = None
+    created_at: str | None = None
+
+
+class AlertPagination(BaseModel):
+    current_page: int
+    per_page: int
+    total_records: int
+    has_more: bool
+
+
+class AlertsData(BaseModel):
+    alerts: list[AlertListItem]
+    pagination: AlertPagination
+
+
+class AlertListResponse(BaseModel):
+    success: bool = True
+    data: AlertsData
