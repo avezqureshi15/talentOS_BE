@@ -114,6 +114,7 @@ class MeetingBrief(BaseModel):
 class InterviewListItem(BaseModel):
     id: str
     status: str
+    round_name: str
     position: PositionBrief
     interviewer: InterviewerBrief
     candidate: CandidateBrief

@@ -21,7 +21,6 @@ from app.modules.interviews.interview_service import InterviewService
 
 router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/interviews", tags=["interviews"])
 
-
 @router.get("", response_model=InterviewListResponse)
 def list_interviews(
     status_filter: str | None = Query(None, alias="status_filter"),
@@ -34,7 +33,6 @@ def list_interviews(
         status_filter=status_filter, page=page, per_page=per_page,
     )
 
-
 @router.post("/schedule", response_model=ScheduleMeetResponse, status_code=status.HTTP_201_CREATED)
 def schedule_meet(
     data: ScheduleMeetRequest,
@@ -42,7 +40,6 @@ def schedule_meet(
 ):
     service = InterviewService()
     return service.schedule_meet(data, with_gmeet=with_gmeet)
-
 
 @router.post("/scheduling", response_model=ScheduleInterviewResponse, status_code=status.HTTP_201_CREATED)
 def schedule_interview(
@@ -54,7 +51,6 @@ def schedule_interview(
         round_id=uuid.UUID(data.round_id),
         slot_id=uuid.UUID(data.slot_id),
     )
-
 
 @router.patch("/scheduling/{interview_id}/reschedule", response_model=ScheduleInterviewResponse)
 def reschedule_interview(
@@ -68,7 +64,6 @@ def reschedule_interview(
         new_slot_id=uuid.UUID(data.slot_id),
     )
 
-
 @router.patch("/scheduling/{interview_id}/cancel", response_model=CancelInterviewResponse)
 def cancel_interview(
     interview_id: uuid.UUID,
@@ -79,9 +74,5 @@ def cancel_interview(
 
 
 @router.post("/booking", response_model=ScheduleInterviewResponse, status_code=status.HTTP_201_CREATED)
-def book_interview(
-    data: BookInterviewRequest,
-    db: Session = Depends(get_db),
-):
-    svc = BookingService(db)
-    return svc.book_interview(data)
+def book_interview(data: BookInterviewRequest, db: Session = Depends(get_db)):
+    return BookingService(db).book_interview(data)
