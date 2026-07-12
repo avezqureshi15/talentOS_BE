@@ -15,7 +15,7 @@ from app.modules.users.user_model import User
 
 logger = get_logger(__name__)
 
-LIFTED_KEYS = {"summary_md", "remarks", "skills", "notes"}
+LIFTED_KEYS = {"summary_md", "remarks", "skills", "notes", "rejected_status", "rejected_reason"}
 
 
 class RoundService:
@@ -143,6 +143,8 @@ class RoundService:
 
         strong_matches: list[str] = []
         gaps_and_concerns: list[str] = []
+        rejected_status: list[str] = []
+        rejected_reason: str | None = None
 
         for r in reviews:
             rv: dict = r.reviews or {}
@@ -151,6 +153,8 @@ class RoundService:
                 ai_summary = rv.get("summary_md")
                 strong_matches = rv.get("strong_matches", [])
                 gaps_and_concerns = rv.get("gaps_and_concerns", [])
+                rejected_status = rv.get("rejected_status", [])
+                rejected_reason = rv.get("rejected_reason")
 
             if r.entity_type.lower() == "hr":
                 remarks_hr = rv.get("remarks")
@@ -206,4 +210,6 @@ class RoundService:
             notes=notes,
             remarks_hr=remarks_hr,
             remarks_interviewer=remarks_interviewer,
+            rejected_status=rejected_status,
+            rejected_reason=rejected_reason,
         )

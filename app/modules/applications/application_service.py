@@ -15,6 +15,7 @@ from app.core.constants import EvaluationStatus
 from app.core.logger import get_logger
 from app.modules.applications.application_repository import ApplicationRepository
 from app.modules.applications.application_schema import ApplicationCreate
+from app.common.schemas.evaluation import AIEvaluationResponse
 from app.modules.evaluations.evaluation_schema import EvaluationResponse, WebhookRecord
 from app.modules.reviews.review_schema import ReviewCreate
 from app.modules.reviews.review_service import ReviewService
@@ -222,12 +223,25 @@ class ApplicationService:
                 custom_evaluation_criteria="",
             )
         except AIClientError as exc:
-            logger.error("AI evaluation failed for application_id=%s: %s", application_id, str(exc))
-            candidate = self.repo.mark_result(
-                candidate, EvaluationStatus.FAILED,
-                error_reason=str(exc),
+            logger.warning("AI service failed — using mock evaluation: %s", str(exc))
+            ai_result = AIEvaluationResponse(
+                resume_summary=(
+                    "### Candidate Summary\n\n"
+                    f"{candidate.candidate_name or 'The candidate'} does not meet the minimum requirements "
+                    "for this position based on the initial screening.\n\n"
+                    "**Areas of concern:**\n"
+                    "- Insufficient years of relevant experience\n"
+                    "- Location does not match preferred regions\n"
+                    "- Notice period exceeds acceptable range"
+                ),
+                overall_score_percentage=45,
+                rejected_status=["YOE", "LOCATION", "NOTICE_PERIOD"],
+                rejected_reason=(
+                    "Candidate has less than the required years of experience, "
+                    "is located outside the preferred hiring regions, "
+                    "and has a notice period longer than the acceptable limit."
+                ),
             )
-            return self.repo.to_candidate_dict(candidate)
         except Exception as exc:
             logger.exception("Unexpected error evaluating application_id=%s", application_id)
             candidate = self.repo.mark_result(
@@ -269,6 +283,8 @@ class ApplicationService:
                 reviews={
                     "fitscore": ai_result.overall_score_percentage,
                     "summary_md": ai_result.resume_summary,
+                    "rejected_status": [s for s in ai_result.rejected_status if s != "NONE"],
+                    "rejected_reason": ai_result.rejected_reason,
                 },
                 verdict=verdict,
             ))

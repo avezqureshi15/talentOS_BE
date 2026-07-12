@@ -7,6 +7,7 @@ from app.core.constants import EvaluationStatus
 from app.core.logger import get_logger
 from app.modules.evaluations.evaluation_model import Candidate
 from app.modules.hiring_requests.hiring_request_model import HiringRequest
+from app.modules.reviews.review_model import Review
 
 logger = get_logger(__name__)
 
@@ -14,6 +15,7 @@ logger = get_logger(__name__)
 class ApplicationRepository:
     def __init__(self, db: Session):
         self.db = db
+        self._review_map: dict[str, Review] = {}
 
     # ── hiring request resolution ────────────────────────────────
 
@@ -95,6 +97,21 @@ class ApplicationRepository:
             .limit(limit)
             .all()
         )
+
+        self._review_map = {}
+        round_ids = [c.current_round_id for c in items if c.current_round_id]
+        if round_ids:
+            ai_reviews = (
+                self.db.query(Review)
+                .filter(
+                    Review.round_id.in_(round_ids),
+                    Review.entity_type == "AI",
+                )
+                .all()
+            )
+            for rv in ai_reviews:
+                self._review_map[str(rv.round_id)] = rv
+
         return items, total
 
     def get_finalized_candidates(
@@ -217,8 +234,25 @@ class ApplicationRepository:
 
     # ── response mapping ─────────────────────────────────────────
 
-    @staticmethod
-    def to_candidate_dict(candidate: Candidate) -> dict:
+    def _get_ai_review_data(self, candidate: Candidate) -> dict | None:
+        if not candidate.current_round_id:
+            return None
+        rv = self._review_map.get(str(candidate.current_round_id))
+        if rv and rv.reviews:
+            return rv.reviews
+        rv = (
+            self.db.query(Review)
+            .filter(
+                Review.round_id == candidate.current_round_id,
+                Review.entity_type == "AI",
+            )
+            .first()
+        )
+        return rv.reviews if rv else None
+
+    def to_candidate_dict(self, candidate: Candidate) -> dict:
+        review_data = self._get_ai_review_data(candidate)
+
         return {
             "id": candidate.external_application_id,
             "candidate_id": candidate.id,
@@ -243,4 +277,6 @@ class ApplicationRepository:
             "scheduled": candidate.scheduled,
             "current_round_id": str(candidate.current_round_id) if candidate.current_round_id else None,
             "final_verdict": candidate.final_verdict,
+            "rejected_status": (review_data or {}).get("rejected_status", []),
+            "rejected_reason": (review_data or {}).get("rejected_reason"),
         }

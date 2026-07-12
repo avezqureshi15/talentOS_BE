@@ -51,3 +51,5 @@ class RoundDetailResponse(BaseModel):
     notes: str | None = None
     remarks_hr: str | None = None
     remarks_interviewer: str | None = None
+    rejected_status: list[str] = []
+    rejected_reason: str | None = None

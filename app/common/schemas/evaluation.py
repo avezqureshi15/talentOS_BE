@@ -14,3 +14,5 @@ class AIEvaluationResponse(BaseModel):
 
     resume_summary: str
     overall_score_percentage: int
+    rejected_status: list[str] = []
+    rejected_reason: str | None = None
