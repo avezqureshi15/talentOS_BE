@@ -1,5 +1,5 @@
 from sqlalchemy import distinct
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy.orm import Session
 
 from app.modules.forms.form_model import Form
 from app.modules.users.user_model import User
@@ -19,12 +19,13 @@ class EmployeeRepository:
     ) -> tuple[list[tuple], int]:
         latest_subq = (
             self.db.query(
-                Form.emp_id.label("emp_id"),
+                User.emp_id.label("emp_id"),
                 Form.id.label("form_id"),
             )
+            .join(User, User.id == Form.employee_id)
             .filter(Form.type == form_type)
-            .distinct(Form.emp_id)
-            .order_by(Form.emp_id, Form.last_sent_at.desc())
+            .distinct(User.emp_id)
+            .order_by(User.emp_id, Form.last_sent_at.desc())
             .subquery()
         )
 

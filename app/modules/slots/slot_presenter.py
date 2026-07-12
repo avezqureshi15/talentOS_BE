@@ -1,17 +1,10 @@
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from app.modules.slots.slot_model import Slot
+from app.modules.slots.slot_schema import SlotListItemResponse
 
 IST = ZoneInfo("Asia/Kolkata")
-
-
-@dataclass
-class SlotListItem:
-    id: str
-    label: str
-    day: str
 
 
 def to_ist(dt: datetime) -> datetime:
@@ -40,8 +33,8 @@ def format_slot_day_ist(start_at: datetime, now_ist_dt: datetime | None = None) 
     return start.strftime("%d %b")
 
 
-def present_slot_item(slot: Slot, now_ist_dt: datetime | None = None) -> SlotListItem:
-    return SlotListItem(
+def present_slot_item(slot: Slot, now_ist_dt: datetime | None = None) -> SlotListItemResponse:
+    return SlotListItemResponse(
         id=str(slot.id),
         label=format_slot_label_ist(slot.start_at, slot.end_at),
         day=format_slot_day_ist(slot.start_at, now_ist_dt),

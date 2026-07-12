@@ -36,12 +36,17 @@ logger = get_logger(__name__)
 class FormService:
     def __init__(self, db: Session):
         from app.modules.alerts.alert_service import AlertService
+
         self.db = db
         self.repository = FormRepository(db)
         self.user_repository = UserRepository(db)
         self.alert_service = AlertService(db)
 
     def _resolve_ask_action(self, emp_id: str, form_type: str) -> tuple[Form, str]:
+        user = self.user_repository.get_by_emp_id(emp_id)
+        if not user:
+            raise ValueError(f"User not found for emp_id={emp_id}")
+
         now = datetime.now(timezone.utc)
         active = self.repository.get_active_sent(emp_id, form_type)
         if active:
@@ -52,7 +57,7 @@ class FormService:
         if latest and latest.status == FormStatus.SENT.value and is_form_expired(latest):
             self.repository.mark_expired(latest)
 
-        form = self.repository.create(emp_id=emp_id, form_type=form_type, last_sent_at=now)
+        form = self.repository.create(employee_id=user.id, form_type=form_type, last_sent_at=now)
         return form, DETAIL_NEW_LINK
 
     def ask_form_batch(self, emp_ids: list[str], form_type: str) -> tuple[AskFormResponse, list[PendingMailTask]]:
@@ -128,23 +133,23 @@ class FormService:
             return FormValidateResponse(valid=False, reason="NOT_FOUND")
         if form.status == FormStatus.SUBMITTED.value:
             return FormValidateResponse(
-                valid=False, reason="ALREADY_SUBMITTED", emp_id=form.emp_id, type=form.type
+                valid=False, reason="ALREADY_SUBMITTED", emp_id=form.employee.emp_id, type=form.type
             )
         if form.status == FormStatus.EXPIRED.value:
-            return FormValidateResponse(valid=False, reason="EXPIRED", emp_id=form.emp_id, type=form.type)
+            return FormValidateResponse(valid=False, reason="EXPIRED", emp_id=form.employee.emp_id, type=form.type)
         if is_form_expired(form):
             if form.status == FormStatus.SENT.value:
                 try:
                     self.repository.mark_expired(form)
                     self.db.commit()
                     self.alert_service.mark_emp_alerts_read(
-                        form.emp_id, alert_type=form.type
+                        form.employee.emp_id, alert_type=form.type
                     )
                 except sa_exc.SQLAlchemyError:
                     self.db.rollback()
                     raise
-            return FormValidateResponse(valid=False, reason="EXPIRED", emp_id=form.emp_id, type=form.type)
-        return FormValidateResponse(valid=True, reason="VALID", emp_id=form.emp_id, type=form.type)
+            return FormValidateResponse(valid=False, reason="EXPIRED", emp_id=form.employee.emp_id, type=form.type)
+        return FormValidateResponse(valid=True, reason="VALID", emp_id=form.employee.emp_id, type=form.type)
 
     def mark_slots_form_submitted(self, emp_id: str) -> None:
         form = self.repository.get_active_sent(emp_id, FormType.SLOTS.value)
@@ -164,7 +169,7 @@ class FormService:
         forms = self.repository.list_due_for_reminder()
         sent = 0
         for form in forms:
-            send_slot_mail_task(form.emp_id, form.id)
+            send_slot_mail_task(form.employee.emp_id, form.id)
             sent += 1
         return sent
 
@@ -173,10 +178,10 @@ class FormService:
         created = 0
         for form in forms:
             if self.alert_service.repository.get_unread_by_emp_and_type(
-                form.emp_id, AlertType.SLOTS.value
+                form.employee.emp_id, AlertType.SLOTS.value
             ):
                 continue
-            self.alert_service.create_alert_if_missing(form.emp_id, AlertType.SLOTS.value)
+            self.alert_service.create_alert_if_missing(form.employee.emp_id, AlertType.SLOTS.value)
             created += 1
         return created
 
@@ -187,7 +192,7 @@ class FormService:
             try:
                 self.repository.mark_expired(form)
                 self.alert_service.mark_emp_alerts_read(
-                    form.emp_id, alert_type=AlertType.SLOTS.value
+                    form.employee.emp_id, alert_type=AlertType.SLOTS.value
                 )
                 updated += 1
             except sa_exc.SQLAlchemyError:

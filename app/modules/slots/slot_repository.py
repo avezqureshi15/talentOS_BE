@@ -1,13 +1,32 @@
 from datetime import datetime
-from sqlalchemy import func
+from typing import Protocol
 from uuid import UUID
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.logger import get_logger
 from app.modules.slots.slot_model import Slot, SlotStatus
 
 logger = get_logger(__name__)
+
+
+class SlotRepositoryProtocol(Protocol):
+    def create_slot(self, employee_id: int, start_at: datetime, end_at: datetime, status: str) -> Slot: ...
+    def get_slot_by_id(self, slot_id: UUID) -> Slot | None: ...
+    def update_slot_status(self, slot: Slot, status: str) -> Slot: ...
+    def get_slots_for_employee(
+        self,
+        employee_id: int,
+        status: str | None,
+        include_past: bool,
+    ) -> list[Slot]: ...
+    def update_slot_times(
+        self,
+        slot: Slot,
+        end_at: datetime | None,
+        status: str | None,
+    ) -> Slot: ...
 
 
 class SlotRepository:
@@ -57,4 +76,3 @@ class SlotRepository:
         self.db.flush()
         logger.debug("Updated slot: id=%s | end_at=%s | status=%s", slot.id, slot.end_at, slot.status)
         return slot
-

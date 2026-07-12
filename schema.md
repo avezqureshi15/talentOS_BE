@@ -2,7 +2,7 @@
 
 **17 tables** across **11 modules**, managed via SQLAlchemy + Alembic on PostgreSQL (Supabase).
 
-> **Last migration:** `0028_drop_reviews_employee_id` — dropped `reviews.employee_id`.
+> **Last migration:** `0031_replace_emp_id_with_employee_id_in_forms` — replaced `forms.emp_id` with FK `forms.employee_id` → `users.id`.
 
 ---
 
@@ -139,15 +139,15 @@ Status enum: `QUEUED`, `PROCESSING`, `SHORTLISTED`, `REJECTED`, `INVALID`, `FAIL
 
 ## 8. slots
 
-| Column | Type | Nullable | Default | PK | Index |
-|--------|------|----------|---------|----|-------|
-| id | UUID | NO | `uuid4` | YES | |
-| emp_id | String(50) | NO | | | YES |
-| start_at | Timestamptz | NO | | | |
-| end_at | Timestamptz | NO | | | |
-| status | String(20) | NO | `available` | | |
-| created_at | Timestamptz | NO | `now()` | | |
-| updated_at | Timestamptz | NO | `now()` | | |
+| Column | Type | Nullable | Default | PK | FK | Index |
+|--------|------|----------|---------|----|----|-------|
+| id | UUID | NO | `uuid4` | YES | | |
+| employee_id | Integer | NO | | | `users.id` | YES |
+| start_at | Timestamptz | NO | | | | |
+| end_at | Timestamptz | NO | | | | |
+| status | String(20) | NO | `available` | | | |
+| created_at | Timestamptz | NO | `now()` | | | |
+| updated_at | Timestamptz | NO | `now()` | | | |
 
 Status enum: `available`, `booked`, `inactive`
 Constraint: `end_at > start_at`
@@ -171,15 +171,15 @@ Type enum: `SLOTS`, `REVIEW`
 
 ## 10. forms
 
-| Column | Type | Nullable | Default | PK | Index |
-|--------|------|----------|---------|----|-------|
-| id | UUID | NO | `uuid4` | YES | |
-| emp_id | String(50) | NO | | | YES |
-| type | String(10) | NO | `SLOTS` | | |
-| status | String(10) | NO | `SENT` | | |
-| last_sent_at | Timestamptz | NO | | | |
-| created_at | Timestamptz | NO | `now()` | | |
-| updated_at | Timestamptz | NO | `now()` | | |
+| Column | Type | Nullable | Default | PK | FK | Index |
+|--------|------|----------|---------|----|----|-------|
+| id | UUID | NO | `uuid4` | YES | | |
+| employee_id | Integer | NO | | | `users.id` | YES |
+| type | String(10) | NO | `SLOTS` | | | |
+| status | String(10) | NO | `SENT` | | | |
+| last_sent_at | Timestamptz | NO | | | | |
+| created_at | Timestamptz | NO | `now()` | | | |
+| updated_at | Timestamptz | NO | `now()` | | | |
 
 Type enum: `SLOTS`, `REVIEW`
 Status enum: `SENT`, `SUBMITTED`, `EXPIRED`
@@ -281,7 +281,9 @@ bands.id                     <──  kpi_definitions.band_id
 
 users.id                     <──  chats.user_id
 users.id                     <──  round_interviewers.employee_id
-users.id                     <──  reviews.employee_id          (nullable — only for INTERVIEWER reviews)
+users.id                     <──  interviews.interviewer_id
+users.id                     <──  slots.employee_id
+users.id                     <──  forms.employee_id
 
 candidates.id                <──  rounds.candidate_id
 slots.id                     <──  rounds.slot_id
@@ -291,7 +293,6 @@ rounds.id                    <──  round_interviewers.round_id
 rounds.id                    <──  reviews.round_id
 rounds.id                    <──  interviews.round_id
 rounds.id                    <──  candidates.current_round_id    (nullable — tracks the candidate's active round)
-users.id                     <──  interviews.interviewer_id
 slots.id                     <──  interviews.slot_id             (nullable)
 ```
 

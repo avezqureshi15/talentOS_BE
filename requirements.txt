@@ -16,3 +16,4 @@ google-auth>=2.29.0
 google-api-python-client>=2.100.0
 passlib[bcrypt]>=1.7.4
 starlette>=0.37.0
+tzdata>=2024.1
