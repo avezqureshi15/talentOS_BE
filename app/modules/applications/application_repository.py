@@ -65,6 +65,7 @@ class ApplicationRepository:
         date_to: str | None = None,
         limit: int = 20,
         offset: int = 0,
+        exclude_finalized: bool = False,
     ) -> tuple[list[Candidate], int]:
         query = self.db.query(Candidate)
 
@@ -84,6 +85,8 @@ class ApplicationRepository:
             query = query.filter(Candidate.created_at >= date_from)
         if date_to:
             query = query.filter(Candidate.created_at <= date_to)
+        if exclude_finalized:
+            query = query.filter(Candidate.final_verdict.is_(None))
 
         total = query.count()
         items = (
@@ -92,6 +95,19 @@ class ApplicationRepository:
             .limit(limit)
             .all()
         )
+        return items, total
+
+    def get_finalized_candidates(
+        self,
+        verdict: str | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> tuple[list[Candidate], int]:
+        query = self.db.query(Candidate).filter(Candidate.final_verdict.isnot(None))
+        if verdict:
+            query = query.filter(Candidate.final_verdict == verdict)
+        total = query.count()
+        items = query.order_by(Candidate.evaluated_at.desc().nullslast()).offset(offset).limit(limit).all()
         return items, total
 
     # ── candidate mutations ──────────────────────────────────────

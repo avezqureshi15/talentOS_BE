@@ -15,16 +15,19 @@ from app.modules.evaluations.evaluation_schema import EvaluationResponse
 router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/applications", tags=["applications"])
 
 
-@router.get("/{application_id}", response_model=EvaluatedCandidate)
-def get_application_by_id(
-    application_id: str,
+@router.get("/final-verdicts", response_model=PaginatedEvaluatedCandidatesResponse)
+def get_finalized_candidates(
+    candidate_status: str | None = Query(default=None, description="Filter by final verdict (selected, rejected)"),
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ):
     service = ApplicationService(db)
-    result = service.get_application_by_id(application_id)
-    if not result:
-        raise HTTPException(status_code=404, detail="Application not found")
-    return result
+    return service.get_finalized_candidates_paginated(
+        verdict=candidate_status,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get("/", response_model=PaginatedEvaluatedCandidatesResponse)
@@ -38,6 +41,7 @@ def get_all_applications(
     date_to: str | None = Query(default=None, description="Filter by created date <= (ISO 8601)"),
     limit: int = Query(default=20, ge=1, le=100, description="Number of candidates to return"),
     offset: int = Query(default=0, ge=0, description="Number of candidates to skip"),
+    final_verdict: str | None = Query(default=None, description='Set to "false" to exclude finalized candidates'),
     db: Session = Depends(get_db),
 ):
     service = ApplicationService(db)
@@ -51,7 +55,20 @@ def get_all_applications(
         date_to=date_to,
         limit=limit,
         offset=offset,
+        exclude_finalized=final_verdict == "false",
     )
+
+
+@router.get("/{application_id}", response_model=EvaluatedCandidate)
+def get_application_by_id(
+    application_id: str,
+    db: Session = Depends(get_db),
+):
+    service = ApplicationService(db)
+    result = service.get_application_by_id(application_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Application not found")
+    return result
 
 
 @router.patch("/{candidate_id}/final-verdict", response_model=EvaluationResponse)

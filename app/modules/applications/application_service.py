@@ -52,6 +52,7 @@ class ApplicationService:
         date_to: str | None = None,
         limit: int = 20,
         offset: int = 0,
+        exclude_finalized: bool = False,
     ) -> dict:
         if not self.repo:
             logger.warning("No DB session")
@@ -84,6 +85,27 @@ class ApplicationService:
             max_score=max_score,
             date_from=date_from,
             date_to=date_to,
+            limit=limit,
+            offset=offset,
+            exclude_finalized=exclude_finalized,
+        )
+        return {
+            "data": [self.repo.to_candidate_dict(e) for e in items],
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+        }
+
+    def get_finalized_candidates_paginated(
+        self,
+        verdict: str | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> dict:
+        if not self.repo:
+            return {"data": [], "total": 0, "limit": limit, "offset": offset}
+        items, total = self.repo.get_finalized_candidates(
+            verdict=verdict.upper() if verdict else None,
             limit=limit,
             offset=offset,
         )
