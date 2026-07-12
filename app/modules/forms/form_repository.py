@@ -44,12 +44,30 @@ class FormRepository:
             .first()
         )
 
-    def create(self, employee_id: int, form_type: str, last_sent_at: datetime) -> Form:
+    def get_active_sent_by_emp_and_round(self, emp_id: str, round_id: UUID) -> Form | None:
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=FORM_VALIDITY_HOURS)
+        return (
+            self.db.query(Form)
+            .join(User, User.id == Form.employee_id)
+            .filter(
+                User.emp_id == emp_id,
+                Form.type == FormType.REVIEW.value,
+                Form.round_id == round_id,
+                Form.status == FormStatus.SENT.value,
+                Form.last_sent_at > cutoff,
+            )
+            .order_by(Form.last_sent_at.desc())
+            .first()
+        )
+
+    def create(self, employee_id: int, form_type: str, last_sent_at: datetime, round_id: UUID | None = None, candidate_id: int | None = None) -> Form:
         form = Form(
             employee_id=employee_id,
             type=form_type,
             status=FormStatus.SENT.value,
             last_sent_at=last_sent_at,
+            round_id=round_id,
+            candidate_id=candidate_id,
         )
         self.db.add(form)
         self.db.flush()
@@ -74,42 +92,52 @@ class FormRepository:
         logger.info("Marked form expired: id=%s | emp_id=%s", form.id, form.employee.emp_id)
         return form
 
+    def _list_by_type_and_status(
+        self, form_type: str, status: str,
+        sent_before: str | None = None,
+        sent_after: str | None = None,
+    ) -> list[Form]:
+        query = self.db.query(Form).filter(
+            Form.type == form_type,
+            Form.status == status,
+        )
+        if sent_before:
+            query = query.filter(Form.last_sent_at <= func.now() - text(sent_before))
+        if sent_after:
+            query = query.filter(Form.last_sent_at > func.now() - text(sent_after))
+        return query.all()
+
     def list_due_for_reminder(self) -> list[Form]:
-        rows = (
-            self.db.query(Form)
-            .filter(
-                Form.type == FormType.SLOTS.value,
-                Form.status == FormStatus.SENT.value,
-                Form.last_sent_at <= func.now() - text("INTERVAL '2 hours'"),
-                Form.last_sent_at > func.now() - text("INTERVAL '3 hours'"),
-            )
-            .all()
+        rows = self._list_by_type_and_status(
+            FormType.SLOTS.value, FormStatus.SENT.value,
+            sent_before="INTERVAL '2 hours'",
+            sent_after="INTERVAL '3 hours'",
+        ) + self._list_by_type_and_status(
+            FormType.REVIEW.value, FormStatus.SENT.value,
+            sent_before="INTERVAL '2 hours'",
+            sent_after="INTERVAL '3 hours'",
         )
         logger.debug("Forms due for reminder: count=%s", len(rows))
         return rows
 
     def list_due_for_escalation(self) -> list[Form]:
-        rows = (
-            self.db.query(Form)
-            .filter(
-                Form.type == FormType.SLOTS.value,
-                Form.status == FormStatus.SENT.value,
-                Form.last_sent_at <= func.now() - text("INTERVAL '3 hours'"),
-            )
-            .all()
+        rows = self._list_by_type_and_status(
+            FormType.SLOTS.value, FormStatus.SENT.value,
+            sent_before="INTERVAL '3 hours'",
+        ) + self._list_by_type_and_status(
+            FormType.REVIEW.value, FormStatus.SENT.value,
+            sent_before="INTERVAL '3 hours'",
         )
         logger.debug("Forms due for escalation: count=%s", len(rows))
         return rows
 
     def list_expired(self) -> list[Form]:
-        rows = (
-            self.db.query(Form)
-            .filter(
-                Form.type == FormType.SLOTS.value,
-                Form.status == FormStatus.SENT.value,
-                Form.last_sent_at <= func.now() - text("INTERVAL '24 hours'"),
-            )
-            .all()
+        rows = self._list_by_type_and_status(
+            FormType.SLOTS.value, FormStatus.SENT.value,
+            sent_before="INTERVAL '24 hours'",
+        ) + self._list_by_type_and_status(
+            FormType.REVIEW.value, FormStatus.SENT.value,
+            sent_before="INTERVAL '24 hours'",
         )
         logger.debug("Forms expired: count=%s", len(rows))
         return rows

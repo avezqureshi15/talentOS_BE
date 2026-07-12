@@ -1,11 +1,11 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.session import get_db
-from app.modules.forms.form_schema import FormValidateResponse
+from app.modules.forms.form_schema import FormSubmitResponse, FormValidateResponse
 from app.modules.forms.form_service import FormService
 
 router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/forms", tags=["forms"])
@@ -15,3 +15,12 @@ router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/forms", tags=["forms"])
 def validate_form(form_id: UUID, db: Session = Depends(get_db)):
     service = FormService(db)
     return service.validate_form(form_id)
+
+
+@router.post("/{form_id}/submit", response_model=FormSubmitResponse)
+def submit_form(form_id: UUID, db: Session = Depends(get_db)):
+    service = FormService(db)
+    try:
+        return service.submit_form(form_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc

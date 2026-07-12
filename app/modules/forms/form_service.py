@@ -12,12 +12,14 @@ from app.modules.forms.form_mail import (
     DETAIL_RESENT,
     MSG_EMP_NOT_FOUND,
     MSG_INVALID_EMAIL,
+    MSG_REVIEW_MAIL_SENT,
     MSG_SMTP_NOT_CONFIGURED,
     build_ask_summary_message,
     detail_to_message,
     is_form_expired,
     is_smtp_configured,
     is_valid_email,
+    send_review_mail_task,
     send_slot_mail_task,
 )
 from app.modules.forms.form_model import Form, FormStatus, FormType
@@ -25,6 +27,7 @@ from app.modules.forms.form_repository import FormRepository
 from app.modules.forms.form_schema import (
     AskFormResponse,
     AskFormResultItem,
+    FormSubmitResponse,
     FormValidateResponse,
     PendingMailTask,
 )
@@ -59,6 +62,43 @@ class FormService:
 
         form = self.repository.create(employee_id=user.id, form_type=form_type, last_sent_at=now)
         return form, DETAIL_NEW_LINK
+
+    def generate_review_form(
+        self,
+        emp_id: str,
+        round_id: UUID,
+        candidate_id: int,
+        candidate_name: str,
+        round_name: str,
+        interviewer_name: str,
+        interviewer_email: str,
+    ) -> Form:
+        user = self.user_repository.get_by_emp_id(emp_id)
+        if not user:
+            raise ValueError(f"User not found for emp_id={emp_id}")
+
+        now = datetime.now(timezone.utc)
+        active = self.repository.get_active_sent_by_emp_and_round(emp_id, round_id)
+        if active:
+            self.repository.touch_last_sent_at(active, last_sent_at=now)
+            self.db.commit()
+            send_review_mail_task(emp_id, active.id, candidate_name, round_name, interviewer_name)
+            return active
+
+        latest = self.repository.get_latest(emp_id, FormType.REVIEW.value)
+        if latest and latest.status == FormStatus.SENT.value and is_form_expired(latest):
+            self.repository.mark_expired(latest)
+
+        form = self.repository.create(
+            employee_id=user.id,
+            form_type=FormType.REVIEW.value,
+            last_sent_at=now,
+            round_id=round_id,
+            candidate_id=candidate_id,
+        )
+        self.db.commit()
+        send_review_mail_task(emp_id, form.id, candidate_name, round_name, interviewer_name)
+        return form
 
     def ask_form_batch(self, emp_ids: list[str], form_type: str) -> tuple[AskFormResponse, list[PendingMailTask]]:
         results: list[AskFormResultItem] = []
@@ -133,10 +173,14 @@ class FormService:
             return FormValidateResponse(valid=False, reason="NOT_FOUND")
         if form.status == FormStatus.SUBMITTED.value:
             return FormValidateResponse(
-                valid=False, reason="ALREADY_SUBMITTED", emp_id=form.employee.emp_id, type=form.type
+                valid=False, reason="ALREADY_SUBMITTED", emp_id=form.employee.emp_id, type=form.type,
+                round_id=form.round_id, candidate_id=form.candidate_id,
             )
         if form.status == FormStatus.EXPIRED.value:
-            return FormValidateResponse(valid=False, reason="EXPIRED", emp_id=form.employee.emp_id, type=form.type)
+            return FormValidateResponse(
+                valid=False, reason="EXPIRED", emp_id=form.employee.emp_id, type=form.type,
+                round_id=form.round_id, candidate_id=form.candidate_id,
+            )
         if is_form_expired(form):
             if form.status == FormStatus.SENT.value:
                 try:
@@ -148,8 +192,14 @@ class FormService:
                 except sa_exc.SQLAlchemyError:
                     self.db.rollback()
                     raise
-            return FormValidateResponse(valid=False, reason="EXPIRED", emp_id=form.employee.emp_id, type=form.type)
-        return FormValidateResponse(valid=True, reason="VALID", emp_id=form.employee.emp_id, type=form.type)
+            return FormValidateResponse(
+                valid=False, reason="EXPIRED", emp_id=form.employee.emp_id, type=form.type,
+                round_id=form.round_id, candidate_id=form.candidate_id,
+            )
+        return FormValidateResponse(
+            valid=True, reason="VALID", emp_id=form.employee.emp_id, type=form.type,
+            round_id=form.round_id, candidate_id=form.candidate_id,
+        )
 
     def mark_slots_form_submitted(self, emp_id: str) -> None:
         form = self.repository.get_active_sent(emp_id, FormType.SLOTS.value)
@@ -165,11 +215,38 @@ class FormService:
             raise
         self.alert_service.mark_emp_alerts_read(emp_id=emp_id, alert_type=AlertType.SLOTS.value)
 
+    def submit_form(self, form_id: UUID) -> FormSubmitResponse:
+        form = self.repository.get_by_id(form_id)
+        if not form:
+            raise ValueError(f"Form not found: form_id={form_id}")
+        if form.status != FormStatus.SENT.value:
+            return FormSubmitResponse(message="Form already finalised")
+        try:
+            self.repository.mark_submitted(form)
+            self.db.commit()
+        except sa_exc.SQLAlchemyError:
+            self.db.rollback()
+            raise
+        alert_type = AlertType.REVIEW.value if form.type == FormType.REVIEW.value else AlertType.SLOTS.value
+        self.alert_service.mark_emp_alerts_read(
+            emp_id=form.employee.emp_id, alert_type=alert_type,
+        )
+        return FormSubmitResponse(message="Form submitted successfully")
+
+    def _get_alert_type(self, form_type: str) -> str:
+        return AlertType.REVIEW.value if form_type == FormType.REVIEW.value else AlertType.SLOTS.value
+
+    def _send_form_mail(self, form: Form) -> None:
+        if form.type == FormType.REVIEW.value:
+            send_review_mail_task(form.employee.emp_id, form.id, None, None, None)
+        else:
+            send_slot_mail_task(form.employee.emp_id, form.id)
+
     def run_reminder_job(self) -> int:
         forms = self.repository.list_due_for_reminder()
         sent = 0
         for form in forms:
-            send_slot_mail_task(form.employee.emp_id, form.id)
+            self._send_form_mail(form)
             sent += 1
         return sent
 
@@ -177,11 +254,12 @@ class FormService:
         forms = self.repository.list_due_for_escalation()
         created = 0
         for form in forms:
+            alert_type = self._get_alert_type(form.type)
             if self.alert_service.repository.get_unread_by_emp_and_type(
-                form.employee.emp_id, AlertType.SLOTS.value
+                form.employee.emp_id, alert_type
             ):
                 continue
-            self.alert_service.create_alert_if_missing(form.employee.emp_id, AlertType.SLOTS.value)
+            self.alert_service.create_alert_if_missing(form.employee.emp_id, alert_type)
             created += 1
         return created
 
@@ -191,8 +269,9 @@ class FormService:
         for form in forms:
             try:
                 self.repository.mark_expired(form)
+                alert_type = self._get_alert_type(form.type)
                 self.alert_service.mark_emp_alerts_read(
-                    form.employee.emp_id, alert_type=AlertType.SLOTS.value
+                    form.employee.emp_id, alert_type=alert_type,
                 )
                 updated += 1
             except sa_exc.SQLAlchemyError:

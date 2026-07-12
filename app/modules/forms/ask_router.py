@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -8,6 +8,9 @@ from app.db.session import get_db
 from app.modules.forms.form_mail import send_slot_mail_task
 from app.modules.forms.form_schema import AskFormRequest, AskFormResponse
 from app.modules.forms.form_service import FormService
+from app.modules.rounds.round_service import RoundService
+from app.modules.rounds.round_schema import RoundDetailResponse
+from app.modules.users.user_repository import UserRepository
 
 router = APIRouter(prefix=settings.API_V1_PREFIX, tags=["forms"])
 
@@ -18,8 +21,48 @@ def ask_form(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
+    if data.type == "REVIEW":
+        return _generate_review_forms(data, db)
+
     service = FormService(db)
     response, mail_tasks = service.ask_form_batch(data.emp_ids, data.type)
     for task in mail_tasks:
         background_tasks.add_task(send_slot_mail_task, task.emp_id, task.form_id)
     return response
+
+
+def _generate_review_forms(data: AskFormRequest, db: Session) -> AskFormResponse:
+    if not data.round_id:
+        raise HTTPException(status_code=400, detail="round_id is required for REVIEW type")
+    if not data.candidate_id:
+        raise HTTPException(status_code=400, detail="candidate_id is required for REVIEW type")
+
+    round_svc = RoundService(db)
+    round_detail = round_svc.get_round_detail(data.round_id)
+    if not round_detail:
+        raise HTTPException(status_code=404, detail="Round not found")
+
+    user_repo = UserRepository(db)
+    service = FormService(db)
+    results: list[AskFormResultItem] = []
+
+    for emp_id in data.emp_ids:
+        user = user_repo.get_by_emp_id(emp_id)
+        if not user:
+            results.append(AskFormResultItem(emp_id=emp_id, status="FAILED", message="Employee not found"))
+            continue
+        try:
+            service.generate_review_form(
+                emp_id=emp_id,
+                round_id=data.round_id,
+                candidate_id=data.candidate_id,
+                candidate_name=round_detail.candidate or "Candidate",
+                round_name=round_detail.round or "Interview",
+                interviewer_name=user.name or emp_id,
+                interviewer_email=user.email or "",
+            )
+            results.append(AskFormResultItem(emp_id=emp_id, status="SUCCESS", message="Review form sent"))
+        except ValueError as exc:
+            results.append(AskFormResultItem(emp_id=emp_id, status="FAILED", message=str(exc)))
+
+    return AskFormResponse(message="Review forms generated", results=results)
