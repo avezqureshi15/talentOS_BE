@@ -90,6 +90,9 @@ class InterviewScheduleService:
         self.repository.update_status(interview_id, "RESCHEDULED")
         self.repository.update_slot_status(old_slot_id, SlotStatus.AVAILABLE.value)
         self.repository.update_slot_status(new_slot_id, SlotStatus.BOOKED.value)
+        round_obj = self.repository.get_round_by_id(interview.round_id)
+        if round_obj and round_obj.candidate_id:
+            self.repository.update_candidate_status(round_obj.candidate_id, EvaluationStatus.INTERVIEW_RESCHEDULED.value)
         self.db.commit()
         self.db.refresh(interview)
         logger.info("Interview rescheduled: id=%s", interview.id)

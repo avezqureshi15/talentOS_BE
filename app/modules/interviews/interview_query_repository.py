@@ -32,12 +32,14 @@ class InterviewQueryRepository:
         query = (
             self.db.query(
                 Interview.id,
+                Interview.status.label("interview_status"),
                 Slot.start_at,
                 Slot.end_at,
                 Interview.event_id,
                 Interview.meet_link,
                 Round.jd_id,
                 Round.candidate_id,
+                User.id.label("interviewer_user_id"),
                 User.emp_id,
                 User.name.label("interviewer_name"),
                 User.email.label("interviewer_email"),
@@ -72,12 +74,13 @@ class InterviewQueryRepository:
         return {
             "id": str(row.id),
             "status": _COMPLETED if start and start < now else _INCOMING,
+            "interview_status": row.interview_status or "",
             "position": {
                 "id": str(row.jd_id) if row.jd_id else "",
                 "title": row.position_title or "",
             },
             "interviewer": {
-                "id": row.emp_id or "",
+                "id": str(row.interviewer_user_id) if row.interviewer_user_id else "",
                 "name": row.interviewer_name or "",
                 "email": row.interviewer_email or "",
             },
