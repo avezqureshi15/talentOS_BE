@@ -34,13 +34,22 @@ def complete_interview(interview_id: str) -> None:
 
         if candidate_id:
             db.query(Candidate).filter(Candidate.id == candidate_id).update(
-                {"status": EvaluationStatus.INTERVIEW_COMPLETED.value}
+                {"status": EvaluationStatus.WAITING_FOR_REVIEW.value}
             )
             EventService(db).create_event(EventCreate(
                 entity_type="CANDIDATE",
                 entity_id=str(candidate_id),
                 event_name="Interview Completed",
                 state_code=EvaluationStatus.INTERVIEW_COMPLETED.value,
+                actor_type="SYSTEM",
+                candidate_id=candidate_id,
+                event_metadata={"interview_id": interview_id, "round_id": str(interview.round_id), "round_name": round_.name if round_ else None},
+            ))
+            EventService(db).create_event(EventCreate(
+                entity_type="CANDIDATE",
+                entity_id=str(candidate_id),
+                event_name="Waiting For Review",
+                state_code=EvaluationStatus.WAITING_FOR_REVIEW.value,
                 actor_type="SYSTEM",
                 candidate_id=candidate_id,
                 event_metadata={"interview_id": interview_id, "round_id": str(interview.round_id), "round_name": round_.name if round_ else None},
