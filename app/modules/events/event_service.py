@@ -58,6 +58,11 @@ class EventService:
         events = self.repository.get_by_job(job_id)
         return [EventResponse.model_validate(e) for e in events]
 
+    def get_events_by_candidate(self, candidate_id: int) -> list[EventResponse]:
+        logger.info("Fetching events: candidate_id=%d", candidate_id)
+        events = self.repository.get_by_candidate_id(candidate_id)
+        return [EventResponse.model_validate(e) for e in events]
+
     def get_event_by_id(self, event_id: uuid.UUID) -> EventResponse:
         event = self.repository.get_by_id(event_id)
         if not event:

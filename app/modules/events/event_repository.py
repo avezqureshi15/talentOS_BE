@@ -15,6 +15,7 @@ class EventRepositoryProtocol(Protocol):
     def update(self, event: Event) -> Event: ...
     def get_by_entity(self, entity_type: str, entity_id: str) -> list[Event]: ...
     def get_by_job(self, job_id: uuid.UUID) -> list[Event]: ...
+    def get_by_candidate_id(self, candidate_id: int) -> list[Event]: ...
 
 
 class EventRepository:
@@ -47,6 +48,15 @@ class EventRepository:
         return (
             self.db.query(Event)
             .filter(Event.job_id == job_id)
+            .order_by(Event.created_at.desc())
+            .all()
+        )
+
+    def get_by_candidate_id(self, candidate_id: int) -> list[Event]:
+        logger.debug("Fetching events: candidate_id=%d", candidate_id)
+        return (
+            self.db.query(Event)
+            .filter(Event.candidate_id == candidate_id)
             .order_by(Event.created_at.desc())
             .all()
         )

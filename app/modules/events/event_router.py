@@ -17,6 +17,12 @@ def create_event(data: EventCreate, db: Session = Depends(get_db)):
     return service.create_event(data)
 
 
+@router.get("/by-candidate/{candidate_id}", response_model=list[EventResponse])
+def get_events_by_candidate(candidate_id: int, db: Session = Depends(get_db)):
+    service = EventService(db)
+    return service.get_events_by_candidate(candidate_id)
+
+
 @router.get("/{event_id}", response_model=EventResponse)
 def get_event_by_id(event_id: uuid.UUID, db: Session = Depends(get_db)):
     service = EventService(db)
