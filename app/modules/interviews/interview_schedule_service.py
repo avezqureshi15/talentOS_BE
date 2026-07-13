@@ -122,8 +122,6 @@ class InterviewScheduleService:
             self.repository.update_candidate_status(round_obj.candidate_id, EvaluationStatus.INTERVIEW_RESCHEDULED.value)
         self.db.commit()
         self.db.refresh(interview)
-        from app.modules.rounds.round_model import Round as _Round
-        round_obj = self.db.query(_Round).filter(_Round.id == interview.round_id).first()
         if round_obj and round_obj.candidate_id:
             EventService(self.db).create_event(EventCreate(
                 entity_type="CANDIDATE",
@@ -166,8 +164,6 @@ class InterviewScheduleService:
             self.repository.update_candidate_status(round_obj.candidate_id, EvaluationStatus.INTERVIEW_CANCELLED.value)
         self.db.commit()
         self.db.refresh(interview)
-        from app.modules.rounds.round_model import Round as _Round
-        round_obj = self.db.query(_Round).filter(_Round.id == interview.round_id).first()
         if round_obj and round_obj.candidate_id:
             EventService(self.db).create_event(EventCreate(
                 entity_type="CANDIDATE",
