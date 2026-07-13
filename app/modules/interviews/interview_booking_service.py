@@ -40,6 +40,9 @@ class BookingService:
         for emp_id in data.interviewer_ids:
             self.repository.create_round_interviewer(round_id=round_obj.id, employee_id=emp_id)
 
+        candidate.current_round_id = round_obj.id
+        self.db.flush()
+
         result = self._schedule_svc.schedule_interview(
             round_id=round_obj.id, slot_id=uuid.UUID(data.slot_id),
             create_google_meet=data.create_google_meet, commit=False,
