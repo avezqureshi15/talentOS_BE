@@ -2,7 +2,9 @@ import uuid
 
 from sqlalchemy.orm import Session
 
+from app.core.constants import EvaluationStatus
 from app.core.logger import get_logger
+from app.modules.evaluations.evaluation_model import Candidate
 from app.modules.reviews.review_model import Review
 from app.modules.reviews.review_repository import ReviewRepository, ReviewRepositoryProtocol
 from app.modules.events.event_schema import EventCreate
@@ -97,5 +99,16 @@ class ReviewService:
                     actor_type="INTERVIEWER",
                     candidate_id=round_obj.candidate_id,
                     event_metadata={"round_id": str(round_id), "verdict": data.verdict},
+                ))
+                self.db.query(Candidate).filter(Candidate.id == round_obj.candidate_id).update({"status": EvaluationStatus.UNDER_EVALUATION.value})
+                self.db.flush()
+                EventService(self.db).create_event(EventCreate(
+                    entity_type="CANDIDATE",
+                    entity_id=str(round_obj.candidate_id),
+                    event_name="Candidate Under Evaluation",
+                    state_code="UNDER_EVALUATION",
+                    actor_type="INTERVIEWER",
+                    candidate_id=round_obj.candidate_id,
+                    event_metadata={"round_id": str(round_id), "verdict": data.verdict, "triggered_by": "interviewer_review"},
                 ))
         return ReviewResponse.model_validate(review)
