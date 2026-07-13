@@ -60,7 +60,7 @@ class ApplicationStateService:
                 state_code="FINAL_SELECTED" if t.set_final_verdict == "SELECTED" else "FINAL_REJECTED",
                 actor_type="HR",
                 candidate_id=candidate_id,
-                metadata={"final_verdict": t.set_final_verdict},
+                event_metadata={"final_verdict": t.set_final_verdict},
             ))
         return EvaluationResponse.model_validate(candidate)
 
