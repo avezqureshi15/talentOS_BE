@@ -102,16 +102,16 @@ class InterviewScheduleService:
         if commit:
             self.db.commit()
             self.db.refresh(created)
-            job_id = f"interview_complete_{created.id}"
-            get_scheduler().add_job(
-                "app.cron.interview_completion:complete_interview",
-                trigger=DateTrigger(run_date=slot.end_at),
-                args=[str(created.id)],
-                id=job_id,
-                replace_existing=True,
-                misfire_grace_time=1800,
-            )
-            logger.info("Completion job scheduled | job_id=%s run_date=%s", job_id, slot.end_at)
+        job_id = f"interview_complete_{created.id}"
+        get_scheduler().add_job(
+            "app.cron.interview_completion:complete_interview",
+            trigger=DateTrigger(run_date=slot.end_at),
+            args=[str(created.id)],
+            id=job_id,
+            replace_existing=True,
+            misfire_grace_time=1800,
+        )
+        logger.info("Completion job scheduled | job_id=%s run_date=%s", job_id, slot.end_at)
         logger.info("Interview scheduled: id=%s | event_id=%s", created.id, result.event_id)
         return ScheduleInterviewResponse(
             id=str(created.id), round_id=str(created.round_id),
