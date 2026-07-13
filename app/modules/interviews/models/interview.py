@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from sqlalchemy import DateTime, ForeignKey, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.core.constants import InterviewStatus
 from app.db.base import Base
 
 
@@ -15,7 +16,7 @@ class Interview(Base):
     slot_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), ForeignKey("slots.id"), nullable=True)
     event_id: Mapped[str | None] = mapped_column(String(500), nullable=True)
     meet_link: Mapped[str | None] = mapped_column(String(1024), nullable=True)
-    status: Mapped[str] = mapped_column(String(50), nullable=False, default="SCHEDULED")
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default=InterviewStatus.SCHEDULED.value)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

@@ -1,3 +1,3 @@
-from .hourly_jobs import run_hourly_jobs_forever, run_hourly_jobs_once
+from .hourly_jobs import setup_form_jobs
 
-__all__ = ["run_hourly_jobs_forever", "run_hourly_jobs_once"]
+__all__ = ["setup_form_jobs"]

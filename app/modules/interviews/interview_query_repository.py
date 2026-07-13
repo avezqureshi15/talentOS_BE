@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
+from app.core.constants import InterviewStatus
 from app.core.logger import get_logger
 from app.modules.evaluations.evaluation_model import Candidate
 from app.modules.hiring_requests.hiring_request_model import HiringRequest
@@ -59,9 +60,9 @@ class InterviewQueryRepository:
             .outerjoin(HiringRequest, Round.jd_id == HiringRequest.id)
         )
         if status_filter == _CANCELLED:
-            query = query.filter(Interview.status == "CANCELLED")
+            query = query.filter(Interview.status == InterviewStatus.CANCELLED.value)
         else:
-            query = query.filter(Interview.status != "CANCELLED")
+            query = query.filter(Interview.status != InterviewStatus.CANCELLED.value)
             if status_filter == _INCOMING:
                 query = query.filter(Slot.start_at >= now)
             elif status_filter == _COMPLETED:

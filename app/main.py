@@ -1,15 +1,15 @@
 from contextlib import asynccontextmanager
-import asyncio
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.cron import run_hourly_jobs_forever
 from app.common.handlers import register_exception_handlers
 from app.core.config import settings
 from app.core.kafka import ensure_topics
 from app.core.logger import get_logger, setup_logging
+from app.cron.hourly_jobs import setup_form_jobs
 from app.middleware import RequestLoggingMiddleware
+from app.scheduler import init_scheduler, shutdown_scheduler
 from app.modules.applications import router as applications_router
 from app.modules.alerts import router as alerts_router
 from app.modules.auth.auth_router import router as auth_router
@@ -38,11 +38,10 @@ async def lifespan(app: FastAPI):
     setup_logging()
     logger.info("Starting %s v%s | env=%s", settings.APP_NAME, settings.APP_VERSION, settings.APP_ENV)
     ensure_topics()
-    cron_stop_event = asyncio.Event()
-    cron_task = asyncio.create_task(run_hourly_jobs_forever(cron_stop_event))
+    scheduler = init_scheduler()
+    setup_form_jobs(scheduler)
     yield
-    cron_stop_event.set()
-    await cron_task
+    shutdown_scheduler()
     logger.info("Shutting down %s", settings.APP_NAME)
 
 

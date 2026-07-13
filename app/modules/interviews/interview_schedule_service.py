@@ -1,5 +1,6 @@
 import uuid
 
+from apscheduler.triggers.date import DateTrigger
 from google.api_core.exceptions import GoogleAPICallError
 from googleapiclient.errors import HttpError
 from sqlalchemy.orm import Session
@@ -8,7 +9,7 @@ from app.common.exceptions.calendar_exception import CalendarApiFailedException
 from app.common.exceptions.interview_exception import InterviewNotFoundException
 from app.common.exceptions.round_exception import RoundNotFoundException
 from app.common.exceptions.slot_exception import SlotNotFoundException
-from app.core.constants import EvaluationStatus
+from app.core.constants import EvaluationStatus, InterviewStatus
 from app.core.logger import get_logger
 from app.modules.events.event_schema import EventCreate
 from app.modules.events.event_service import EventService
@@ -17,6 +18,7 @@ from app.modules.interviews.interview_repository import InterviewRepository, Int
 from app.modules.interviews.interview_schema import CancelInterviewResponse, ScheduleInterviewResponse
 from app.modules.interviews.models.interview import Interview
 from app.modules.slots.slot_model import SlotStatus
+from app.scheduler import get_scheduler
 
 logger = get_logger(__name__)
 
@@ -56,7 +58,7 @@ class InterviewScheduleService:
             raise CalendarApiFailedException("Failed to create calendar event") from exc
         created = self.repository.create(Interview(
             round_id=round_id, slot_id=slot_id, event_id=result.event_id,
-            meet_link=result.meet_link, status="SCHEDULED",
+            meet_link=result.meet_link, status=InterviewStatus.SCHEDULED.value,
         ))
         if round_obj.candidate_id:
             self.repository.update_candidate_status(round_obj.candidate_id, EvaluationStatus.INTERVIEW_SCHEDULED.value)
@@ -79,6 +81,14 @@ class InterviewScheduleService:
         if commit:
             self.db.commit()
             self.db.refresh(created)
+            get_scheduler().add_job(
+                "app.cron.interview_completion:complete_interview",
+                trigger=DateTrigger(run_date=slot.end_at),
+                args=[str(created.id)],
+                id=f"interview_complete_{created.id}",
+                replace_existing=True,
+                misfire_grace_time=1800,
+            )
         logger.info("Interview scheduled: id=%s | event_id=%s", created.id, result.event_id)
         return ScheduleInterviewResponse(
             id=str(created.id), round_id=str(created.round_id),
@@ -104,7 +114,7 @@ class InterviewScheduleService:
                 logger.error("Calendar update failed: %s", exc)
                 raise CalendarApiFailedException("Failed to update calendar event") from exc
         self.repository.update_slot(interview_id, new_slot_id)
-        self.repository.update_status(interview_id, "RESCHEDULED")
+        self.repository.update_status(interview_id, InterviewStatus.RESCHEDULED.value)
         self.repository.update_slot_status(old_slot_id, SlotStatus.AVAILABLE.value)
         self.repository.update_slot_status(new_slot_id, SlotStatus.BOOKED.value)
         round_obj = self.repository.get_round_by_id(interview.round_id)
@@ -124,6 +134,13 @@ class InterviewScheduleService:
                 candidate_id=round_obj.candidate_id,
                 event_metadata={"round_id": str(interview.round_id), "old_slot": str(old_slot_id), "new_slot": str(new_slot_id)},
             ))
+        try:
+            get_scheduler().reschedule_job(
+                f"interview_complete_{interview.id}",
+                trigger=DateTrigger(run_date=new_slot.end_at),
+            )
+        except Exception:
+            logger.warning("Failed to reschedule completion job: id=%s", interview.id)
         logger.info("Interview rescheduled: id=%s", interview.id)
         return ScheduleInterviewResponse(
             id=str(interview.id), round_id=str(interview.round_id),
@@ -143,7 +160,7 @@ class InterviewScheduleService:
                 logger.error("Calendar cancel failed: %s", exc)
                 raise CalendarApiFailedException("Failed to cancel calendar event") from exc
         self.repository.update_slot_status(interview.slot_id, SlotStatus.AVAILABLE.value)
-        self.repository.update_status(interview_id, "CANCELLED")
+        self.repository.update_status(interview_id, InterviewStatus.CANCELLED.value)
         round_obj = self.repository.get_round_by_id(interview.round_id)
         if round_obj and round_obj.candidate_id:
             self.repository.update_candidate_status(round_obj.candidate_id, EvaluationStatus.INTERVIEW_CANCELLED.value)
@@ -161,5 +178,9 @@ class InterviewScheduleService:
                 candidate_id=round_obj.candidate_id,
                 event_metadata={"round_id": str(interview.round_id)},
             ))
+        try:
+            get_scheduler().remove_job(f"interview_complete_{interview.id}")
+        except Exception:
+            logger.debug("No completion job to remove: id=%s", interview.id)
         logger.info("Interview cancelled: id=%s", interview.id)
         return CancelInterviewResponse(id=str(interview.id), status=interview.status)
