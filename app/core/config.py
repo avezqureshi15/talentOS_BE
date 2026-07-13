@@ -1,4 +1,17 @@
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
+
+_DEV_TIMING = {
+    "FORM_REMINDER_HOURS": 0.002778,
+    "FORM_ESCALATION_HOURS": 0.005556,
+    "FORM_EXPIRY_HOURS": 24,
+}
+
+_PROD_TIMING = {
+    "FORM_REMINDER_HOURS": 2,
+    "FORM_ESCALATION_HOURS": 3,
+    "FORM_EXPIRY_HOURS": 24,
+}
 
 
 class Settings(BaseSettings):
@@ -61,10 +74,18 @@ class Settings(BaseSettings):
     SMTP_USE_TLS: bool = True
     FRONTEND_BASE_URL: str = "http://localhost:5173"
 
-    # Form timing (reminders, escalations, expiry)
+    # Form timing — prod defaults; overridden for dev via model_validator
     FORM_REMINDER_HOURS: float = 2
     FORM_ESCALATION_HOURS: float = 3
     FORM_EXPIRY_HOURS: float = 24
+
+    @model_validator(mode="after")
+    def _apply_env_timing(self) -> "Settings":
+        timing = _DEV_TIMING if self.APP_ENV == "development" else _PROD_TIMING
+        self.FORM_REMINDER_HOURS = timing["FORM_REMINDER_HOURS"]
+        self.FORM_ESCALATION_HOURS = timing["FORM_ESCALATION_HOURS"]
+        self.FORM_EXPIRY_HOURS = timing["FORM_EXPIRY_HOURS"]
+        return self
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "case_sensitive": True}
 
