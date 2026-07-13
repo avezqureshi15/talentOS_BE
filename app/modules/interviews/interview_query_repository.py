@@ -16,6 +16,7 @@ logger = get_logger(__name__)
 
 _INCOMING = "incoming"
 _COMPLETED = "completed"
+_CANCELLED = "cancelled"
 
 
 class InterviewQueryRepository:
@@ -33,6 +34,7 @@ class InterviewQueryRepository:
             self.db.query(
                 Interview.id,
                 Interview.status.label("interview_status"),
+                Interview.updated_at.label("cancelled_at"),
                 Slot.start_at,
                 Slot.end_at,
                 Interview.event_id,
@@ -56,10 +58,14 @@ class InterviewQueryRepository:
             .outerjoin(Candidate, Round.candidate_id == Candidate.id)
             .outerjoin(HiringRequest, Round.jd_id == HiringRequest.id)
         )
-        if status_filter == _INCOMING:
-            query = query.filter(Slot.start_at >= now)
-        elif status_filter == _COMPLETED:
-            query = query.filter(Slot.start_at < now)
+        if status_filter == _CANCELLED:
+            query = query.filter(Interview.status == "CANCELLED")
+        else:
+            query = query.filter(Interview.status != "CANCELLED")
+            if status_filter == _INCOMING:
+                query = query.filter(Slot.start_at >= now)
+            elif status_filter == _COMPLETED:
+                query = query.filter(Slot.start_at < now)
         total = query.count()
         rows = (
             query.order_by(Slot.start_at.desc())
@@ -95,6 +101,7 @@ class InterviewQueryRepository:
                 "timezone": "UTC",
             },
             "round_name": row.round_name or "",
+            "cancelled_at": row.cancelled_at.isoformat() if row.cancelled_at else None,
             "meeting": {
                 "platform": "Google Meet" if row.event_id else None,
                 "url": row.meet_link,

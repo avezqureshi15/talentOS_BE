@@ -48,7 +48,7 @@ class AuthService:
         domain = email.split("@")[1].lower() if "@" in email else ""
 
         allowed = settings.ALLOWED_EMAIL_DOMAIN.lower().strip()
-        if allowed and domain != allowed:
+        if allowed and allowed != "all" and domain != allowed:
             raise AuthError(
                 f"Only @{allowed} email addresses are allowed to access this platform.",
                 status_code=403,

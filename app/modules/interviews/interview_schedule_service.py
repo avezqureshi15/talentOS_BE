@@ -144,6 +144,9 @@ class InterviewScheduleService:
                 raise CalendarApiFailedException("Failed to cancel calendar event") from exc
         self.repository.update_slot_status(interview.slot_id, SlotStatus.AVAILABLE.value)
         self.repository.update_status(interview_id, "CANCELLED")
+        round_obj = self.repository.get_round_by_id(interview.round_id)
+        if round_obj and round_obj.candidate_id:
+            self.repository.update_candidate_status(round_obj.candidate_id, EvaluationStatus.INTERVIEW_CANCELLED.value)
         self.db.commit()
         self.db.refresh(interview)
         from app.modules.rounds.round_model import Round as _Round

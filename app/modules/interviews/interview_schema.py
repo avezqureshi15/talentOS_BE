@@ -114,7 +114,9 @@ class MeetingBrief(BaseModel):
 class InterviewListItem(BaseModel):
     id: str
     status: str
+    interview_status: str | None = None
     round_name: str
+    cancelled_at: str | None = None
     position: PositionBrief
     interviewer: InterviewerBrief
     candidate: CandidateBrief
