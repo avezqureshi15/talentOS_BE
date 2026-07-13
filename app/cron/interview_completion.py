@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 
 from app.core.constants import EvaluationStatus, InterviewStatus
 from app.core.logger import get_logger
@@ -13,6 +14,8 @@ logger = get_logger(__name__)
 
 
 def complete_interview(interview_id: str) -> None:
+    started = datetime.now(timezone.utc)
+    logger.info("Interview completion job started | interview_id=%s", interview_id)
     db = SessionLocal()
     try:
         interview = db.query(Interview).filter(
@@ -20,7 +23,8 @@ def complete_interview(interview_id: str) -> None:
             Interview.status.in_([InterviewStatus.SCHEDULED.value, InterviewStatus.RESCHEDULED.value]),
         ).first()
         if not interview:
-            logger.info("Interview not found or already completed: id=%s", interview_id)
+            elapsed = (datetime.now(timezone.utc) - started).total_seconds()
+            logger.info("Interview not found or already completed | interview_id=%s elapsed_seconds=%.2f", interview_id, elapsed)
             return
 
         round_ = db.query(Round).filter(Round.id == interview.round_id).first()
@@ -39,14 +43,16 @@ def complete_interview(interview_id: str) -> None:
                 state_code=EvaluationStatus.INTERVIEW_COMPLETED.value,
                 actor_type="SYSTEM",
                 candidate_id=candidate_id,
-                event_metadata={"interview_id": interview_id, "round_id": str(interview.round_id)},
+                event_metadata={"interview_id": interview_id, "round_id": str(interview.round_id), "round_name": round_.name if round_ else None},
             ))
 
         db.commit()
-        logger.info("Interview completed: id=%s | candidate_id=%s", interview_id, candidate_id)
+        elapsed = (datetime.now(timezone.utc) - started).total_seconds()
+        logger.info("Interview completed | interview_id=%s candidate_id=%s round_id=%s elapsed_seconds=%.2f", interview_id, candidate_id, interview.round_id, elapsed)
     except Exception:
         db.rollback()
-        logger.error("Interview completion failed: id=%s", interview_id)
+        elapsed = (datetime.now(timezone.utc) - started).total_seconds()
+        logger.error("Interview completion failed after %.2fs | interview_id=%s", elapsed, interview_id)
         raise
     finally:
         db.close()

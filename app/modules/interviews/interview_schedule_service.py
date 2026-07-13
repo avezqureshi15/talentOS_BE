@@ -102,14 +102,16 @@ class InterviewScheduleService:
         if commit:
             self.db.commit()
             self.db.refresh(created)
+            job_id = f"interview_complete_{created.id}"
             get_scheduler().add_job(
                 "app.cron.interview_completion:complete_interview",
                 trigger=DateTrigger(run_date=slot.end_at),
                 args=[str(created.id)],
-                id=f"interview_complete_{created.id}",
+                id=job_id,
                 replace_existing=True,
                 misfire_grace_time=1800,
             )
+            logger.info("Completion job scheduled | job_id=%s run_date=%s", job_id, slot.end_at)
         logger.info("Interview scheduled: id=%s | event_id=%s", created.id, result.event_id)
         return ScheduleInterviewResponse(
             id=str(created.id), round_id=str(created.round_id),
@@ -154,12 +156,14 @@ class InterviewScheduleService:
                 event_metadata={"round_id": str(interview.round_id), "old_slot": str(old_slot_id), "new_slot": str(new_slot_id)},
             ))
         try:
+            job_id = f"interview_complete_{interview.id}"
             get_scheduler().reschedule_job(
-                f"interview_complete_{interview.id}",
+                job_id,
                 trigger=DateTrigger(run_date=new_slot.end_at),
             )
-        except Exception:
-            logger.warning("Failed to reschedule completion job: id=%s", interview.id)
+            logger.info("Completion job rescheduled | job_id=%s new_run_date=%s", job_id, new_slot.end_at)
+        except Exception as exc:
+            logger.warning("Failed to reschedule completion job | job_id=interview_complete_%s | %s", interview.id, exc)
         logger.info("Interview rescheduled: id=%s", interview.id)
         return ScheduleInterviewResponse(
             id=str(interview.id), round_id=str(interview.round_id),
@@ -196,8 +200,10 @@ class InterviewScheduleService:
                 event_metadata={"round_id": str(interview.round_id)},
             ))
         try:
-            get_scheduler().remove_job(f"interview_complete_{interview.id}")
+            job_id = f"interview_complete_{interview.id}"
+            get_scheduler().remove_job(job_id)
+            logger.info("Completion job removed | job_id=%s", job_id)
         except Exception:
-            logger.debug("No completion job to remove: id=%s", interview.id)
+            logger.debug("No completion job to remove | interview_id=%s", interview.id)
         logger.info("Interview cancelled: id=%s", interview.id)
         return CancelInterviewResponse(id=str(interview.id), status=interview.status)

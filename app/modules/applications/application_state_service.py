@@ -101,9 +101,11 @@ class ApplicationStateService:
                 self.db.query(Slot).filter(Slot.id == interview.slot_id).update({"status": SlotStatus.AVAILABLE.value})
             interview.status = InterviewStatus.CANCELLED.value
             try:
-                get_scheduler().remove_job(f"interview_complete_{interview.id}")
+                job_id = f"interview_complete_{interview.id}"
+                get_scheduler().remove_job(job_id)
+                logger.info("Completion job removed via final verdict | job_id=%s", job_id)
             except Exception:
-                pass
+                logger.debug("No completion job to remove via final verdict | interview_id=%s", interview.id)
             EventService(self.db).create_event(EventCreate(
                 entity_type="CANDIDATE",
                 entity_id=str(candidate_id),

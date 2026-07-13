@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
@@ -8,37 +10,26 @@ from app.modules.forms.form_service import FormService
 logger = get_logger(__name__)
 
 
-def _run_reminder_job() -> None:
-    db = SessionLocal()
-    try:
-        count = FormService(db).run_reminder_job()
-        logger.info("Reminder job done: count=%d", count)
-    except Exception as exc:
-        logger.error("Reminder job failed: %s", exc)
-    finally:
-        db.close()
+def _with_db_logging(name: str, fn):
+    def wrapper() -> None:
+        db = SessionLocal()
+        started = datetime.now(timezone.utc)
+        logger.info("%s job started", name)
+        try:
+            count = fn(db)
+            elapsed = (datetime.now(timezone.utc) - started).total_seconds()
+            logger.info("%s job completed | count=%d elapsed_seconds=%.2f", name, count, elapsed)
+        except Exception as exc:
+            elapsed = (datetime.now(timezone.utc) - started).total_seconds()
+            logger.error("%s job failed after %.2fs | %s", name, elapsed, exc)
+        finally:
+            db.close()
+    return wrapper
 
 
-def _run_escalation_job() -> None:
-    db = SessionLocal()
-    try:
-        count = FormService(db).run_escalation_job()
-        logger.info("Escalation job done: count=%d", count)
-    except Exception as exc:
-        logger.error("Escalation job failed: %s", exc)
-    finally:
-        db.close()
-
-
-def _run_expiry_job() -> None:
-    db = SessionLocal()
-    try:
-        count = FormService(db).run_expiry_reconciliation_job()
-        logger.info("Expiry reconciliation job done: count=%d", count)
-    except Exception as exc:
-        logger.error("Expiry reconciliation job failed: %s", exc)
-    finally:
-        db.close()
+_run_reminder_job = _with_db_logging("reminder", lambda db: FormService(db).run_reminder_job())
+_run_escalation_job = _with_db_logging("escalation", lambda db: FormService(db).run_escalation_job())
+_run_expiry_job = _with_db_logging("expiry", lambda db: FormService(db).run_expiry_reconciliation_job())
 
 
 def setup_form_jobs(scheduler: BackgroundScheduler) -> None:
