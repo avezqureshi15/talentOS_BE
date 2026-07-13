@@ -59,7 +59,7 @@ class ReviewService:
                     state_code="ROUND_VERDICT_UPDATED",
                     actor_type="SYSTEM",
                     candidate_id=round_obj.candidate_id,
-                    metadata={"round_id": str(round_id), "round_verdict": mapped, "triggered_by": None},
+                    event_metadata={"round_id": str(round_id), "round_verdict": mapped, "triggered_by": None},
                 ))
 
     def get_reviews_by_round(self, round_id: str) -> list[ReviewResponse]:
@@ -96,6 +96,6 @@ class ReviewService:
                     state_code="INTERVIEWER_REVIEWED",
                     actor_type="INTERVIEWER",
                     candidate_id=round_obj.candidate_id,
-                    metadata={"round_id": str(round_id), "verdict": data.verdict},
+                    event_metadata={"round_id": str(round_id), "verdict": data.verdict},
                 ))
         return ReviewResponse.model_validate(review)

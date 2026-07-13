@@ -69,7 +69,7 @@ class InterviewScheduleService:
                 candidate_id=round_obj.candidate_id,
                 action_url=result.meet_link,
                 action_label="Join Meeting",
-                metadata={
+                event_metadata={
                     "round_id": str(round_id), "round_name": round_obj.name,
                     "slot_time": slot.start_at.isoformat() if hasattr(slot, "start_at") else None,
                     "interviewers": attendees,
@@ -122,7 +122,7 @@ class InterviewScheduleService:
                 state_code="INTERVIEW_RESCHEDULED",
                 actor_type="HR",
                 candidate_id=round_obj.candidate_id,
-                metadata={"round_id": str(interview.round_id), "old_slot": str(old_slot_id), "new_slot": str(new_slot_id)},
+                event_metadata={"round_id": str(interview.round_id), "old_slot": str(old_slot_id), "new_slot": str(new_slot_id)},
             ))
         logger.info("Interview rescheduled: id=%s", interview.id)
         return ScheduleInterviewResponse(
@@ -156,7 +156,7 @@ class InterviewScheduleService:
                 state_code="INTERVIEW_CANCELLED",
                 actor_type="HR",
                 candidate_id=round_obj.candidate_id,
-                metadata={"round_id": str(interview.round_id)},
+                event_metadata={"round_id": str(interview.round_id)},
             ))
         logger.info("Interview cancelled: id=%s", interview.id)
         return CancelInterviewResponse(id=str(interview.id), status=interview.status)

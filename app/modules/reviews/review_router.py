@@ -47,7 +47,7 @@ def update_review_by_round(round_id: uuid.UUID, data: ReviewUpdateByRound, db: S
                     state_code="HR_SHORTLISTED" if is_selected else "HR_REJECTED",
                     actor_type="HR",
                     candidate_id=candidate_id,
-                    metadata={"round_id": str(round_id), "round_name": round_obj.name} if round_obj else None,
+                    event_metadata={"round_id": str(round_id), "round_name": round_obj.name} if round_obj else None,
                 ))
 
     return result

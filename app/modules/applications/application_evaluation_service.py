@@ -82,7 +82,7 @@ class ApplicationEvaluationService:
                 actor_type="SYSTEM",
                 candidate_id=candidate.id,
                 remark="No resume_url provided",
-                metadata={"error_reason": "No resume_url provided"},
+                event_metadata={"error_reason": "No resume_url provided"},
             ))
             candidate = self.repo.mark_result(candidate, EvaluationStatus.INVALID, error_reason="No resume_url provided")
             return self.repo.to_candidate_dict(candidate)
@@ -96,7 +96,7 @@ class ApplicationEvaluationService:
                 actor_type="SYSTEM",
                 candidate_id=candidate.id,
                 remark="Resume is not text-extractable (image/scanned PDF)",
-                metadata={"error_reason": "Resume is not text-extractable"},
+                event_metadata={"error_reason": "Resume is not text-extractable"},
             ))
             candidate = self.repo.mark_result(candidate, EvaluationStatus.INVALID, error_reason="Resume is not text-extractable (image/scanned PDF)")
             return self.repo.to_candidate_dict(candidate)
@@ -108,7 +108,7 @@ class ApplicationEvaluationService:
             state_code="EVALUATION_STARTED",
             actor_type="SYSTEM",
             candidate_id=candidate.id,
-            metadata={"resume_url": resume_url},
+            event_metadata={"resume_url": resume_url},
         ))
         candidate_meta_parts = []
         for label, val in [
@@ -136,7 +136,7 @@ class ApplicationEvaluationService:
                 actor_type="SYSTEM",
                 candidate_id=candidate.id,
                 remark=f"Unexpected error: {exc}",
-                metadata={"error_reason": f"Unexpected error: {exc}"},
+                event_metadata={"error_reason": f"Unexpected error: {exc}"},
             ))
             candidate = self.repo.mark_result(candidate, EvaluationStatus.FAILED, error_reason=f"Unexpected error: {exc}")
             return self.repo.to_candidate_dict(candidate)
@@ -154,7 +154,7 @@ class ApplicationEvaluationService:
             state_code="EVALUATION_COMPLETED",
             actor_type="AI",
             candidate_id=candidate.id,
-            metadata={"fit_score": ai_result.overall_score_percentage, "threshold_used": threshold},
+            event_metadata={"fit_score": ai_result.overall_score_percentage, "threshold_used": threshold},
         ))
         self._create_initial_review(ai_result, candidate, job_id, verdict)
         return self.repo.to_candidate_dict(candidate)
@@ -213,7 +213,7 @@ class ApplicationEvaluationService:
                 state_code="AI_SHORTLISTED" if verdict == "shortlisted" else "AI_REJECTED",
                 actor_type="AI",
                 candidate_id=candidate.id,
-                metadata={"fit_score": ai_result.overall_score_percentage, "round_id": str(round_resp.id), "verdict": verdict},
+                event_metadata={"fit_score": ai_result.overall_score_percentage, "round_id": str(round_resp.id), "verdict": verdict},
             ))
         except Exception as exc:
             logger.error("Round/review creation failed for candidate_id=%s: %s", candidate.id, exc)

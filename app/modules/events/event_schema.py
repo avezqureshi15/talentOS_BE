@@ -16,7 +16,7 @@ class EventCreate(BaseModel):
     remark: str | None = None
     action_url: str | None = None
     action_label: str | None = None
-    metadata: dict | None = None
+    event_metadata: dict | None = None
 
 
 class EventUpdate(BaseModel):
@@ -31,7 +31,7 @@ class EventUpdate(BaseModel):
     remark: str | None = None
     action_url: str | None = None
     action_label: str | None = None
-    metadata: dict | None = None
+    event_metadata: dict | None = None
 
 
 class EventResponse(BaseModel):
@@ -47,7 +47,7 @@ class EventResponse(BaseModel):
     remark: str | None = None
     action_url: str | None = None
     action_label: str | None = None
-    metadata: dict | None = None
+    event_metadata: dict | None = None
     created_at: datetime
     updated_at: datetime
 

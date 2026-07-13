@@ -23,7 +23,7 @@ class Event(Base):
     remark: Mapped[str | None] = mapped_column(Text, nullable=True)
     action_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     action_label: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    event_metadata: Mapped[dict | None] = mapped_column("metadata", JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

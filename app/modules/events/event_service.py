@@ -29,7 +29,7 @@ class EventService:
             remark=data.remark,
             action_url=data.action_url,
             action_label=data.action_label,
-            metadata=data.metadata,
+            event_metadata=data.event_metadata,
         )
         self.repository.create(event)
         self.db.commit()
