@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.session import get_db
+from app.modules.events.event_service import EventService
 from app.modules.interviews.interview_schema import (
     BookInterviewRequest,
     CancelInterviewResponse,
@@ -46,7 +47,7 @@ def schedule_interview(
     data: ScheduleInterviewRequest,
     db: Session = Depends(get_db),
 ):
-    svc = InterviewScheduleService(db)
+    svc = InterviewScheduleService(db, event_service=EventService(db))
     return svc.schedule_interview(
         round_id=uuid.UUID(data.round_id),
         slot_id=uuid.UUID(data.slot_id),
@@ -58,7 +59,7 @@ def reschedule_interview(
     data: RescheduleInterviewRequest,
     db: Session = Depends(get_db),
 ):
-    svc = InterviewScheduleService(db)
+    svc = InterviewScheduleService(db, event_service=EventService(db))
     return svc.reschedule_interview(
         interview_id=interview_id,
         new_slot_id=uuid.UUID(data.slot_id),
@@ -69,10 +70,10 @@ def cancel_interview(
     interview_id: uuid.UUID,
     db: Session = Depends(get_db),
 ):
-    svc = InterviewScheduleService(db)
+    svc = InterviewScheduleService(db, event_service=EventService(db))
     return svc.cancel_interview(interview_id=interview_id)
 
 
 @router.post("/booking", response_model=ScheduleInterviewResponse, status_code=status.HTTP_201_CREATED)
 def book_interview(data: BookInterviewRequest, db: Session = Depends(get_db)):
-    return BookingService(db).book_interview(data)
+    return BookingService(db, event_service=EventService(db)).book_interview(data)

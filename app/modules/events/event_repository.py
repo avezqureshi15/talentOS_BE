@@ -57,6 +57,6 @@ class EventRepository:
         return (
             self.db.query(Event)
             .filter(Event.candidate_id == candidate_id)
-            .order_by(Event.created_at.desc())
+            .order_by(Event.created_at.asc())
             .all()
         )

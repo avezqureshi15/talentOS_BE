@@ -1,8 +1,10 @@
 import uuid
+from typing import Protocol
 
 from apscheduler.triggers.date import DateTrigger
 from google.api_core.exceptions import GoogleAPICallError
 from googleapiclient.errors import HttpError
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.common.exceptions.calendar_exception import CalendarApiFailedException
@@ -11,8 +13,6 @@ from app.common.exceptions.round_exception import RoundNotFoundException
 from app.common.exceptions.slot_exception import SlotNotFoundException
 from app.core.constants import EvaluationStatus, InterviewStatus
 from app.core.logger import get_logger
-from app.modules.events.event_schema import EventCreate
-from app.modules.events.event_service import EventService
 from app.modules.interviews.interview_helpers import get_calendar_service
 from app.modules.interviews.interview_repository import InterviewRepository, InterviewRepositoryProtocol
 from app.modules.interviews.interview_schema import CancelInterviewResponse, ScheduleInterviewResponse
@@ -23,10 +23,30 @@ from app.scheduler import get_scheduler
 logger = get_logger(__name__)
 
 
+class _EventPayload(BaseModel):
+    entity_type: str
+    entity_id: str
+    job_id: str | None = None
+    candidate_id: int | None = None
+    event_name: str
+    state_code: str
+    actor_type: str | None = None
+    actor_id: str | None = None
+    remark: str | None = None
+    action_url: str | None = None
+    action_label: str | None = None
+    event_metadata: dict | None = None
+
+
+class EventServiceProtocol(Protocol):
+    def create_event(self, data: BaseModel) -> BaseModel: ...
+
+
 class InterviewScheduleService:
-    def __init__(self, db: Session, repo: InterviewRepositoryProtocol | None = None):
+    def __init__(self, db: Session, repo: InterviewRepositoryProtocol | None = None, event_service: EventServiceProtocol | None = None):
         self.db = db
         self.repository = repo or InterviewRepository(db)
+        self.event_service = event_service
 
     def schedule_interview(
         self,
@@ -62,21 +82,22 @@ class InterviewScheduleService:
         ))
         if round_obj.candidate_id:
             self.repository.update_candidate_status(round_obj.candidate_id, EvaluationStatus.INTERVIEW_SCHEDULED.value)
-            EventService(self.db).create_event(EventCreate(
-                entity_type="CANDIDATE",
-                entity_id=str(round_obj.candidate_id),
-                event_name="Interview Scheduled",
-                state_code="INTERVIEW_SCHEDULED",
-                actor_type="HR",
-                candidate_id=round_obj.candidate_id,
-                action_url=result.meet_link,
-                action_label="Join Meeting",
-                event_metadata={
-                    "round_id": str(round_id), "round_name": round_obj.name,
-                    "slot_time": slot.start_at.isoformat() if hasattr(slot, "start_at") else None,
-                    "interviewers": attendees,
-                },
-            ))
+            if self.event_service:
+                self.event_service.create_event(_EventPayload(
+                    entity_type="CANDIDATE",
+                    entity_id=str(round_obj.candidate_id),
+                    event_name="Interview Scheduled",
+                    state_code="INTERVIEW_SCHEDULED",
+                    actor_type="HR",
+                    candidate_id=round_obj.candidate_id,
+                    action_url=result.meet_link,
+                    action_label="Join Meeting",
+                    event_metadata={
+                        "round_id": str(round_id), "round_name": round_obj.name,
+                        "slot_time": slot.start_at.isoformat() if hasattr(slot, "start_at") else None,
+                        "interviewers": attendees,
+                    },
+                ))
         self.repository.update_slot_status(slot_id, SlotStatus.BOOKED.value)
         if commit:
             self.db.commit()
@@ -122,8 +143,8 @@ class InterviewScheduleService:
             self.repository.update_candidate_status(round_obj.candidate_id, EvaluationStatus.INTERVIEW_RESCHEDULED.value)
         self.db.commit()
         self.db.refresh(interview)
-        if round_obj and round_obj.candidate_id:
-            EventService(self.db).create_event(EventCreate(
+        if round_obj and round_obj.candidate_id and self.event_service:
+            self.event_service.create_event(_EventPayload(
                 entity_type="CANDIDATE",
                 entity_id=str(round_obj.candidate_id),
                 event_name="Interview Rescheduled",
@@ -164,8 +185,8 @@ class InterviewScheduleService:
             self.repository.update_candidate_status(round_obj.candidate_id, EvaluationStatus.INTERVIEW_CANCELLED.value)
         self.db.commit()
         self.db.refresh(interview)
-        if round_obj and round_obj.candidate_id:
-            EventService(self.db).create_event(EventCreate(
+        if round_obj and round_obj.candidate_id and self.event_service:
+            self.event_service.create_event(_EventPayload(
                 entity_type="CANDIDATE",
                 entity_id=str(round_obj.candidate_id),
                 event_name="Interview Cancelled",

@@ -6,17 +6,17 @@ from app.common.exceptions.application_exception import ApplicationNotFoundExcep
 from app.common.exceptions.slot_exception import SlotNotFoundException
 from app.core.logger import get_logger
 from app.modules.interviews.interview_repository import InterviewRepository, InterviewRepositoryProtocol
-from app.modules.interviews.interview_schedule_service import InterviewScheduleService
+from app.modules.interviews.interview_schedule_service import InterviewScheduleService, EventServiceProtocol
 from app.modules.interviews.interview_schema import BookInterviewRequest, ScheduleInterviewResponse
 
 logger = get_logger(__name__)
 
 
 class BookingService:
-    def __init__(self, db: Session, repo: InterviewRepositoryProtocol | None = None):
+    def __init__(self, db: Session, repo: InterviewRepositoryProtocol | None = None, event_service: EventServiceProtocol | None = None):
         self.db = db
         self.repository = repo or InterviewRepository(db)
-        self._schedule_svc = InterviewScheduleService(db)
+        self._schedule_svc = InterviewScheduleService(db, event_service=event_service)
 
     def book_interview(self, data: BookInterviewRequest) -> ScheduleInterviewResponse:
         logger.info("Booking: candidate=%s | slot=%s | round=%s | interviewers=%d | gmeet=%s",
