@@ -6,8 +6,11 @@ from app.core.logger import get_logger
 from app.db.session import SessionLocal
 from app.modules.events.event_schema import EventCreate
 from app.modules.events.event_service import EventService
+from app.modules.forms.form_service import FormService
 from app.modules.interviews.models.interview import Interview
+from app.modules.interviews.models.round_interviewer import RoundInterviewer
 from app.modules.rounds.round_model import Round
+from app.modules.users.user_model import User
 from app.modules.evaluations.evaluation_model import Candidate
 
 logger = get_logger(__name__)
@@ -58,6 +61,37 @@ def complete_interview(interview_id: str) -> None:
         db.commit()
         elapsed = (datetime.now(timezone.utc) - started).total_seconds()
         logger.info("Interview completed | interview_id=%s candidate_id=%s round_id=%s elapsed_seconds=%.2f", interview_id, candidate_id, interview.round_id, elapsed)
+
+        # Send review forms to all interviewers for this round
+        if round_ and candidate_id:
+            candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+            candidate_name = candidate.candidate_name if candidate else "Candidate"
+            round_name = round_.name or "Interview"
+
+            interviewers = (
+                db.query(User)
+                .join(RoundInterviewer, RoundInterviewer.employee_id == User.id)
+                .filter(RoundInterviewer.round_id == round_.id)
+                .all()
+            )
+
+            for interviewer in interviewers:
+                try:
+                    form_db = SessionLocal()
+                    try:
+                        FormService(form_db).generate_review_form(
+                            emp_id=interviewer.emp_id,
+                            round_id=round_.id,
+                            candidate_id=candidate_id,
+                            candidate_name=candidate_name,
+                            round_name=round_name,
+                            interviewer_name=interviewer.name or interviewer.emp_id,
+                            interviewer_email=interviewer.email or "",
+                        )
+                    finally:
+                        form_db.close()
+                except Exception as exc:
+                    logger.error("Failed to send review form | interviewer=%s | %s", interviewer.emp_id, exc)
     except Exception:
         db.rollback()
         elapsed = (datetime.now(timezone.utc) - started).total_seconds()

@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 from app.common.utils.list_utils import unique_preserve_order
 from app.core.logger import get_logger
 from app.modules.alerts.alert_model import AlertType
+from app.modules.events.event_schema import EventCreate
+from app.modules.events.event_service import EventService
 from app.modules.forms.form_mail import (
     DETAIL_NEW_LINK,
     DETAIL_RESENT,
@@ -231,6 +233,20 @@ class FormService:
         self.alert_service.mark_emp_alerts_read(
             emp_id=form.employee.emp_id, alert_type=alert_type,
         )
+        if form.type == FormType.REVIEW.value and form.candidate_id:
+            EventService(self.db).create_event(EventCreate(
+                entity_type="CANDIDATE",
+                entity_id=str(form.candidate_id),
+                candidate_id=form.candidate_id,
+                event_name="Review Form Submitted",
+                state_code="REVIEW_FORM_SUBMITTED",
+                actor_type="INTERVIEWER",
+                actor_id=form.employee.emp_id,
+                event_metadata={
+                    "round_id": str(form.round_id) if form.round_id else None,
+                    "form_id": str(form.id),
+                },
+            ))
         return FormSubmitResponse(message="Form submitted successfully")
 
     def _get_alert_type(self, form_type: str) -> str:
