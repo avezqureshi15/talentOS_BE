@@ -58,7 +58,7 @@ def build_ask_summary_message(success_emp_ids: list[str]) -> str:
     return f"Slot selection mails are being sent to {joined}."
 
 
-def send_slot_mail_task(emp_id: str, form_id: UUID) -> None:
+def send_slot_mail_task(emp_id: str, form_id: UUID, is_reminder: bool = False) -> None:
     if not is_smtp_configured():
         logger.warning("Background mail skipped for emp_id=%s: SMTP not configured", emp_id)
         return
@@ -89,6 +89,7 @@ def send_slot_mail_task(emp_id: str, form_id: UUID) -> None:
         subject, body, html = render_slot_form_email(
             recipient_name=display_name,
             form_url=link,
+            is_reminder=is_reminder,
         )
         email_service.send(to_email=user.email.strip(), subject=subject, body=body, html=html)
     except Exception as exc:
@@ -103,6 +104,7 @@ def send_review_mail_task(
     candidate_name: str | None = None,
     round_name: str | None = None,
     interviewer_name: str | None = None,
+    is_reminder: bool = False,
 ) -> None:
     if not is_smtp_configured():
         logger.warning("Background review mail skipped for emp_id=%s: SMTP not configured", emp_id)
@@ -135,6 +137,7 @@ def send_review_mail_task(
             recipient_name=display_name,
             candidate_name=candidate_name or "the candidate",
             form_url=link,
+            is_reminder=is_reminder,
         )
         email_service.send(to_email=user.email.strip(), subject=subject, body=body, html=html)
     except Exception as exc:

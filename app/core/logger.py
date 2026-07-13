@@ -49,6 +49,9 @@ def setup_logging() -> None:
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
 
+    logging.getLogger("apscheduler.scheduler").setLevel(logging.WARNING)
+    logging.getLogger("apscheduler.executors.default").setLevel(logging.WARNING)
+
 
 def get_logger(name: str) -> logging.Logger:
     return logging.getLogger(name)

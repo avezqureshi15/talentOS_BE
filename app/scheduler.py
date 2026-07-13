@@ -1,4 +1,4 @@
-from apscheduler.events import EVENT_JOB_ADDED, EVENT_JOB_REMOVED, EVENT_JOB_ERROR, EVENT_JOB_MISSED, EVENT_JOB_SUBMITTED, EVENT_JOB_MAX_INSTANCES
+from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_MISSED, EVENT_JOB_MAX_INSTANCES
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -9,25 +9,32 @@ _scheduler: BackgroundScheduler | None = None
 logger = get_logger(__name__)
 
 
+JOB_DESCRIPTIONS: dict[str, str] = {
+    "form_reminder": "Sends follow-up emails to interviewers who haven't submitted their review forms",
+    "form_escalation": "Escalates overdue review forms to the next level (manager or alternate)",
+    "form_expiry": "Marks review/slot forms that have exceeded the expiry window as expired",
+}
+
+
+def _get_job_info(job_id: str) -> str:
+    desc = JOB_DESCRIPTIONS.get(job_id, "")
+    return f"name=\"{job_id}\" description=\"{desc}\"" if desc else f"name=\"{job_id}\""
+
+
 def _log_job_event(event) -> None:
-    """Generic listener dispatching by event code for detailed job lifecycle logging."""
     mapping = {
-        EVENT_JOB_ADDED: ("Job added", "added"),
-        EVENT_JOB_REMOVED: ("Job removed", "removed"),
-        EVENT_JOB_SUBMITTED: ("Job submitted", "submitted"),
         EVENT_JOB_ERROR: ("Job errored", "errored"),
         EVENT_JOB_MISSED: ("Job missed", "missed"),
         EVENT_JOB_MAX_INSTANCES: ("Job max instances reached", "max_instances"),
     }
     msg, _ = mapping.get(event.code, ("Job event", str(event.code)))
-    log = logger.warning if event.code in (EVENT_JOB_ERROR, EVENT_JOB_MISSED, EVENT_JOB_MAX_INSTANCES) else logger.info
-    log("%s | job_id=%s scheduled_run_time=%s exception=%s", msg, event.job_id, getattr(event, "scheduled_run_time", None), getattr(event, "exception", None))
+    logger.warning("%s | %s scheduled_run_time=%s exception=%s", msg, _get_job_info(event.job_id), getattr(event, "scheduled_run_time", None), getattr(event, "exception", None))
 
 
 def _register_listeners(scheduler: BackgroundScheduler) -> None:
     scheduler.add_listener(
         _log_job_event,
-        EVENT_JOB_ADDED | EVENT_JOB_REMOVED | EVENT_JOB_SUBMITTED | EVENT_JOB_ERROR | EVENT_JOB_MISSED | EVENT_JOB_MAX_INSTANCES,
+        EVENT_JOB_ERROR | EVENT_JOB_MISSED | EVENT_JOB_MAX_INSTANCES,
     )
 
 

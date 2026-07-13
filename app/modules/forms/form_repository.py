@@ -118,8 +118,7 @@ class FormRepository:
             sent_before=_reminder,
             sent_after=_escalation,
         )
-        logger.debug("Forms due for reminder: count=%s", len(rows))
-        return rows
+        return [f for f in rows if f.reminded_at is None]
 
     def list_due_for_escalation(self) -> list[Form]:
         _escalation = f"INTERVAL '{settings.FORM_ESCALATION_HOURS} hours'"
@@ -130,7 +129,6 @@ class FormRepository:
             FormType.REVIEW.value, FormStatus.SENT.value,
             sent_before=_escalation,
         )
-        logger.debug("Forms due for escalation: count=%s", len(rows))
         return rows
 
     def list_expired(self) -> list[Form]:
@@ -142,5 +140,4 @@ class FormRepository:
             FormType.REVIEW.value, FormStatus.SENT.value,
             sent_before=_expiry,
         )
-        logger.debug("Forms expired: count=%s", len(rows))
         return rows

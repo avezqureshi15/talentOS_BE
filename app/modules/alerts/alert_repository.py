@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from typing import Protocol
+from uuid import UUID
 
 from sqlalchemy.orm import Session
 
@@ -13,12 +14,14 @@ _FORM_VALIDITY_HOURS = settings.FORM_EXPIRY_HOURS
 
 
 class AlertRepositoryProtocol(Protocol):
-    def list_paginated(self, page: int, per_page: int, emp_id: str | None = None, alert_type: str | None = None, is_read: bool | None = None) -> tuple[list[Alert], int]: ...
+    def list_paginated(self, page: int, per_page: int, employee_id: int | None = None, alert_type: str | None = None, is_read: bool | None = None) -> tuple[list[Alert], int]: ...
     def get_by_id(self, alert_id) -> Alert | None: ...
-    def get_unread_by_emp_and_type(self, emp_id: str, alert_type: str) -> Alert | None: ...
-    def create(self, emp_id: str, alert_type: str) -> Alert: ...
+    def get_by_form_and_type(self, form_id: UUID, alert_type: str) -> Alert | None: ...
+    def get_by_emp_and_type(self, employee_id: int, alert_type: str) -> Alert | None: ...
+    def get_unread_by_emp_and_type(self, employee_id: int, alert_type: str) -> Alert | None: ...
+    def create(self, employee_id: int, alert_type: str, form_id: UUID | None = None) -> Alert: ...
     def mark_read(self, alert: Alert) -> Alert: ...
-    def mark_all_read(self, emp_id: str, alert_type: str) -> int: ...
+    def mark_all_read(self, employee_id: int, alert_type: str) -> int: ...
     def list_enriched(self, page: int, per_page: int, alert_type: str | None = None, is_read: bool | None = None) -> tuple[list[dict], int]: ...
 
 
@@ -26,10 +29,10 @@ class AlertRepository:
     def __init__(self, db: Session):
         self.db = db
 
-    def list_paginated(self, page: int, per_page: int, emp_id: str | None = None, alert_type: str | None = None, is_read: bool | None = None) -> tuple[list[Alert], int]:
+    def list_paginated(self, page: int, per_page: int, employee_id: int | None = None, alert_type: str | None = None, is_read: bool | None = None) -> tuple[list[Alert], int]:
         query = self.db.query(Alert)
-        if emp_id:
-            query = query.filter(Alert.emp_id == emp_id)
+        if employee_id:
+            query = query.filter(Alert.employee_id == employee_id)
         if alert_type:
             query = query.filter(Alert.type == alert_type)
         if is_read is not None:
@@ -41,11 +44,17 @@ class AlertRepository:
     def get_by_id(self, alert_id) -> Alert | None:
         return self.db.query(Alert).filter(Alert.id == alert_id).first()
 
-    def get_unread_by_emp_and_type(self, emp_id: str, alert_type: str) -> Alert | None:
-        return self.db.query(Alert).filter(Alert.emp_id == emp_id, Alert.type == alert_type, Alert.is_read.is_(False)).order_by(Alert.created_at.desc()).first()
+    def get_by_form_and_type(self, form_id: UUID, alert_type: str) -> Alert | None:
+        return self.db.query(Alert).filter(Alert.form_id == form_id, Alert.type == alert_type).first()
 
-    def create(self, emp_id: str, alert_type: str) -> Alert:
-        alert = Alert(emp_id=emp_id, type=alert_type, is_read=False)
+    def get_by_emp_and_type(self, employee_id: int, alert_type: str) -> Alert | None:
+        return self.db.query(Alert).filter(Alert.employee_id == employee_id, Alert.type == alert_type).order_by(Alert.created_at.desc()).first()
+
+    def get_unread_by_emp_and_type(self, employee_id: int, alert_type: str) -> Alert | None:
+        return self.db.query(Alert).filter(Alert.employee_id == employee_id, Alert.type == alert_type, Alert.is_read.is_(False)).order_by(Alert.created_at.desc()).first()
+
+    def create(self, employee_id: int, alert_type: str, form_id: UUID | None = None) -> Alert:
+        alert = Alert(employee_id=employee_id, type=alert_type, form_id=form_id, is_read=False)
         self.db.add(alert)
         self.db.flush()
         return alert
@@ -55,8 +64,8 @@ class AlertRepository:
         self.db.flush()
         return alert
 
-    def mark_all_read(self, emp_id: str, alert_type: str) -> int:
-        return self.db.query(Alert).filter(Alert.emp_id == emp_id, Alert.type == alert_type, Alert.is_read.is_(False)).update({Alert.is_read: True})
+    def mark_all_read(self, employee_id: int, alert_type: str) -> int:
+        return self.db.query(Alert).filter(Alert.employee_id == employee_id, Alert.type == alert_type, Alert.is_read.is_(False)).update({Alert.is_read: True})
 
     def list_enriched(self, page: int, per_page: int, alert_type: str | None = None, is_read: bool | None = None) -> tuple[list[dict], int]:
         from app.modules.evaluations.evaluation_model import Candidate
@@ -69,7 +78,7 @@ class AlertRepository:
         cutoff = now - timedelta(hours=_FORM_VALIDITY_HOURS)
         base = settings.FRONTEND_BASE_URL.rstrip("/")
 
-        q = self.db.query(Alert, User).join(User, User.emp_id == Alert.emp_id)
+        q = self.db.query(Alert, User).join(User, User.id == Alert.employee_id)
         if alert_type:
             q = q.filter(Alert.type == alert_type)
         if is_read is not None:

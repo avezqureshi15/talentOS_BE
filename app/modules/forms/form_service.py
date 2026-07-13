@@ -189,7 +189,7 @@ class FormService:
                     self.repository.mark_expired(form)
                     self.db.commit()
                     self.alert_service.mark_emp_alerts_read(
-                        form.employee.emp_id, alert_type=form.type
+                        form.employee.id, alert_type=form.type
                     )
                 except sa_exc.SQLAlchemyError:
                     self.db.rollback()
@@ -215,7 +215,9 @@ class FormService:
         except sa_exc.SQLAlchemyError:
             self.db.rollback()
             raise
-        self.alert_service.mark_emp_alerts_read(emp_id=emp_id, alert_type=AlertType.SLOTS.value)
+        user = self.user_repository.get_by_emp_id(emp_id)
+        if user:
+            self.alert_service.mark_emp_alerts_read(employee_id=user.id, alert_type=AlertType.SLOTS.value)
 
     def submit_form(self, form_id: UUID) -> FormSubmitResponse:
         form = self.repository.get_by_id(form_id)
@@ -231,7 +233,7 @@ class FormService:
             raise
         alert_type = AlertType.REVIEW.value if form.type == FormType.REVIEW.value else AlertType.SLOTS.value
         self.alert_service.mark_emp_alerts_read(
-            emp_id=form.employee.emp_id, alert_type=alert_type,
+            employee_id=form.employee.id, alert_type=alert_type,
         )
         if form.type == FormType.REVIEW.value and form.candidate_id:
             EventService(self.db).create_event(EventCreate(
@@ -252,18 +254,23 @@ class FormService:
     def _get_alert_type(self, form_type: str) -> str:
         return AlertType.REVIEW.value if form_type == FormType.REVIEW.value else AlertType.SLOTS.value
 
-    def _send_form_mail(self, form: Form) -> None:
+    def _send_form_mail(self, form: Form, is_reminder: bool = False) -> None:
         if form.type == FormType.REVIEW.value:
-            send_review_mail_task(form.employee.emp_id, form.id, None, None, None)
+            send_review_mail_task(form.employee.emp_id, form.id, None, None, None, is_reminder=is_reminder)
         else:
-            send_slot_mail_task(form.employee.emp_id, form.id)
+            send_slot_mail_task(form.employee.emp_id, form.id, is_reminder=is_reminder)
 
     def run_reminder_job(self) -> int:
         forms = self.repository.list_due_for_reminder()
+        now = datetime.now(timezone.utc)
         sent = 0
         for form in forms:
-            self._send_form_mail(form)
+            self._send_form_mail(form, is_reminder=True)
+            form.reminded_at = now
+            self.db.flush()
             sent += 1
+        if sent:
+            self.db.commit()
         return sent
 
     def run_escalation_job(self) -> int:
@@ -271,12 +278,10 @@ class FormService:
         created = 0
         for form in forms:
             alert_type = self._get_alert_type(form.type)
-            if self.alert_service.repository.get_unread_by_emp_and_type(
-                form.employee.emp_id, alert_type
+            if self.alert_service.create_alert_if_missing(
+                employee_id=form.employee.id, alert_type=alert_type, form_id=form.id,
             ):
-                continue
-            self.alert_service.create_alert_if_missing(form.employee.emp_id, alert_type)
-            created += 1
+                created += 1
         return created
 
     def run_expiry_reconciliation_job(self) -> int:
@@ -287,7 +292,7 @@ class FormService:
                 self.repository.mark_expired(form)
                 alert_type = self._get_alert_type(form.type)
                 self.alert_service.mark_emp_alerts_read(
-                    form.employee.emp_id, alert_type=alert_type,
+                    form.employee.id, alert_type=alert_type,
                 )
                 updated += 1
             except sa_exc.SQLAlchemyError:

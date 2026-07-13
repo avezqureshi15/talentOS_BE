@@ -6,7 +6,8 @@ from pydantic import BaseModel, ConfigDict
 
 class AlertResponse(BaseModel):
     id: UUID
-    emp_id: str
+    employee_id: int
+    form_id: UUID | None = None
     type: str
     is_read: bool
     created_at: datetime

@@ -29,19 +29,21 @@ class AlertService:
         self.form_repository = FormRepository(db) if db else None
 
     def _enrich_alert(self, alert: Alert) -> AlertResponse:
-        user = self.user_repository.get_by_emp_id(alert.emp_id)
+        user = self.user_repository.get_by_id(alert.employee_id)
         form = None
         if alert.type == AlertType.SLOTS.value:
-            form = self.form_repository.get_active_sent(alert.emp_id)
+            if user:
+                form = self.form_repository.get_active_sent(user.emp_id)
 
         return AlertResponse(
             id=alert.id,
-            emp_id=alert.emp_id,
+            employee_id=alert.employee_id,
+            form_id=alert.form_id,
             type=alert.type,
             is_read=alert.is_read,
             created_at=alert.created_at,
             updated_at=alert.updated_at,
-            name=user.name if user and user.name else alert.emp_id,
+            name=user.name if user and user.name else str(alert.employee_id),
             email=user.email if user and user.email else "",
             phone_number=user.phone_number if user and user.phone_number else "",
             form_link=build_slot_link(form.id) if form else None,
@@ -58,14 +60,14 @@ class AlertService:
         self,
         page: int,
         per_page: int,
-        emp_id: str | None = None,
+        employee_id: int | None = None,
         alert_type: str | None = None,
         is_read: bool | None = None,
     ) -> PaginatedAlertResponse:
         alerts, total = self.repository.list_paginated(
             page=page,
             per_page=per_page,
-            emp_id=emp_id,
+            employee_id=employee_id,
             alert_type=alert_type,
             is_read=is_read,
         )
@@ -124,19 +126,20 @@ class AlertService:
             raise
         return AlertResponse.model_validate(updated)
 
-    def create_alert_if_missing(self, emp_id: str, alert_type: str = AlertType.SLOTS.value) -> None:
-        if self.repository.get_unread_by_emp_and_type(emp_id, alert_type):
-            return
+    def create_alert_if_missing(self, employee_id: int, alert_type: str = AlertType.SLOTS.value, form_id: UUID | None = None) -> bool:
+        if form_id and self.repository.get_by_form_and_type(form_id, alert_type):
+            return False
         try:
-            self.repository.create(emp_id=emp_id, alert_type=alert_type)
+            self.repository.create(employee_id=employee_id, alert_type=alert_type, form_id=form_id)
             self.db.commit()
+            return True
         except sa_exc.SQLAlchemyError:
             self.db.rollback()
             raise
 
-    def mark_emp_alerts_read(self, emp_id: str, alert_type: str = AlertType.SLOTS.value) -> None:
+    def mark_emp_alerts_read(self, employee_id: int, alert_type: str = AlertType.SLOTS.value) -> None:
         try:
-            self.repository.mark_all_read(emp_id, alert_type)
+            self.repository.mark_all_read(employee_id, alert_type)
             self.db.commit()
         except sa_exc.SQLAlchemyError:
             self.db.rollback()
