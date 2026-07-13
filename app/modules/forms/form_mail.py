@@ -8,7 +8,6 @@ from app.core.config import settings
 from app.core.logger import get_logger
 from app.db.session import SessionLocal
 from app.modules.forms.form_model import Form
-from app.modules.forms.form_repository import FORM_VALIDITY_HOURS
 from app.modules.users.user_repository import UserRepository
 
 logger = get_logger(__name__)
@@ -145,4 +144,4 @@ def send_review_mail_task(
 
 
 def is_form_expired(form: Form) -> bool:
-    return datetime.now(timezone.utc) > (form.last_sent_at + timedelta(hours=FORM_VALIDITY_HOURS))
+    return datetime.now(timezone.utc) > (form.last_sent_at + timedelta(hours=settings.FORM_EXPIRY_HOURS))
