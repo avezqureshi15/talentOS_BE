@@ -1,3 +1,4 @@
+from app.core.config import settings
 from app.common.services.email_templates import block_text, render_talentos_email
 
 _SUBJECT = "Submit your interview availability"
@@ -9,7 +10,7 @@ _BODY_INTRO = (
     "Please share your interview availability so we can schedule your next round. "
     "Use the button below to open the slot submission form."
 )
-_EXPIRY_NOTE = "This link expires in 24 hours."
+_EXPIRY_NOTE = f"This link expires in {settings.FORM_EXPIRY_HOURS} hours."
 
 
 def render_slot_form_email(*, recipient_name: str, form_url: str) -> tuple[str, str, str]:

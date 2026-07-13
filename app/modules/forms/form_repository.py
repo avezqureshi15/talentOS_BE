@@ -4,13 +4,12 @@ from uuid import UUID
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.logger import get_logger
 from app.modules.forms.form_model import Form, FormStatus, FormType
 from app.modules.users.user_model import User
 
 logger = get_logger(__name__)
-
-FORM_VALIDITY_HOURS = 24
 
 
 class FormRepository:
@@ -30,7 +29,7 @@ class FormRepository:
         )
 
     def get_active_sent(self, emp_id: str, form_type: str = FormType.SLOTS.value) -> Form | None:
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=FORM_VALIDITY_HOURS)
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=settings.FORM_EXPIRY_HOURS)
         return (
             self.db.query(Form)
             .join(User, User.id == Form.employee_id)
@@ -45,7 +44,7 @@ class FormRepository:
         )
 
     def get_active_sent_by_emp_and_round(self, emp_id: str, round_id: UUID) -> Form | None:
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=FORM_VALIDITY_HOURS)
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=settings.FORM_EXPIRY_HOURS)
         return (
             self.db.query(Form)
             .join(User, User.id == Form.employee_id)
@@ -108,36 +107,40 @@ class FormRepository:
         return query.all()
 
     def list_due_for_reminder(self) -> list[Form]:
+        _reminder = f"INTERVAL '{settings.FORM_REMINDER_HOURS} hours'"
+        _escalation = f"INTERVAL '{settings.FORM_ESCALATION_HOURS} hours'"
         rows = self._list_by_type_and_status(
             FormType.SLOTS.value, FormStatus.SENT.value,
-            sent_before="INTERVAL '2 hours'",
-            sent_after="INTERVAL '3 hours'",
+            sent_before=_reminder,
+            sent_after=_escalation,
         ) + self._list_by_type_and_status(
             FormType.REVIEW.value, FormStatus.SENT.value,
-            sent_before="INTERVAL '2 hours'",
-            sent_after="INTERVAL '3 hours'",
+            sent_before=_reminder,
+            sent_after=_escalation,
         )
         logger.debug("Forms due for reminder: count=%s", len(rows))
         return rows
 
     def list_due_for_escalation(self) -> list[Form]:
+        _escalation = f"INTERVAL '{settings.FORM_ESCALATION_HOURS} hours'"
         rows = self._list_by_type_and_status(
             FormType.SLOTS.value, FormStatus.SENT.value,
-            sent_before="INTERVAL '3 hours'",
+            sent_before=_escalation,
         ) + self._list_by_type_and_status(
             FormType.REVIEW.value, FormStatus.SENT.value,
-            sent_before="INTERVAL '3 hours'",
+            sent_before=_escalation,
         )
         logger.debug("Forms due for escalation: count=%s", len(rows))
         return rows
 
     def list_expired(self) -> list[Form]:
+        _expiry = f"INTERVAL '{settings.FORM_EXPIRY_HOURS} hours'"
         rows = self._list_by_type_and_status(
             FormType.SLOTS.value, FormStatus.SENT.value,
-            sent_before="INTERVAL '24 hours'",
+            sent_before=_expiry,
         ) + self._list_by_type_and_status(
             FormType.REVIEW.value, FormStatus.SENT.value,
-            sent_before="INTERVAL '24 hours'",
+            sent_before=_expiry,
         )
         logger.debug("Forms expired: count=%s", len(rows))
         return rows

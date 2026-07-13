@@ -9,7 +9,7 @@ from app.modules.alerts.alert_model import Alert
 
 logger = get_logger(__name__)
 
-_FORM_VALIDITY_HOURS = 24
+_FORM_VALIDITY_HOURS = settings.FORM_EXPIRY_HOURS
 
 
 class AlertRepositoryProtocol(Protocol):

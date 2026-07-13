@@ -61,6 +61,11 @@ class Settings(BaseSettings):
     SMTP_USE_TLS: bool = True
     FRONTEND_BASE_URL: str = "http://localhost:5173"
 
+    # Form timing (reminders, escalations, expiry)
+    FORM_REMINDER_HOURS: int = 2
+    FORM_ESCALATION_HOURS: int = 3
+    FORM_EXPIRY_HOURS: int = 24
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "case_sensitive": True}
 
 

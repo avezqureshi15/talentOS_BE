@@ -100,7 +100,9 @@ class ReviewService:
                     candidate_id=round_obj.candidate_id,
                     event_metadata={"round_id": str(round_id), "verdict": data.verdict},
                 ))
-                self.db.query(Candidate).filter(Candidate.id == round_obj.candidate_id).update({"status": EvaluationStatus.UNDER_EVALUATION.value})
+                self.db.query(Candidate).filter(Candidate.id == round_obj.candidate_id).update(
+                    {"status": EvaluationStatus.UNDER_EVALUATION.value}
+                )
                 self.db.flush()
                 EventService(self.db).create_event(EventCreate(
                     entity_type="CANDIDATE",
@@ -109,6 +111,10 @@ class ReviewService:
                     state_code="UNDER_EVALUATION",
                     actor_type="INTERVIEWER",
                     candidate_id=round_obj.candidate_id,
-                    event_metadata={"round_id": str(round_id), "verdict": data.verdict, "triggered_by": "interviewer_review"},
+                    event_metadata={
+                        "round_id": str(round_id),
+                        "verdict": data.verdict,
+                        "triggered_by": "interviewer_review",
+                    },
                 ))
         return ReviewResponse.model_validate(review)

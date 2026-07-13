@@ -17,7 +17,7 @@ def complete_interview(interview_id: str) -> None:
     try:
         interview = db.query(Interview).filter(
             Interview.id == uuid.UUID(interview_id),
-            Interview.status == InterviewStatus.SCHEDULED.value,
+            Interview.status.in_([InterviewStatus.SCHEDULED.value, InterviewStatus.RESCHEDULED.value]),
         ).first()
         if not interview:
             logger.info("Interview not found or already completed: id=%s", interview_id)
