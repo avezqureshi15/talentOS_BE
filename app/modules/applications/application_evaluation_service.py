@@ -9,6 +9,8 @@ from app.modules.applications.application_repository import ApplicationRepositor
 from app.modules.evaluations.evaluation_schema import WebhookRecord
 from app.modules.reviews.review_schema import ReviewCreate
 from app.modules.reviews.review_service import ReviewService
+from app.modules.events.event_schema import EventCreate
+from app.modules.events.event_service import EventService
 from app.modules.rounds.round_schema import RoundCreate
 from app.modules.rounds.round_service import RoundService
 
@@ -59,15 +61,55 @@ class ApplicationEvaluationService:
                 how_did_you_hear=app.get("how_did_you_hear"), linkedin_url=app.get("linkedin_url"),
                 willing_to_relocate=app.get("willing_to_relocate", False),
             )
+            EventService(self.db).create_event(EventCreate(
+                entity_type="CANDIDATE",
+                entity_id=str(candidate.id),
+                event_name="Candidate Applied for Job",
+                state_code="CANDIDATE_APPLIED",
+                actor_type="CANDIDATE",
+                actor_id=str(candidate.id),
+                candidate_id=candidate.id,
+                action_url=candidate.resume_url,
+                action_label="Download Resume",
+            ))
         resume_url = app.get("resume_url") or candidate.resume_url
         if not resume_url:
+            EventService(self.db).create_event(EventCreate(
+                entity_type="CANDIDATE",
+                entity_id=str(candidate.id),
+                event_name="Resume Evaluation Failed",
+                state_code="EVALUATION_FAILED",
+                actor_type="SYSTEM",
+                candidate_id=candidate.id,
+                remark="No resume_url provided",
+                metadata={"error_reason": "No resume_url provided"},
+            ))
             candidate = self.repo.mark_result(candidate, EvaluationStatus.INVALID, error_reason="No resume_url provided")
             return self.repo.to_candidate_dict(candidate)
         resume_text = self.resume.extract_text(resume_url)
         if len(resume_text.strip()) < settings.EVALUATION_MIN_RESUME_CHARS:
+            EventService(self.db).create_event(EventCreate(
+                entity_type="CANDIDATE",
+                entity_id=str(candidate.id),
+                event_name="Resume Evaluation Failed",
+                state_code="EVALUATION_FAILED",
+                actor_type="SYSTEM",
+                candidate_id=candidate.id,
+                remark="Resume is not text-extractable (image/scanned PDF)",
+                metadata={"error_reason": "Resume is not text-extractable"},
+            ))
             candidate = self.repo.mark_result(candidate, EvaluationStatus.INVALID, error_reason="Resume is not text-extractable (image/scanned PDF)")
             return self.repo.to_candidate_dict(candidate)
         candidate = self.repo.mark_processing(candidate)
+        EventService(self.db).create_event(EventCreate(
+            entity_type="CANDIDATE",
+            entity_id=str(candidate.id),
+            event_name="Resume Evaluation Started",
+            state_code="EVALUATION_STARTED",
+            actor_type="SYSTEM",
+            candidate_id=candidate.id,
+            metadata={"resume_url": resume_url},
+        ))
         candidate_meta_parts = []
         for label, val in [
             ("Years of Experience", candidate.years_of_experience),
@@ -86,6 +128,16 @@ class ApplicationEvaluationService:
             ai_result = self._mock_evaluation_fallback(candidate.candidate_name)
         except Exception as exc:
             logger.exception("Unexpected error evaluating application_id=%s", application_id)
+            EventService(self.db).create_event(EventCreate(
+                entity_type="CANDIDATE",
+                entity_id=str(candidate.id),
+                event_name="Resume Evaluation Failed",
+                state_code="EVALUATION_FAILED",
+                actor_type="SYSTEM",
+                candidate_id=candidate.id,
+                remark=f"Unexpected error: {exc}",
+                metadata={"error_reason": f"Unexpected error: {exc}"},
+            ))
             candidate = self.repo.mark_result(candidate, EvaluationStatus.FAILED, error_reason=f"Unexpected error: {exc}")
             return self.repo.to_candidate_dict(candidate)
         threshold = settings.ATS_THRESHOLD_DEFAULT
@@ -95,6 +147,15 @@ class ApplicationEvaluationService:
             fit_score=ai_result.overall_score_percentage,
             summary_md=ai_result.resume_summary, ats_threshold_used=threshold,
         )
+        EventService(self.db).create_event(EventCreate(
+            entity_type="CANDIDATE",
+            entity_id=str(candidate.id),
+            event_name="Resume Evaluation Completed",
+            state_code="EVALUATION_COMPLETED",
+            actor_type="AI",
+            candidate_id=candidate.id,
+            metadata={"fit_score": ai_result.overall_score_percentage, "threshold_used": threshold},
+        ))
         self._create_initial_review(ai_result, candidate, job_id, verdict)
         return self.repo.to_candidate_dict(candidate)
 
@@ -145,5 +206,14 @@ class ApplicationEvaluationService:
             if round_obj:
                 round_obj.round_verdict = "selected" if verdict == "shortlisted" else "rejected"
                 self.db.flush()
+            EventService(self.db).create_event(EventCreate(
+                entity_type="CANDIDATE",
+                entity_id=str(candidate.id),
+                event_name="Candidate Shortlisted by AI" if verdict == "shortlisted" else "Rejected by AI",
+                state_code="AI_SHORTLISTED" if verdict == "shortlisted" else "AI_REJECTED",
+                actor_type="AI",
+                candidate_id=candidate.id,
+                metadata={"fit_score": ai_result.overall_score_percentage, "round_id": str(round_resp.id), "verdict": verdict},
+            ))
         except Exception as exc:
             logger.error("Round/review creation failed for candidate_id=%s: %s", candidate.id, exc)

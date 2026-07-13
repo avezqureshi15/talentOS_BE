@@ -10,6 +10,7 @@ from .hiring_request_exception import (
     HiringRequestNotFoundException,
     HiringRequestNotUpdatedException,
 )
+from .event_exception import EventNotFoundException
 from .interview_exception import InterviewNotFoundException
 from .round_exception import RoundNotFoundException
 from .review_exception import ReviewNotFoundException
@@ -20,6 +21,7 @@ __all__ = [
     "JobNotFoundException",
     "ApplicationNotFoundException",
     "DesignationNotFoundException",
+    "EventNotFoundException",
     "UserNotFoundException",
     "HiringRequestNotFoundException",
     "HiringRequestNotCreatedException",

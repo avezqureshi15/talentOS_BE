@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 from app.core.logger import get_logger
 from app.modules.reviews.review_model import Review
 from app.modules.reviews.review_repository import ReviewRepository, ReviewRepositoryProtocol
+from app.modules.events.event_schema import EventCreate
+from app.modules.events.event_service import EventService
 from app.modules.reviews.review_schema import ReviewCreate, ReviewResponse, ReviewUpdateByRound
 
 logger = get_logger(__name__)
@@ -49,6 +51,16 @@ class ReviewService:
         if round_obj and round_obj.round_verdict != mapped:
             round_obj.round_verdict = mapped
             self.db.flush()
+            if round_obj.candidate_id:
+                EventService(self.db).create_event(EventCreate(
+                    entity_type="CANDIDATE",
+                    entity_id=str(round_obj.candidate_id),
+                    event_name="Round Verdict Updated",
+                    state_code="ROUND_VERDICT_UPDATED",
+                    actor_type="SYSTEM",
+                    candidate_id=round_obj.candidate_id,
+                    metadata={"round_id": str(round_id), "round_verdict": mapped, "triggered_by": None},
+                ))
 
     def get_reviews_by_round(self, round_id: str) -> list[ReviewResponse]:
         reviews = self.repository.get_by_round(round_id)
@@ -73,4 +85,17 @@ class ReviewService:
         self.db.commit()
         self.db.refresh(review)
         self._update_round_verdict(round_id)
+        if data.entity_type == "interviewer":
+            from app.modules.rounds.round_model import Round as _Round
+            round_obj = self.db.query(_Round).filter(_Round.id == round_id).first()
+            if round_obj and round_obj.candidate_id:
+                EventService(self.db).create_event(EventCreate(
+                    entity_type="CANDIDATE",
+                    entity_id=str(round_obj.candidate_id),
+                    event_name="Interviewer Review Submitted",
+                    state_code="INTERVIEWER_REVIEWED",
+                    actor_type="INTERVIEWER",
+                    candidate_id=round_obj.candidate_id,
+                    metadata={"round_id": str(round_id), "verdict": data.verdict},
+                ))
         return ReviewResponse.model_validate(review)

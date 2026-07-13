@@ -16,6 +16,7 @@ from app.modules.auth.auth_router import router as auth_router
 from app.modules.chat.chat_router import router as chat_router
 from app.modules.designation import router as designation_router
 from app.modules.email.email_router import router as email_router
+from app.modules.events import router as events_router
 from app.modules.employees import router as employees_router
 from app.modules.evaluations import candidates_router as evaluation_candidates_router
 from app.modules.evaluations import router as evaluations_router
@@ -67,6 +68,7 @@ app.include_router(jobs_router)
 app.include_router(applications_router)
 app.include_router(chat_router)
 app.include_router(designation_router)
+app.include_router(events_router)
 app.include_router(hiring_requests_router)
 app.include_router(interviews_router)
 app.include_router(reviews_router)

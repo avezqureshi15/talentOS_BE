@@ -10,6 +10,8 @@ from app.common.exceptions.round_exception import RoundNotFoundException
 from app.common.exceptions.slot_exception import SlotNotFoundException
 from app.core.constants import EvaluationStatus
 from app.core.logger import get_logger
+from app.modules.events.event_schema import EventCreate
+from app.modules.events.event_service import EventService
 from app.modules.interviews.interview_helpers import get_calendar_service
 from app.modules.interviews.interview_repository import InterviewRepository, InterviewRepositoryProtocol
 from app.modules.interviews.interview_schema import CancelInterviewResponse, ScheduleInterviewResponse
@@ -58,6 +60,21 @@ class InterviewScheduleService:
         ))
         if round_obj.candidate_id:
             self.repository.update_candidate_status(round_obj.candidate_id, EvaluationStatus.INTERVIEW_SCHEDULED.value)
+            EventService(self.db).create_event(EventCreate(
+                entity_type="CANDIDATE",
+                entity_id=str(round_obj.candidate_id),
+                event_name="Interview Scheduled",
+                state_code="INTERVIEW_SCHEDULED",
+                actor_type="HR",
+                candidate_id=round_obj.candidate_id,
+                action_url=result.meet_link,
+                action_label="Join Meeting",
+                metadata={
+                    "round_id": str(round_id), "round_name": round_obj.name,
+                    "slot_time": slot.start_at.isoformat() if hasattr(slot, "start_at") else None,
+                    "interviewers": attendees,
+                },
+            ))
         self.repository.update_slot_status(slot_id, SlotStatus.BOOKED.value)
         if commit:
             self.db.commit()
@@ -95,6 +112,18 @@ class InterviewScheduleService:
             self.repository.update_candidate_status(round_obj.candidate_id, EvaluationStatus.INTERVIEW_RESCHEDULED.value)
         self.db.commit()
         self.db.refresh(interview)
+        from app.modules.rounds.round_model import Round as _Round
+        round_obj = self.db.query(_Round).filter(_Round.id == interview.round_id).first()
+        if round_obj and round_obj.candidate_id:
+            EventService(self.db).create_event(EventCreate(
+                entity_type="CANDIDATE",
+                entity_id=str(round_obj.candidate_id),
+                event_name="Interview Rescheduled",
+                state_code="INTERVIEW_RESCHEDULED",
+                actor_type="HR",
+                candidate_id=round_obj.candidate_id,
+                metadata={"round_id": str(interview.round_id), "old_slot": str(old_slot_id), "new_slot": str(new_slot_id)},
+            ))
         logger.info("Interview rescheduled: id=%s", interview.id)
         return ScheduleInterviewResponse(
             id=str(interview.id), round_id=str(interview.round_id),
@@ -117,5 +146,17 @@ class InterviewScheduleService:
         self.repository.update_status(interview_id, "CANCELLED")
         self.db.commit()
         self.db.refresh(interview)
+        from app.modules.rounds.round_model import Round as _Round
+        round_obj = self.db.query(_Round).filter(_Round.id == interview.round_id).first()
+        if round_obj and round_obj.candidate_id:
+            EventService(self.db).create_event(EventCreate(
+                entity_type="CANDIDATE",
+                entity_id=str(round_obj.candidate_id),
+                event_name="Interview Cancelled",
+                state_code="INTERVIEW_CANCELLED",
+                actor_type="HR",
+                candidate_id=round_obj.candidate_id,
+                metadata={"round_id": str(interview.round_id)},
+            ))
         logger.info("Interview cancelled: id=%s", interview.id)
         return CancelInterviewResponse(id=str(interview.id), status=interview.status)
