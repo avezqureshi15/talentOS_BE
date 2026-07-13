@@ -2,8 +2,8 @@ from apscheduler.events import EVENT_JOB_ADDED, EVENT_JOB_REMOVED, EVENT_JOB_ERR
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from app.core.config import settings
 from app.core.logger import get_logger
+from app.db.session import engine
 
 _scheduler: BackgroundScheduler | None = None
 logger = get_logger(__name__)
@@ -40,7 +40,7 @@ def get_scheduler() -> BackgroundScheduler:
 
 def init_scheduler() -> BackgroundScheduler:
     global _scheduler
-    jobstore = SQLAlchemyJobStore(url=settings.DATABASE_URL)
+    jobstore = SQLAlchemyJobStore(engine=engine)
     _scheduler = BackgroundScheduler(
         jobstores={"default": jobstore},
         timezone="UTC",

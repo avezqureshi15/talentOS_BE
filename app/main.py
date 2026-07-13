@@ -7,6 +7,7 @@ from app.common.handlers import register_exception_handlers
 from app.core.config import settings
 from app.core.kafka import ensure_topics
 from app.core.logger import get_logger, setup_logging
+from app.db.session import engine
 from app.cron.hourly_jobs import setup_form_jobs
 from app.middleware import RequestLoggingMiddleware
 from app.scheduler import init_scheduler, shutdown_scheduler
@@ -42,6 +43,7 @@ async def lifespan(app: FastAPI):
     setup_form_jobs(scheduler)
     yield
     shutdown_scheduler()
+    engine.dispose()
     logger.info("Shutting down %s", settings.APP_NAME)
 
 
