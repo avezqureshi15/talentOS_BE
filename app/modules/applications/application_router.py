@@ -43,6 +43,7 @@ def get_all_applications(
     offset: int = Query(default=0, ge=0, description="Number of candidates to skip"),
     final_verdict: str | None = Query(default=None, description='Set to "false" to exclude finalized candidates'),
     round_verdict: str | None = Query(default=None, description="Filter by round verdict (selected, rejected)"),
+    ai: bool = Query(default=False, description="If true, omit cover_letter from response"),
     db: Session = Depends(get_db),
 ):
     service = ApplicationService(db)
@@ -58,16 +59,18 @@ def get_all_applications(
         limit=limit,
         offset=offset,
         exclude_finalized=final_verdict == "false",
+        ai=ai,
     )
 
 
 @router.get("/{application_id}", response_model=EvaluatedCandidate)
 def get_application_by_id(
     application_id: str,
+    ai: bool = Query(default=False, description="If true, omit cover_letter and include events"),
     db: Session = Depends(get_db),
 ):
     service = ApplicationService(db)
-    result = service.get_application_by_id(application_id)
+    result = service.get_application_by_id(application_id, ai=ai)
     if not result:
         raise HTTPException(status_code=404, detail="Application not found")
     return result

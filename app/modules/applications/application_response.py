@@ -24,7 +24,7 @@ def get_ai_review(db: Session, candidate: Candidate, review_map: dict[str, Revie
     return None
 
 
-def build_candidate_response(candidate: Candidate, ai_review: dict | None = None) -> dict:
+def build_candidate_response(candidate: Candidate, ai_review: dict | None = None, hide_cover_letter: bool = False, events: list[dict] | None = None) -> dict:
     return {
         "id": candidate.external_application_id,
         "candidate_id": candidate.id,
@@ -32,7 +32,7 @@ def build_candidate_response(candidate: Candidate, ai_review: dict | None = None
         "name": candidate.candidate_name,
         "email": candidate.candidate_email,
         "phone": candidate.candidate_phone,
-        "cover_letter": candidate.cover_letter,
+        "cover_letter": None if hide_cover_letter else candidate.cover_letter,
         "resume_url": candidate.resume_url,
         "current_ctc": candidate.current_ctc,
         "expected_ctc": candidate.expected_ctc,
@@ -51,4 +51,5 @@ def build_candidate_response(candidate: Candidate, ai_review: dict | None = None
         "final_verdict": candidate.final_verdict,
         "reviews": (ai_review or {}).get("reviews"),
         "review_verdict": (ai_review or {}).get("verdict"),
+        "events": events,
     }

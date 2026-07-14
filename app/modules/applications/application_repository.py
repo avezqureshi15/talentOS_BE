@@ -11,6 +11,7 @@ from app.modules.applications.application_repository_queries import (
 )
 from app.modules.applications.application_response import build_candidate_response, get_ai_review
 from app.modules.evaluations.evaluation_model import Candidate
+from app.modules.events.event_repository import EventRepository
 from app.modules.hiring_requests.hiring_request_model import HiringRequest
 from app.modules.reviews.review_model import Review
 
@@ -68,9 +69,23 @@ class ApplicationRepository:
         candidate = self.get_by_candidate_id(candidate_id)
         return candidate.final_verdict if candidate else None
 
-    def to_candidate_dict(self, candidate: Candidate) -> dict:
+    def build_events_map(self, candidates: list[Candidate], ai: bool = False) -> dict[int, list[dict]]:
+        if not ai or not candidates:
+            return {}
+        event_repo = EventRepository(self.db)
+        raw = event_repo.get_by_candidate_ids([c.id for c in candidates])
+        result: dict[int, list[dict]] = {}
+        for cid, events in raw.items():
+            result[cid] = [
+                {"event_name": e.event_name, "created_at": e.created_at.isoformat()}
+                for e in events
+            ]
+        return result
+
+    def to_candidate_dict(self, candidate: Candidate, ai: bool = False, events_map: dict[int, list[dict]] | None = None) -> dict:
         ai_review = get_ai_review(self.db, candidate, self._review_map)
-        return build_candidate_response(candidate, ai_review)
+        events = events_map.get(candidate.id) if events_map else None
+        return build_candidate_response(candidate, ai_review, hide_cover_letter=ai, events=events)
 
     def create_queued_candidate(self, application_id: str, job_id: str, **kwargs) -> Candidate:
         return _mut.create_queued_candidate(self.db, application_id, job_id, **kwargs)

@@ -16,6 +16,7 @@ class EventRepositoryProtocol(Protocol):
     def get_by_entity(self, entity_type: str, entity_id: str) -> list[Event]: ...
     def get_by_job(self, job_id: uuid.UUID) -> list[Event]: ...
     def get_by_candidate_id(self, candidate_id: int) -> list[Event]: ...
+    def get_by_candidate_ids(self, candidate_ids: list[int]) -> dict[int, list[Event]]: ...
 
 
 class EventRepository:
@@ -60,3 +61,18 @@ class EventRepository:
             .order_by(Event.created_at.asc())
             .all()
         )
+
+    def get_by_candidate_ids(self, candidate_ids: list[int]) -> dict[int, list[Event]]:
+        if not candidate_ids:
+            return {}
+        events = (
+            self.db.query(Event)
+            .filter(Event.candidate_id.in_(candidate_ids))
+            .order_by(Event.created_at.asc())
+            .all()
+        )
+        result: dict[int, list[Event]] = {}
+        for event in events:
+            if event.candidate_id is not None:
+                result.setdefault(event.candidate_id, []).append(event)
+        return result

@@ -11,6 +11,7 @@ from app.modules.applications.application_repository import ApplicationRepositor
 from app.modules.applications.application_schema import ApplicationCreate
 from app.modules.applications.application_state_service import ApplicationStateService
 from app.modules.evaluations.evaluation_schema import EvaluationResponse, WebhookRecord
+from app.modules.events.event_repository import EventRepository
 
 logger = get_logger(__name__)
 
@@ -22,14 +23,22 @@ class ApplicationService:
         self.eval_svc = ApplicationEvaluationService(db, self.repo) if db else None
         self.state_svc = ApplicationStateService(db, self.repo) if db else None
         self.supabase = SupabaseClient()
-    def get_application_by_id(self, application_id: str) -> dict | None:
+    def get_application_by_id(self, application_id: str, ai: bool = False) -> dict | None:
         if not self.repo:
             logger.warning("No DB session")
             return None
         candidate = self.repo.get_candidate_by_application_id(application_id)
         if not candidate:
             return None
-        return self.repo.to_candidate_dict(candidate)
+        events = None
+        if ai and candidate.id:
+            event_repo = EventRepository(self.db)
+            raw_events = event_repo.get_by_candidate_id(candidate.id)
+            events = [
+                {"event_name": e.event_name, "created_at": e.created_at.isoformat()}
+                for e in raw_events
+            ]
+        return self.repo.to_candidate_dict(candidate, ai=ai, events_map={candidate.id: events} if events else None)
     def get_applications_paginated(
         self,
         job_id: str | None = None,
@@ -43,6 +52,7 @@ class ApplicationService:
         limit: int = 20,
         offset: int = 0,
         exclude_finalized: bool = False,
+        ai: bool = False,
     ) -> dict:
         if not self.repo:
             logger.warning("No DB session")
@@ -80,8 +90,9 @@ class ApplicationService:
             offset=offset,
             exclude_finalized=exclude_finalized,
         )
+        events_map = self.repo.build_events_map(items, ai=ai) if ai else {}
         return {
-            "data": [self.repo.to_candidate_dict(e) for e in items],
+            "data": [self.repo.to_candidate_dict(e, ai=ai, events_map=events_map) for e in items],
             "total": total,
             "limit": limit,
             "offset": offset,

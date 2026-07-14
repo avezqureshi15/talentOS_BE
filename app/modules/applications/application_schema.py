@@ -37,6 +37,11 @@ class ApplicationResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class EventInfo(BaseModel):
+    event_name: str
+    created_at: str
+
+
 class EvaluatedCandidate(BaseModel):
     id: str
     candidate_id: int
@@ -61,6 +66,7 @@ class EvaluatedCandidate(BaseModel):
     scheduled: bool = False
     current_round_id: str | None = None
     final_verdict: str | None = None
+    events: list[EventInfo] | None = None
 
 
 class EvaluatedCandidatesResponse(BaseModel):
