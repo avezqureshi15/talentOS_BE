@@ -32,7 +32,19 @@ class FormValidateResponse(BaseModel):
 
 
 class PendingMailTask(BaseModel):
-    emp_id: str
+    user_id: int
+    form_id: UUID
+
+
+class NotifyFormRequest(BaseModel):
+    user_id: int
+    type: Literal["SLOTS", "REVIEW"] = "SLOTS"
+    reminder: bool = True
+
+
+class NotifyFormResponse(BaseModel):
+    message: str
+    detail: str
     form_id: UUID
 
 

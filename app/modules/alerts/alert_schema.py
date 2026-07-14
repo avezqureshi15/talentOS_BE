@@ -47,6 +47,8 @@ class AlertListItem(BaseModel):
     id: str
     type: str
     employee: EmployeeBrief
+    employee_id: int
+    round_id: str | None = None
     slot_link: str | None = None
     review_link: str | None = None
     interview: InterviewBrief | None = None

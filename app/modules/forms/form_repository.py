@@ -43,6 +43,43 @@ class FormRepository:
             .first()
         )
 
+    def get_latest_by_user(self, user_id: int, form_type: str = FormType.SLOTS.value) -> Form | None:
+        return (
+            self.db.query(Form)
+            .filter(Form.employee_id == user_id, Form.type == form_type)
+            .order_by(Form.last_sent_at.desc())
+            .first()
+        )
+
+    def get_active_sent_by_user(self, user_id: int, form_type: str = FormType.SLOTS.value) -> Form | None:
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=settings.FORM_EXPIRY_HOURS)
+        return (
+            self.db.query(Form)
+            .filter(
+                Form.employee_id == user_id,
+                Form.type == form_type,
+                Form.status == FormStatus.SENT.value,
+                Form.last_sent_at > cutoff,
+            )
+            .order_by(Form.last_sent_at.desc())
+            .first()
+        )
+
+    def get_active_sent_by_user_and_round(self, user_id: int, round_id: UUID) -> Form | None:
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=settings.FORM_EXPIRY_HOURS)
+        return (
+            self.db.query(Form)
+            .filter(
+                Form.employee_id == user_id,
+                Form.type == FormType.REVIEW.value,
+                Form.round_id == round_id,
+                Form.status == FormStatus.SENT.value,
+                Form.last_sent_at > cutoff,
+            )
+            .order_by(Form.last_sent_at.desc())
+            .first()
+        )
+
     def get_active_sent_by_emp_and_round(self, emp_id: str, round_id: UUID) -> Form | None:
         cutoff = datetime.now(timezone.utc) - timedelta(hours=settings.FORM_EXPIRY_HOURS)
         return (

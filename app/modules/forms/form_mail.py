@@ -58,26 +58,26 @@ def build_ask_summary_message(success_emp_ids: list[str]) -> str:
     return f"Slot selection mails are being sent to {joined}."
 
 
-def send_slot_mail_task(emp_id: str, form_id: UUID, is_reminder: bool = False) -> None:
+def send_slot_mail_task(user_id: int, form_id: UUID, is_reminder: bool = False) -> None:
     if not is_smtp_configured():
-        logger.warning("Background mail skipped for emp_id=%s: SMTP not configured", emp_id)
+        logger.warning("Background mail skipped for user_id=%s: SMTP not configured", user_id)
         return
 
     db = SessionLocal()
     try:
         user_repo = UserRepository(db)
-        user = user_repo.get_by_emp_id(emp_id)
+        user = user_repo.get_by_id(user_id)
         if not user:
-            logger.warning("Background mail skipped: emp_id=%s not found", emp_id)
+            logger.warning("Background mail skipped: user_id=%s not found", user_id)
             return
         if not is_valid_email(user.email):
             logger.warning(
-                "Background mail skipped for emp_id=%s: invalid or missing email",
-                emp_id,
+                "Background mail skipped for user_id=%s: invalid or missing email",
+                user_id,
             )
             return
 
-        display_name = user.name or emp_id
+        display_name = user.name or str(user_id)
         link = build_slot_link(form_id)
         email_service = EmailService(
             smtp_host=settings.SMTP_HOST,
@@ -93,13 +93,13 @@ def send_slot_mail_task(emp_id: str, form_id: UUID, is_reminder: bool = False) -
         )
         email_service.send(to_email=user.email.strip(), subject=subject, body=body, html=html)
     except Exception as exc:
-        logger.warning("Background mail failed for emp_id=%s: %s", emp_id, exc)
+        logger.warning("Background mail failed for user_id=%s: %s", user_id, exc)
     finally:
         db.close()
 
 
 def send_review_mail_task(
-    emp_id: str,
+    user_id: int,
     form_id: UUID,
     candidate_name: str | None = None,
     round_name: str | None = None,
@@ -107,24 +107,24 @@ def send_review_mail_task(
     is_reminder: bool = False,
 ) -> None:
     if not is_smtp_configured():
-        logger.warning("Background review mail skipped for emp_id=%s: SMTP not configured", emp_id)
+        logger.warning("Background review mail skipped for user_id=%s: SMTP not configured", user_id)
         return
 
     db = SessionLocal()
     try:
         user_repo = UserRepository(db)
-        user = user_repo.get_by_emp_id(emp_id)
+        user = user_repo.get_by_id(user_id)
         if not user:
-            logger.warning("Background review mail skipped: emp_id=%s not found", emp_id)
+            logger.warning("Background review mail skipped: user_id=%s not found", user_id)
             return
         if not is_valid_email(user.email):
             logger.warning(
-                "Background review mail skipped for emp_id=%s: invalid or missing email",
-                emp_id,
+                "Background review mail skipped for user_id=%s: invalid or missing email",
+                user_id,
             )
             return
 
-        display_name = interviewer_name or user.name or emp_id
+        display_name = interviewer_name or user.name or str(user_id)
         link = build_review_link(form_id)
         email_service = EmailService(
             smtp_host=settings.SMTP_HOST,
@@ -141,7 +141,7 @@ def send_review_mail_task(
         )
         email_service.send(to_email=user.email.strip(), subject=subject, body=body, html=html)
     except Exception as exc:
-        logger.warning("Background review mail failed for emp_id=%s: %s", emp_id, exc)
+        logger.warning("Background review mail failed for user_id=%s: %s", user_id, exc)
     finally:
         db.close()
 

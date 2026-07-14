@@ -74,8 +74,6 @@ class AlertRepository:
         from app.modules.rounds.round_model import Round
         from app.modules.users.user_model import User
 
-        now = datetime.now(timezone.utc)
-        cutoff = now - timedelta(hours=_FORM_VALIDITY_HOURS)
         base = settings.FRONTEND_BASE_URL.rstrip("/")
 
         q = self.db.query(Alert, User).join(User, User.id == Alert.employee_id)
@@ -86,31 +84,60 @@ class AlertRepository:
         total = q.count()
         rows = q.order_by(Alert.created_at.desc()).offset((page - 1) * per_page).limit(per_page).all()
 
+        # Look up forms directly by alert.form_id (any status) for REVIEW alerts
+        review_form_ids = [alert.form_id for alert, _ in rows if alert.type == "REVIEW" and alert.form_id]
+        form_lookup: dict = {}
+        if review_form_ids:
+            for f in self.db.query(Form).filter(Form.id.in_(review_form_ids)).all():
+                form_lookup[str(f.id)] = {"id": f.id, "rid": f.round_id}
+
+        # Fallback: active sent forms by emp_id (for SLOTS or when alert has no form_id)
+        now = datetime.now(timezone.utc)
+        cutoff = now - timedelta(hours=_FORM_VALIDITY_HOURS)
         emp_ids = list({u.emp_id for _, u in rows})
-        forms: dict = {}
+        active_forms: dict = {}
         if emp_ids:
-            fq = self.db.query(Form, User).join(User, User.id == Form.employee_id).filter(User.emp_id.in_(emp_ids), Form.status == FormStatus.SENT.value, Form.last_sent_at > cutoff)
+            fq = self.db.query(Form, User).join(User, User.id == Form.employee_id).filter(
+                User.emp_id.in_(emp_ids), Form.status == FormStatus.SENT.value, Form.last_sent_at > cutoff,
+            )
             if alert_type:
                 fq = fq.filter(Form.type == alert_type)
-            forms = {u.emp_id: {"id": f.id, "rid": f.round_id} for f, u in fq.all()}
+            active_forms = {u.emp_id: {"id": f.id, "rid": f.round_id} for f, u in fq.all()}
 
-        rids = [f["rid"] for f in forms.values() if f.get("rid")]
+        # Collect rids from both sources
+        rids = set()
+        for f in form_lookup.values():
+            if f.get("rid"):
+                rids.add(str(f["rid"]))
+        for f in active_forms.values():
+            if f.get("rid"):
+                rids.add(str(f["rid"]))
+
         iv = {}
         if rids:
-            iv_q = self.db.query(Round, Candidate, HiringRequest).outerjoin(Candidate, Candidate.id == Round.candidate_id).outerjoin(HiringRequest, HiringRequest.id == Round.jd_id).filter(Round.id.in_(rids))
+            iv_q = self.db.query(Round, Candidate, HiringRequest).outerjoin(Candidate, Candidate.id == Round.candidate_id).outerjoin(HiringRequest, HiringRequest.id == Round.jd_id).filter(Round.id.in_(list(rids)))
             for r, c, h in iv_q.all():
                 iv[str(r.id)] = (c.candidate_name if c else "", h.title if h else "")
 
         items = []
         for alert, user in rows:
-            f = forms.get(user.emp_id, {})
+            if alert.type == "SLOTS":
+                f = active_forms.get(user.emp_id, {})
+            else:
+                f = form_lookup.get(str(alert.form_id)) if alert.form_id else active_forms.get(user.emp_id, {}) or {}
             fid = f.get("id")
-            item = {"id": str(alert.id), "type": alert.type.lower(), "created_at": alert.created_at.isoformat() if alert.created_at else None, "employee": {"id": user.emp_id, "name": user.name or "", "email": user.email or "", "phone": user.phone_number or ""}}
+            item = {
+                "id": str(alert.id), "type": alert.type.lower(),
+                "created_at": alert.created_at.isoformat() if alert.created_at else None,
+                "employee_id": alert.employee_id,
+                "employee": {"id": user.emp_id, "name": user.name or "", "email": user.email or "", "phone": user.phone_number or ""},
+            }
+            rid = f.get("rid")
+            item["round_id"] = str(rid) if rid else None
             if alert.type == "SLOTS":
                 item["slot_link"] = f"{base}/book-slot/{fid}" if fid else None
             elif alert.type == "REVIEW":
                 item["review_link"] = f"{base}/rate-candidate/{fid}" if fid else None
-                rid = f.get("rid")
                 if rid:
                     cn, pt = iv.get(str(rid), ("", ""))
                     item["interview"] = {"id": str(rid), "candidate_name": cn, "position": pt}

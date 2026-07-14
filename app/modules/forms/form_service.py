@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from sqlalchemy import exc as sa_exc
@@ -36,6 +36,9 @@ from app.modules.forms.form_schema import (
 from app.modules.users.user_repository import UserRepository
 
 logger = get_logger(__name__)
+
+_NOTIFY_COOLDOWN = timedelta(minutes=1)
+_last_notified: dict[tuple[int, str, str | None], datetime] = {}
 
 
 class FormService:
@@ -84,7 +87,7 @@ class FormService:
         if active:
             self.repository.touch_last_sent_at(active, last_sent_at=now)
             self.db.commit()
-            send_review_mail_task(emp_id, active.id, candidate_name, round_name, interviewer_name)
+            send_review_mail_task(user.id, active.id, candidate_name, round_name, interviewer_name)
             return active
 
         latest = self.repository.get_latest(emp_id, FormType.REVIEW.value)
@@ -99,7 +102,7 @@ class FormService:
             candidate_id=candidate_id,
         )
         self.db.commit()
-        send_review_mail_task(emp_id, form.id, candidate_name, round_name, interviewer_name)
+        send_review_mail_task(user.id, form.id, candidate_name, round_name, interviewer_name)
         return form
 
     def ask_form_batch(self, emp_ids: list[str], form_type: str) -> tuple[AskFormResponse, list[PendingMailTask]]:
@@ -149,7 +152,7 @@ class FormService:
                         message=detail_to_message(detail),
                     )
                 )
-                mail_tasks.append(PendingMailTask(emp_id=emp_id, form_id=form.id))
+                mail_tasks.append(PendingMailTask(user_id=user.id, form_id=form.id))
             except sa_exc.SQLAlchemyError:
                 self.db.rollback()
                 raise
@@ -202,6 +205,60 @@ class FormService:
             valid=True, reason="VALID", emp_id=form.employee.emp_id, type=form.type,
             round_id=form.round_id, candidate_id=form.candidate_id,
         )
+
+    def notify_form(self, user_id: int, form_type: str, is_reminder: bool = True) -> tuple[Form, str]:
+        now = datetime.now(timezone.utc)
+
+        user = self.user_repository.get_by_id(user_id)
+        if not user:
+            raise ValueError(f"User not found: user_id={user_id}")
+
+        latest = self.repository.get_latest_by_user(user_id, form_type)
+        round_id = str(latest.round_id) if (latest and latest.round_id and form_type == FormType.REVIEW.value) else None
+        key = (user_id, form_type, round_id)
+        last = _last_notified.get(key)
+        if last and (now - last) < _NOTIFY_COOLDOWN:
+            remaining = int((_NOTIFY_COOLDOWN - (now - last)).total_seconds())
+            raise ValueError(f"Rate limit: Please wait {remaining} second(s) before sending another notification.")
+
+        if form_type == FormType.REVIEW.value:
+            active = self.repository.get_active_sent_by_user(user_id, form_type)
+            if active:
+                self.repository.touch_last_sent_at(active, last_sent_at=now)
+                detail = DETAIL_RESENT
+                form = active
+            else:
+                if latest and latest.status == FormStatus.SENT.value and is_form_expired(latest):
+                    self.repository.mark_expired(latest)
+                if latest and latest.status in (FormStatus.EXPIRED.value, FormStatus.SENT.value):
+                    form = self.repository.create(
+                        employee_id=user_id,
+                        form_type=form_type,
+                        last_sent_at=now,
+                        round_id=latest.round_id,
+                        candidate_id=latest.candidate_id,
+                    )
+                else:
+                    raise ValueError("No existing review form found for this user.")
+                detail = DETAIL_NEW_LINK
+        else:
+            active = self.repository.get_active_sent_by_user(user_id, form_type)
+            if active:
+                self.repository.touch_last_sent_at(active, last_sent_at=now)
+                detail = DETAIL_RESENT
+                form = active
+            else:
+                if latest and latest.status == FormStatus.SENT.value and is_form_expired(latest):
+                    self.repository.mark_expired(latest)
+                form = self.repository.create(
+                    employee_id=user_id,
+                    form_type=form_type,
+                    last_sent_at=now,
+                )
+                detail = DETAIL_NEW_LINK
+
+        _last_notified[key] = now
+        return form, detail
 
     def mark_slots_form_submitted(self, emp_id: str) -> None:
         form = self.repository.get_active_sent(emp_id, FormType.SLOTS.value)
@@ -256,9 +313,9 @@ class FormService:
 
     def _send_form_mail(self, form: Form, is_reminder: bool = False) -> None:
         if form.type == FormType.REVIEW.value:
-            send_review_mail_task(form.employee.emp_id, form.id, None, None, None, is_reminder=is_reminder)
+            send_review_mail_task(form.employee_id, form.id, None, None, None, is_reminder=is_reminder)
         else:
-            send_slot_mail_task(form.employee.emp_id, form.id, is_reminder=is_reminder)
+            send_slot_mail_task(form.employee_id, form.id, is_reminder=is_reminder)
 
     def run_reminder_job(self) -> int:
         forms = self.repository.list_due_for_reminder()

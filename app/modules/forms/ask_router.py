@@ -27,7 +27,7 @@ def ask_form(
     service = FormService(db)
     response, mail_tasks = service.ask_form_batch(data.emp_ids, data.type)
     for task in mail_tasks:
-        background_tasks.add_task(send_slot_mail_task, task.emp_id, task.form_id)
+        background_tasks.add_task(send_slot_mail_task, task.user_id, task.form_id)
     return response
 
 
