@@ -258,6 +258,22 @@ class FormService:
                 detail = DETAIL_NEW_LINK
 
         _last_notified[key] = now
+
+        if form.type == FormType.REVIEW.value and form.candidate_id:
+            EventService(self.db).create_event(EventCreate(
+                entity_type="CANDIDATE",
+                entity_id=str(form.candidate_id),
+                candidate_id=form.candidate_id,
+                event_name="Review Overdue Notification to Interviewer",
+                state_code="REVIEW_NOTIFICATION_TO_INTERVIEWER",
+                actor_type="HR",
+                event_metadata={
+                    "form_id": str(form.id),
+                    "employee_id": form.employee.id,
+                    "detail": detail,
+                },
+            ))
+
         return form, detail
 
     def mark_slots_form_submitted(self, emp_id: str) -> None:
@@ -325,6 +341,19 @@ class FormService:
             self._send_form_mail(form, is_reminder=True)
             form.reminded_at = now
             self.db.flush()
+            if form.type == FormType.REVIEW.value and form.candidate_id:
+                EventService(self.db).create_event(EventCreate(
+                    entity_type="CANDIDATE",
+                    entity_id=str(form.candidate_id),
+                    candidate_id=form.candidate_id,
+                    event_name="Review Overdue Reminder to Interviewer",
+                    state_code="REVIEW_REMINDER_TO_INTERVIEWER",
+                    actor_type="SYSTEM",
+                    event_metadata={
+                        "form_id": str(form.id),
+                        "employee_id": form.employee.id,
+                    },
+                ))
             sent += 1
         if sent:
             self.db.commit()
@@ -339,6 +368,20 @@ class FormService:
                 employee_id=form.employee.id, alert_type=alert_type, form_id=form.id,
             ):
                 created += 1
+                if form.type == FormType.REVIEW.value and form.candidate_id:
+                    EventService(self.db).create_event(EventCreate(
+                        entity_type="CANDIDATE",
+                        entity_id=str(form.candidate_id),
+                        candidate_id=form.candidate_id,
+                        event_name="Review Pending Escalated to HR",
+                        state_code="REVIEW_ESCALATED_TO_HR",
+                        actor_type="SYSTEM",
+                        event_metadata={
+                            "form_id": str(form.id),
+                            "employee_id": form.employee.id,
+                            "alert_type": alert_type,
+                        },
+                    ))
         return created
 
     def run_expiry_reconciliation_job(self) -> int:

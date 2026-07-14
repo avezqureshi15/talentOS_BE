@@ -77,7 +77,7 @@ class ApplicationRepository:
         result: dict[int, list[dict]] = {}
         for cid, events in raw.items():
             result[cid] = [
-                {"event_name": e.event_name, "created_at": e.created_at.isoformat()}
+                {"event_name": e.event_name, "created_at": e.created_at.isoformat(), "actor_type": e.actor_type}
                 for e in events
             ]
         return result

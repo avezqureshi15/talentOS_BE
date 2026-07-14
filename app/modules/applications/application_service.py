@@ -35,7 +35,7 @@ class ApplicationService:
             event_repo = EventRepository(self.db)
             raw_events = event_repo.get_by_candidate_id(candidate.id)
             events = [
-                {"event_name": e.event_name, "created_at": e.created_at.isoformat()}
+                {"event_name": e.event_name, "created_at": e.created_at.isoformat(), "actor_type": e.actor_type}
                 for e in raw_events
             ]
         return self.repo.to_candidate_dict(candidate, ai=ai, events_map={candidate.id: events} if events else None)

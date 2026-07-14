@@ -40,6 +40,7 @@ class ApplicationResponse(BaseModel):
 class EventInfo(BaseModel):
     event_name: str
     created_at: str
+    actor_type: str | None = None
 
 
 class EvaluatedCandidate(BaseModel):

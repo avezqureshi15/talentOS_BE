@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 from app.common.exceptions.alert_exception import AlertNotFoundException
 from app.modules.alerts.alert_model import Alert, AlertType
 from app.modules.alerts.alert_repository import AlertRepository, AlertRepositoryProtocol
+from app.modules.events.event_schema import EventCreate
+from app.modules.events.event_service import EventService
 from app.modules.alerts.alert_schema import (
     AlertListResponse,
     AlertListItem,
@@ -114,6 +116,8 @@ class AlertService:
         if not alert:
             raise AlertNotFoundException(str(alert_id))
 
+        was_read = alert.is_read
+
         if alert.is_read:
             return AlertResponse.model_validate(alert)
 
@@ -124,6 +128,23 @@ class AlertService:
         except sa_exc.SQLAlchemyError:
             self.db.rollback()
             raise
+
+        if not was_read and alert.type == AlertType.REVIEW.value and alert.form_id:
+            form = self.form_repository.get_by_id(alert.form_id) if self.form_repository else None
+            if form and form.candidate_id:
+                EventService(self.db).create_event(EventCreate(
+                    entity_type="CANDIDATE",
+                    entity_id=str(form.candidate_id),
+                    candidate_id=form.candidate_id,
+                    event_name="Review Alert Resolved",
+                    state_code="REVIEW_ALERT_RESOLVED",
+                    actor_type="HR",
+                    event_metadata={
+                        "form_id": str(form.id),
+                        "alert_id": str(alert.id),
+                    },
+                ))
+
         return AlertResponse.model_validate(updated)
 
     def create_alert_if_missing(self, employee_id: int, alert_type: str = AlertType.SLOTS.value, form_id: UUID | None = None) -> bool:
