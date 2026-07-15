@@ -87,6 +87,7 @@ class AlertService:
         page: int = 1,
         per_page: int = 20,
         is_read: bool | None = None,
+        search: str | None = None,
     ) -> AlertListResponse:
         db_type = self._map_alert_type(alert_type)
         if not self.repository:
@@ -96,7 +97,7 @@ class AlertService:
                 ),
             ))
         items, total = self.repository.list_enriched(
-            page=page, per_page=per_page, alert_type=db_type, is_read=is_read,
+            page=page, per_page=per_page, alert_type=db_type, is_read=is_read, search=search,
         )
         alerts = [AlertListItem(**self._map_employee(item)) for item in items]
         pagination = AlertRepository.build_pagination(page, per_page, total)

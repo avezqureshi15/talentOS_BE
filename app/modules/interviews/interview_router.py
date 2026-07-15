@@ -25,13 +25,14 @@ router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/interviews", tags=["intervi
 @router.get("", response_model=InterviewListResponse)
 def list_interviews(
     status_filter: str | None = Query(None, alias="status_filter"),
+    search: str | None = Query(None),
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
     service = InterviewService(db)
     return service.list_interviews(
-        status_filter=status_filter, page=page, per_page=per_page,
+        status_filter=status_filter, search=search, page=page, per_page=per_page,
     )
 
 @router.post("/schedule", response_model=ScheduleMeetResponse, status_code=status.HTTP_201_CREATED)

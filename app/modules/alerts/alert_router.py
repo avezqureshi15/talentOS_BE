@@ -17,10 +17,11 @@ def list_alerts(
     per_page: int = Query(20, ge=1, le=100),
     type: str | None = Query(default=None),
     is_read: bool | None = Query(default=False),
+    search: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ):
     service = AlertService(db)
-    return service.list_alerts_enriched(alert_type=type, page=page, per_page=per_page, is_read=is_read)
+    return service.list_alerts_enriched(alert_type=type, page=page, per_page=per_page, is_read=is_read, search=search)
 
 
 @router.patch("/{alert_id}/read", response_model=AlertResponse)

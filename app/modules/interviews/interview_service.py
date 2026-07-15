@@ -79,6 +79,7 @@ class InterviewService:
     def list_interviews(
         self,
         status_filter: str | None = None,
+        search: str | None = None,
         page: int = 1,
         per_page: int = 20,
     ) -> InterviewListResponse:
@@ -89,7 +90,7 @@ class InterviewService:
                 ),
             ))
         items, total = self.query_repo.list_paginated(
-            status_filter=status_filter, page=page, per_page=per_page,
+            status_filter=status_filter, search=search, page=page, per_page=per_page,
         )
         interviews = [InterviewListItem(**item) for item in items]
         pagination = InterviewQueryRepository.build_pagination(page, per_page, total)

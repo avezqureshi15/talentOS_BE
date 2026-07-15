@@ -22,7 +22,7 @@ class AlertRepositoryProtocol(Protocol):
     def create(self, employee_id: int, alert_type: str, form_id: UUID | None = None) -> Alert: ...
     def mark_read(self, alert: Alert) -> Alert: ...
     def mark_all_read(self, employee_id: int, alert_type: str) -> int: ...
-    def list_enriched(self, page: int, per_page: int, alert_type: str | None = None, is_read: bool | None = None) -> tuple[list[dict], int]: ...
+    def list_enriched(self, page: int, per_page: int, alert_type: str | None = None, is_read: bool | None = None, search: str | None = None) -> tuple[list[dict], int]: ...
 
 
 class AlertRepository:
@@ -67,7 +67,8 @@ class AlertRepository:
     def mark_all_read(self, employee_id: int, alert_type: str) -> int:
         return self.db.query(Alert).filter(Alert.employee_id == employee_id, Alert.type == alert_type, Alert.is_read.is_(False)).update({Alert.is_read: True})
 
-    def list_enriched(self, page: int, per_page: int, alert_type: str | None = None, is_read: bool | None = None) -> tuple[list[dict], int]:
+    def list_enriched(self, page: int, per_page: int, alert_type: str | None = None, is_read: bool | None = None, search: str | None = None) -> tuple[list[dict], int]:
+        from sqlalchemy import or_
         from app.modules.evaluations.evaluation_model import Candidate
         from app.modules.forms.form_model import Form, FormStatus
         from app.modules.hiring_requests.hiring_request_model import HiringRequest
@@ -81,6 +82,9 @@ class AlertRepository:
             q = q.filter(Alert.type == alert_type)
         if is_read is not None:
             q = q.filter(Alert.is_read == is_read)
+        if search:
+            pattern = f"%{search}%"
+            q = q.filter(or_(User.name.ilike(pattern), Alert.type.ilike(pattern)))
         total = q.count()
         rows = q.order_by(Alert.created_at.desc()).offset((page - 1) * per_page).limit(per_page).all()
 

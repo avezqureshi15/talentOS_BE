@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.constants import InterviewStatus
@@ -27,6 +28,7 @@ class InterviewQueryRepository:
     def list_paginated(
         self,
         status_filter: str | None = None,
+        search: str | None = None,
         page: int = 1,
         per_page: int = 20,
     ) -> tuple[list[dict], int]:
@@ -67,6 +69,16 @@ class InterviewQueryRepository:
                 query = query.filter(Slot.start_at >= now)
             elif status_filter == _COMPLETED:
                 query = query.filter(Slot.start_at < now)
+        if search:
+            pattern = f"%{search}%"
+            query = query.filter(
+                or_(
+                    Round.name.ilike(pattern),
+                    HiringRequest.title.ilike(pattern),
+                    Candidate.candidate_name.ilike(pattern),
+                    User.name.ilike(pattern),
+                )
+            )
         total = query.count()
         rows = (
             query.order_by(Slot.start_at.desc())
