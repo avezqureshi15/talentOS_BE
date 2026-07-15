@@ -3,7 +3,7 @@ const fs = require("fs");
 const path = require("path");
 
 const client = new Client({
-  connectionString: "postgresql://postgres:root@localhost:5432/talentos",
+  connectionString: process.env.DATABASE_URL || "postgresql://postgres:root@localhost:5432/talentos",
 });
 
 // ---- READ + PARSE PY FILE ----
