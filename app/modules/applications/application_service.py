@@ -54,6 +54,7 @@ class ApplicationService:
         exclude_finalized: bool = False,
         ai: bool = False,
         search: str | None = None,
+        reject_reason: str | None = None,
     ) -> dict:
         if not self.repo:
             logger.warning("No DB session")
@@ -91,6 +92,7 @@ class ApplicationService:
             offset=offset,
             exclude_finalized=exclude_finalized,
             search=search,
+            reject_reason=reject_reason,
         )
         events_map = self.repo.build_events_map(items, ai=ai) if ai else {}
         return {

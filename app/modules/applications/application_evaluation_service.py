@@ -199,6 +199,17 @@ class ApplicationEvaluationService:
                 },
                 verdict=verdict,
             ))
+            candidate.reviews = {
+                "fitscore": ai_result.overall_score_percentage,
+                "summary": ai_result.resume_summary,
+                "summary_md": ai_result.resume_summary,
+                "YOE": {"actual": f"{candidate.years_of_experience or '?'} yrs", "expected": "5 yrs"},
+                "CTC": {"actual": f"{candidate.current_ctc or '?'} LPA", "expected": "12 LPA"},
+                "LOCATION": {"actual": candidate.location or "?", "expected": "India"},
+                "NOTICE_PERIOD": {"actual": f"{candidate.notice_period or '?'} days", "expected": "15 days"},
+                "rejection_details": ai_result.rejection_details,
+            }
+            candidate.review_verdict = verdict
             from app.modules.rounds.round_model import Round
             round_obj = self.db.query(Round).filter(Round.id == round_resp.id).first()
             if round_obj:

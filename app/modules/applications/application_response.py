@@ -1,30 +1,20 @@
-from sqlalchemy.orm import Session
-
 from app.modules.evaluations.evaluation_model import Candidate
-from app.modules.reviews.review_model import Review
 
 
-def get_ai_review(db: Session, candidate: Candidate, review_map: dict[str, Review] | None = None) -> dict | None:
-    if not candidate.current_round_id:
-        return None
-    if review_map:
-        rv = review_map.get(str(candidate.current_round_id))
-        if rv and rv.reviews:
-            return {"reviews": rv.reviews, "verdict": rv.verdict}
-    rv = (
-        db.query(Review)
-        .filter(
-            Review.round_id == candidate.current_round_id,
-            Review.entity_type == "AI",
-        )
-        .first()
-    )
-    if rv:
-        return {"reviews": rv.reviews, "verdict": rv.verdict}
-    return None
+def extract_comparison_fields(reviews: dict | None) -> list[dict]:
+    if not reviews:
+        return []
+    result: list[dict] = []
+    for k, v in reviews.items():
+        if isinstance(v, dict) and "actual" in v and "expected" in v:
+            result.append({
+                "label": k,
+                "value": {"Expected": str(v["expected"]), "Actual": str(v["actual"])},
+            })
+    return result
 
 
-def build_candidate_response(candidate: Candidate, ai_review: dict | None = None, hide_cover_letter: bool = False, events: list[dict] | None = None) -> dict:
+def build_candidate_response(candidate: Candidate, hide_cover_letter: bool = False, events: list[dict] | None = None) -> dict:
     return {
         "id": candidate.external_application_id,
         "candidate_id": candidate.id,
@@ -49,7 +39,8 @@ def build_candidate_response(candidate: Candidate, ai_review: dict | None = None
         "scheduled": candidate.scheduled,
         "current_round_id": str(candidate.current_round_id) if candidate.current_round_id else None,
         "final_verdict": candidate.final_verdict,
-        "reviews": (ai_review or {}).get("reviews"),
-        "review_verdict": (ai_review or {}).get("verdict"),
+        "reviews": candidate.reviews,
+        "review_verdict": candidate.review_verdict,
+        "comparison_fields": extract_comparison_fields(candidate.reviews),
         "events": events,
     }

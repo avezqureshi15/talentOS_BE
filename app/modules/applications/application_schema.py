@@ -43,6 +43,14 @@ class EventInfo(BaseModel):
     actor_type: str | None = None
 
 
+class ComparisonFieldValue(BaseModel):
+    Expected: str
+    Actual: str
+
+class ComparisonField(BaseModel):
+    label: str
+    value: ComparisonFieldValue
+
 class EvaluatedCandidate(BaseModel):
     id: str
     candidate_id: int
@@ -67,6 +75,9 @@ class EvaluatedCandidate(BaseModel):
     scheduled: bool = False
     current_round_id: str | None = None
     final_verdict: str | None = None
+    reviews: dict | None = None
+    review_verdict: str | None = None
+    comparison_fields: list[ComparisonField] = []
     events: list[EventInfo] | None = None
 
 

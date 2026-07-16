@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, Uuid
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.constants import EvaluationStatus
@@ -59,3 +60,5 @@ class Candidate(Base):
 
     current_round_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), ForeignKey("rounds.id"), nullable=True)
     final_verdict: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    reviews: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    review_verdict: Mapped[str | None] = mapped_column(String(50), nullable=True)

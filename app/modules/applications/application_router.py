@@ -45,6 +45,7 @@ def get_all_applications(
     round_verdict: str | None = Query(default=None, description="Filter by round verdict (selected, rejected)"),
     ai: bool = Query(default=False, description="If true, omit cover_letter from response"),
     q: str | None = Query(default=None, description="Search candidates by name or email"),
+    reject_reason: str | None = Query(default=None, description="Comma-separated rejection reasons (yoe,location,budget,notice_period)"),
     db: Session = Depends(get_db),
 ):
     service = ApplicationService(db)
@@ -62,6 +63,7 @@ def get_all_applications(
         exclude_finalized=final_verdict == "false",
         ai=ai,
         search=q,
+        reject_reason=reject_reason,
     )
 
 

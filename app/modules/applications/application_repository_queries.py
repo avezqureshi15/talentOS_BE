@@ -1,7 +1,9 @@
+from sqlalchemy import Text, cast, or_
 from sqlalchemy.orm import Session
 
 from app.modules.evaluations.evaluation_model import Candidate
 from app.modules.reviews.review_model import Review
+from app.modules.rounds.round_model import Round
 
 
 def get_candidates_by_job_paginated(
@@ -18,6 +20,7 @@ def get_candidates_by_job_paginated(
     offset: int = 0,
     exclude_finalized: bool = False,
     search: str | None = None,
+    reject_reason: str | None = None,
 ) -> tuple[list[Candidate], int]:
     query = db.query(Candidate)
 
@@ -45,9 +48,15 @@ def get_candidates_by_job_paginated(
     if exclude_finalized:
         query = query.filter(Candidate.final_verdict.is_(None))
     if round_verdict:
-        from app.modules.rounds.round_model import Round
         query = query.join(Round, Candidate.current_round_id == Round.id)
         query = query.filter(Round.round_verdict == round_verdict)
+
+    if reject_reason:
+        reasons = [f'"{r.strip().upper()}"' for r in reject_reason.split(",")]
+        query = query.filter(Candidate.reviews.isnot(None))
+        query = query.filter(
+            or_(*[cast(Candidate.reviews["rejection_details"], Text).contains(r) for r in reasons])
+        )
 
     total = query.count()
     items = (

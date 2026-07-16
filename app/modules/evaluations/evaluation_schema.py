@@ -74,6 +74,8 @@ class EvaluationResponse(BaseModel):
     error_reason: str | None
     current_round_id: str | None
     final_verdict: str | None
+    reviews: dict | None = None
+    review_verdict: str | None = None
     created_at: datetime
     updated_at: datetime
     evaluated_at: datetime | None

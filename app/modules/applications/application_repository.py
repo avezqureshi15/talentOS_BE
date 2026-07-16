@@ -5,15 +5,13 @@ from sqlalchemy.orm import Session
 from app.core.logger import get_logger
 from app.modules.applications import application_repository_mutations as _mut
 from app.modules.applications.application_repository_queries import (
-    build_review_map,
     get_candidates_by_job_paginated as _get_candidates_by_job_paginated,
     get_finalized_candidates as _get_finalized_candidates,
 )
-from app.modules.applications.application_response import build_candidate_response, get_ai_review
+from app.modules.applications.application_response import build_candidate_response
 from app.modules.evaluations.evaluation_model import Candidate
 from app.modules.events.event_repository import EventRepository
 from app.modules.hiring_requests.hiring_request_model import HiringRequest
-from app.modules.reviews.review_model import Review
 
 logger = get_logger(__name__)
 
@@ -21,7 +19,6 @@ logger = get_logger(__name__)
 class ApplicationRepository:
     def __init__(self, db: Session):
         self.db = db
-        self._review_map: dict[str, Review] = {}
 
     def resolve_external_job_id(self, job_id: str) -> str | None:
         try:
@@ -55,9 +52,7 @@ class ApplicationRepository:
         return query.order_by(Candidate.fit_score.desc().nullslast()).all()
 
     def get_candidates_by_job_paginated(self, **kwargs) -> tuple[list[Candidate], int]:
-        items, total = _get_candidates_by_job_paginated(self.db, **kwargs)
-        self._review_map = build_review_map(self.db, items)
-        return items, total
+        return _get_candidates_by_job_paginated(self.db, **kwargs)
 
     def get_finalized_candidates(self, **kwargs) -> tuple[list[Candidate], int]:
         return _get_finalized_candidates(self.db, **kwargs)
@@ -83,9 +78,8 @@ class ApplicationRepository:
         return result
 
     def to_candidate_dict(self, candidate: Candidate, ai: bool = False, events_map: dict[int, list[dict]] | None = None) -> dict:
-        ai_review = get_ai_review(self.db, candidate, self._review_map)
         events = events_map.get(candidate.id) if events_map else None
-        return build_candidate_response(candidate, ai_review, hide_cover_letter=ai, events=events)
+        return build_candidate_response(candidate, hide_cover_letter=ai, events=events)
 
     def create_queued_candidate(self, application_id: str, job_id: str, **kwargs) -> Candidate:
         return _mut.create_queued_candidate(self.db, application_id, job_id, **kwargs)
