@@ -31,6 +31,7 @@ class InterviewQueryRepository:
         search: str | None = None,
         page: int = 1,
         per_page: int = 20,
+        candidate_id: int | None = None,
     ) -> tuple[list[dict], int]:
         now = datetime.now(timezone.utc)
         query = (
@@ -61,6 +62,8 @@ class InterviewQueryRepository:
             .outerjoin(Candidate, Round.candidate_id == Candidate.id)
             .outerjoin(HiringRequest, Round.jd_id == HiringRequest.id)
         )
+        if candidate_id is not None:
+            query = query.filter(Round.candidate_id == candidate_id)
         if status_filter == _CANCELLED:
             query = query.filter(Interview.status == InterviewStatus.CANCELLED.value)
         else:

@@ -1,11 +1,16 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.session import get_db
-from app.modules.rounds.round_schema import RoundCreate, RoundDetailResponse, RoundResponse
+from app.modules.rounds.round_schema import (
+    PaginatedRoundResponse,
+    RoundCreate,
+    RoundDetailResponse,
+    RoundResponse,
+)
 from app.modules.rounds.round_service import RoundService
 
 router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/rounds", tags=["rounds"])
@@ -15,6 +20,18 @@ router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/rounds", tags=["rounds"])
 def create_round(data: RoundCreate, db: Session = Depends(get_db)):
     service = RoundService(db)
     return service.create_round(data)
+
+
+@router.get("", response_model=PaginatedRoundResponse)
+def list_rounds(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
+    search: str | None = Query(None),
+    candidate_id: int | None = Query(None),
+    db: Session = Depends(get_db),
+):
+    service = RoundService(db)
+    return service.get_rounds_paginated(page=page, per_page=per_page, search=search, candidate_id=candidate_id)
 
 
 @router.get("/{round_id}", response_model=RoundDetailResponse)

@@ -84,6 +84,7 @@ class InterviewService:
         search: str | None = None,
         page: int = 1,
         per_page: int = 20,
+        candidate_id: int | None = None,
     ) -> InterviewListResponse:
         if not self.query_repo:
             return InterviewListResponse(data=InterviewsData(
@@ -92,7 +93,7 @@ class InterviewService:
                 ),
             ))
         items, total = self.query_repo.list_paginated(
-            status_filter=status_filter, search=search, page=page, per_page=per_page,
+            status_filter=status_filter, search=search, page=page, per_page=per_page, candidate_id=candidate_id,
         )
         interviews = [InterviewListItem(**item) for item in items]
         pagination = InterviewQueryRepository.build_pagination(page, per_page, total)

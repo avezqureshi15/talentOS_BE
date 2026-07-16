@@ -52,3 +52,21 @@ class RoundDetailResponse(BaseModel):
     jd_label: str | None = None
     interviewer: str | None = None
     reviews: list[ReviewEntity] = []
+
+
+class RoundListItem(BaseModel):
+    id: str
+    name: str | None = None
+    round_verdict: str | None = None
+    candidate_name: str | None = None
+    candidate_id: str | None = None
+    position_title: str | None = None
+    created_at: str | None = None
+
+
+class PaginatedRoundResponse(BaseModel):
+    items: list[RoundListItem]
+    total: int
+    page: int
+    per_page: int
+    has_more: bool
