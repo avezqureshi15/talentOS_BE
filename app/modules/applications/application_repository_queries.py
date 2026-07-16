@@ -17,11 +17,17 @@ def get_candidates_by_job_paginated(
     limit: int = 20,
     offset: int = 0,
     exclude_finalized: bool = False,
+    search: str | None = None,
 ) -> tuple[list[Candidate], int]:
     query = db.query(Candidate)
 
     if job_id:
         query = query.filter(Candidate.external_job_id == job_id)
+    if search:
+        like = f"%{search}%"
+        query = query.filter(
+            Candidate.candidate_name.ilike(like) | Candidate.candidate_email.ilike(like)
+        )
     if status:
         query = query.filter(Candidate.status == status)
     if schedule == "scheduled":
