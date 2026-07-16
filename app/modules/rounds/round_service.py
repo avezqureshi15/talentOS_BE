@@ -1,8 +1,10 @@
 from uuid import UUID
 
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.logger import get_logger
+from app.modules.evaluations.evaluation_model import Candidate
 from app.modules.rounds.round_detail_service import RoundDetailService
 from app.modules.rounds.round_model import Round
 from app.modules.rounds.round_repository import RoundRepository, RoundRepositoryProtocol
@@ -25,6 +27,15 @@ class RoundService:
 
     def create_round(self, data: RoundCreate) -> RoundResponse:
         logger.info("Creating round: name=%s | candidate_id=%s", data.name, data.candidate_id)
+        if data.candidate_id:
+            candidate = self.db.query(Candidate).filter(Candidate.id == data.candidate_id).first()
+            if candidate and candidate.current_round_id:
+                current_round = self.db.query(Round).filter(Round.id == candidate.current_round_id).first()
+                if current_round and current_round.round_verdict is None:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Current round verdict must be filled before scheduling a new round",
+                    )
         round_obj = Round(
             name=data.name,
             candidate_id=data.candidate_id,

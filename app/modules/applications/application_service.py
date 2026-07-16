@@ -1,8 +1,10 @@
 from uuid import UUID
 
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.common.clients import SupabaseClient
+from app.common.exceptions.application_exception import ApplicationNotFoundException
 from app.common.exceptions.base_exception import BaseAppException
 from app.core.constants import EvaluationStatus
 from app.core.logger import get_logger
@@ -12,6 +14,7 @@ from app.modules.applications.application_schema import ApplicationCreate
 from app.modules.applications.application_state_service import ApplicationStateService
 from app.modules.evaluations.evaluation_schema import EvaluationResponse, WebhookRecord
 from app.modules.events.event_repository import EventRepository
+from app.modules.rounds.round_model import Round
 
 logger = get_logger(__name__)
 
@@ -155,6 +158,16 @@ class ApplicationService:
         return self.state_svc.update_candidate_status(candidate_id, new_status)
 
     def move_to_next_round(self, candidate_id: int) -> EvaluationResponse:
+        candidate = self.repo.get_by_candidate_id(candidate_id)
+        if not candidate:
+            raise ApplicationNotFoundException(candidate_id)
+        if candidate.current_round_id:
+            current_round = self.db.query(Round).filter(Round.id == candidate.current_round_id).first()
+            if current_round and current_round.round_verdict is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Current round verdict must be filled before moving to the next round",
+                )
         return self.update_candidate_status(candidate_id, "MOVE_TO_NEXT_ROUND")
 
     def create_application(self, data: ApplicationCreate) -> dict:
