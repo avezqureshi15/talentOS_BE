@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from app.common.clients import AIClient, AIClientError, ResumeClient, SupabaseClient
+from app.common.clients import AIClient, ClientError, ResumeClient, SupabaseClient
 from app.core.config import settings
 from app.core.constants import EvaluationStatus
 from app.core.logger import get_logger
@@ -123,7 +123,7 @@ class ApplicationEvaluationService:
         jd_details = self.supabase.fetch_jd_details(job_id)
         try:
             ai_result = self.ai.evaluate_resume(resume_txt=resume_text, jd_details=jd_details, custom_evaluation_criteria="")
-        except AIClientError:
+        except ClientError:
             logger.warning("AI service failed — using mock evaluation")
             ai_result = self._mock_evaluation_fallback(candidate.candidate_name)
         except Exception as exc:
@@ -171,12 +171,11 @@ class ApplicationEvaluationService:
                 "- Notice period exceeds acceptable range"
             ),
             overall_score_percentage=45,
-            rejected_status=["YOE", "LOCATION", "NOTICE_PERIOD"],
-            rejected_reason=(
-                "Candidate has less than the required years of experience, "
-                "is located outside the preferred hiring regions, "
-                "and has a notice period longer than the acceptable limit."
-            ),
+            rejection_details=[
+                {"YOE": {"JD": "5+ yrs", "Candidate": "2 yrs"}},
+                {"LOCATION": {"JD": "India", "Candidate": "Remote, UAE"}},
+                {"NOTICE_PERIOD": {"JD": "15 days", "Candidate": "60 days"}},
+            ],
         )
 
     def _create_initial_review(self, ai_result: AIEvaluationResponse, candidate, job_id: str, verdict: str) -> None:
@@ -196,8 +195,7 @@ class ApplicationEvaluationService:
                     "CTC": {"actual": f"{candidate.current_ctc or '?'} LPA", "expected": "12 LPA"},
                     "LOCATION": {"actual": candidate.location or "?", "expected": "India"},
                     "NOTICE_PERIOD": {"actual": f"{candidate.notice_period or '?'} days", "expected": "15 days"},
-                    "rejected_status": [s for s in ai_result.rejected_status if s != "NONE"],
-                    "rejected_reason": ai_result.rejected_reason,
+                    "rejection_details": ai_result.rejection_details,
                 },
                 verdict=verdict,
             ))
