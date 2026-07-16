@@ -89,12 +89,15 @@ def build_review_map(db: Session, candidates: list[Candidate]) -> dict[str, Revi
 def get_finalized_candidates(
     db: Session,
     verdict: str | None = None,
+    job_id: str | None = None,
     limit: int = 20,
     offset: int = 0,
 ) -> tuple[list[Candidate], int]:
     query = db.query(Candidate).filter(Candidate.final_verdict.isnot(None))
     if verdict:
         query = query.filter(Candidate.final_verdict == verdict)
+    if job_id:
+        query = query.filter(Candidate.external_job_id == job_id)
     total = query.count()
     items = query.order_by(Candidate.evaluated_at.desc().nullslast()).offset(offset).limit(limit).all()
     return items, total

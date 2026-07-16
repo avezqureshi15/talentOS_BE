@@ -104,6 +104,7 @@ class ApplicationService:
     def get_finalized_candidates_paginated(
         self,
         verdict: str | None = None,
+        job_id: str | None = None,
         limit: int = 20,
         offset: int = 0,
     ) -> dict:
@@ -111,6 +112,7 @@ class ApplicationService:
             return {"data": [], "total": 0, "limit": limit, "offset": offset}
         items, total = self.repo.get_finalized_candidates(
             verdict=verdict.upper() if verdict else None,
+            job_id=job_id,
             limit=limit,
             offset=offset,
         )
@@ -151,6 +153,10 @@ class ApplicationService:
     def update_candidate_status(self, candidate_id: int, new_status: str) -> EvaluationResponse:
         if not self.state_svc: raise ValueError("State service not available")
         return self.state_svc.update_candidate_status(candidate_id, new_status)
+
+    def move_to_next_round(self, candidate_id: int) -> EvaluationResponse:
+        return self.update_candidate_status(candidate_id, "MOVE_TO_NEXT_ROUND")
+
     def create_application(self, data: ApplicationCreate) -> dict:
         logger.info("Creating application: job_id=%s | name=%s", data.job_id, data.name)
         job_title = self.supabase.fetch_job_title(data.job_id)

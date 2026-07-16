@@ -1,7 +1,14 @@
 import uuid
 from datetime import datetime
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict
+
+
+class RoundVerdictRequest(BaseModel):
+    verdict: Literal["shortlisted", "rejected"]
+    remark: str = ""
 
 
 class RatingItem(BaseModel):
