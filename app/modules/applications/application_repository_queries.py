@@ -48,14 +48,25 @@ def get_candidates_by_job_paginated(
     if exclude_finalized:
         query = query.filter(Candidate.final_verdict.is_(None))
     if round_verdict:
-        query = query.join(Round, Candidate.current_round_id == Round.id)
-        query = query.filter(Round.round_verdict == round_verdict)
+        query = query.outerjoin(Round, Candidate.current_round_id == Round.id)
+        query = query.filter(
+            or_(
+                Candidate.review_verdict == round_verdict,
+                Round.round_verdict == round_verdict,
+            )
+        )
 
     if reject_reason:
-        reasons = [f'"{r.strip().upper()}"' for r in reject_reason.split(",")]
+        _KEY_MAP = {"BUDGET": "CTC"}
+        raw_reasons = [r.strip().upper() for r in reject_reason.split(",")]
+        mapped_reasons = [_KEY_MAP.get(r, r) for r in raw_reasons]
+        quoted_reasons = [f'"{r}"' for r in raw_reasons]
         query = query.filter(Candidate.reviews.isnot(None))
         query = query.filter(
-            or_(*[cast(Candidate.reviews["rejection_details"], Text).contains(r) for r in reasons])
+            or_(
+                *[Candidate.reviews[r].astext.isnot(None) for r in mapped_reasons],
+                *[cast(Candidate.reviews["rejection_details"], Text).contains(q) for q in quoted_reasons],
+            )
         )
 
     total = query.count()
