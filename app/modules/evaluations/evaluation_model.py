@@ -34,6 +34,10 @@ class Candidate(Base):
     scheduled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     willing_to_relocate: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
+    candidate_type: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="REGULAR"
+    )
+
     status: Mapped[str] = mapped_column(
         String(30), nullable=False, default=EvaluationStatus.QUEUED.value, index=True
     )

@@ -34,6 +34,7 @@ class ApplicationEvaluationService:
             "years_of_experience": record.years_of_experience, "notice_period": record.notice_period,
             "how_did_you_hear": record.how_did_you_hear, "linkedin_url": record.linkedin_url,
             "willing_to_relocate": record.willing_to_relocate,
+            "candidate_type": record.candidate_type,
         }
         result = self._evaluate_single(app_dict)
         return result or {"error": "Evaluation returned no result"}
@@ -60,6 +61,7 @@ class ApplicationEvaluationService:
                 years_of_experience=app.get("years_of_experience"), notice_period=app.get("notice_period"),
                 how_did_you_hear=app.get("how_did_you_hear"), linkedin_url=app.get("linkedin_url"),
                 willing_to_relocate=app.get("willing_to_relocate", False),
+                candidate_type=app.get("candidate_type", "REGULAR"),
             )
             EventService(self.db).create_event(EventCreate(
                 entity_type="CANDIDATE",

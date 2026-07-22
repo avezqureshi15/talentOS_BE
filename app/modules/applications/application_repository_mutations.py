@@ -27,6 +27,7 @@ def create_queued_candidate(db: Session, application_id: str, job_id: str, **kwa
         how_did_you_hear=kwargs.get("how_did_you_hear"),
         linkedin_url=kwargs.get("linkedin_url"),
         willing_to_relocate=kwargs.get("willing_to_relocate", False),
+        candidate_type=kwargs.get("candidate_type", "REGULAR"),
         status=EvaluationStatus.QUEUED.value,
     )
     db.add(candidate)

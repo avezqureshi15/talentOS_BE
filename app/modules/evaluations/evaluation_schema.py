@@ -24,6 +24,7 @@ class WebhookRecord(BaseModel):
     how_did_you_hear: str | None = Field(None)
     linkedin_url: str | None = Field(None)
     willing_to_relocate: bool = False
+    candidate_type: str = "REGULAR"
     status: str | None = Field(None)
     created_at: datetime | None = Field(None)
 
