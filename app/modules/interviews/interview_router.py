@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.session import get_db
+from app.modules.auth.auth_dependencies import RequireHr
 from app.modules.events.event_service import EventService
 from fastapi.responses import JSONResponse
 
@@ -23,7 +24,7 @@ from app.modules.interviews.interview_booking_service import BookingService
 from app.modules.interviews.interview_schedule_service import InterviewScheduleService
 from app.modules.interviews.interview_service import InterviewService
 
-router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/interviews", tags=["interviews"])
+router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/interviews", tags=["interviews"], dependencies=[Depends(RequireHr)])
 
 @router.get("", response_model=InterviewListResponse)
 def list_interviews(

@@ -1,7 +1,7 @@
 from datetime import date, datetime, timezone
 from typing import Optional
 
-from sqlalchemy import Date, DateTime, Integer, String, Text
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -15,6 +15,12 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     personal_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+
+    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    auth_provider: Mapped[str] = mapped_column(String(20), default="google", nullable=False)
+    tenant_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("tenants.id"), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
     status: Mapped[str] = mapped_column(String(50), nullable=False)
     user_type: Mapped[str] = mapped_column(String(50), nullable=False)
     designation: Mapped[str] = mapped_column(String(255), nullable=False)

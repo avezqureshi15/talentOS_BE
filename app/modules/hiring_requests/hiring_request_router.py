@@ -7,11 +7,12 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.session import get_db
+from app.modules.auth.auth_dependencies import RequireHr
 from app.modules.hiring_requests.hiring_request_schema import HiringRequestCreate, HiringRequestUpdate
 from app.modules.hiring_requests.hiring_request_service import HiringRequestService
 from app.modules.hiring_requests.hiring_request_excel_service import fetch_applications, generate_excel_bytes
 
-router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/hiring-requests", tags=["hiring-requests"])
+router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/hiring-requests", tags=["hiring-requests"], dependencies=[Depends(RequireHr)])
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED)

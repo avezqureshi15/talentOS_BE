@@ -22,8 +22,12 @@ class UserRepository:
         page: int = 1,
         per_page: int = 20,
         slots_info: bool = False,
+        tenant_id: int | None = None,
     ) -> tuple[list[User] | list[tuple[User, int]], int]:
         base_query = self.db.query(User)
+
+        if tenant_id is not None:
+            base_query = base_query.filter(User.tenant_id == tenant_id)
 
         if query:
             filter_condition = or_(
@@ -68,8 +72,10 @@ class UserRepository:
     def get_by_emp_id(self, emp_id: str) -> User | None:
         return self.db.query(User).filter(User.emp_id == emp_id).first()
 
-    def list_all(self, page: int = 1, per_page: int = 20, q: str | None = None) -> tuple[list[User], int]:
+    def list_all(self, page: int = 1, per_page: int = 20, q: str | None = None, tenant_id: int | None = None) -> tuple[list[User], int]:
         query = self.db.query(User)
+        if tenant_id is not None:
+            query = query.filter(User.tenant_id == tenant_id)
         if q:
             query = query.filter(
                 User.name.ilike(f"%{q}%") | User.email.ilike(f"%{q}%") | User.emp_id.ilike(f"%{q}%")

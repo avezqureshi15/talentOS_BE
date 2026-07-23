@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.session import get_db
+from app.modules.auth.auth_dependencies import RequireHr
 from app.modules.applications.application_schema import (
     ApplicationCreate,
     EvaluatedCandidate,
@@ -12,7 +13,7 @@ from app.modules.applications.application_schema import (
 from app.modules.applications.application_service import ApplicationService
 from app.modules.evaluations.evaluation_schema import EvaluationResponse
 
-router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/applications", tags=["applications"])
+router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/applications", tags=["applications"], dependencies=[Depends(RequireHr)])
 
 
 @router.get("/final-verdicts", response_model=PaginatedEvaluatedCandidatesResponse)

@@ -5,10 +5,11 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.session import get_db
+from app.modules.auth.auth_dependencies import RequireHr
 from app.modules.alerts.alert_schema import AlertListResponse, AlertResponse
 from app.modules.alerts.alert_service import AlertService
 
-router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/alerts", tags=["alerts"])
+router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/alerts", tags=["alerts"], dependencies=[Depends(RequireHr)])
 
 
 @router.get("/", response_model=AlertListResponse)

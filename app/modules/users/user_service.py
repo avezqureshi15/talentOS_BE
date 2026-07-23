@@ -33,9 +33,10 @@ class UserService:
         page: int = 1,
         per_page: int = DEFAULT_PAGE_SIZE,
         slots_info: bool = False,
+        tenant_id: int | None = None,
     ) -> PaginatedUserResponse:
-        logger.info("Searching users: query=%s page=%d per_page=%d slots_info=%s", query, page, per_page, slots_info)
-        result, total = self.repository.search_paginated(query, page, per_page, slots_info)
+        logger.info("Searching users: query=%s page=%d per_page=%d slots_info=%s tenant_id=%s", query, page, per_page, slots_info, tenant_id)
+        result, total = self.repository.search_paginated(query, page, per_page, slots_info, tenant_id=tenant_id)
 
         if slots_info:
             data = []

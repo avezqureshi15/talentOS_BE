@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.session import get_db
+from app.modules.auth.auth_dependencies import RequireHr
 from app.modules.forms.form_service import FormService
 from app.modules.slots.slot_schema import (
     BatchEmployeeSlotsResponse,
@@ -12,7 +13,7 @@ from app.modules.slots.slot_schema import (
 )
 from app.modules.slots.slot_service import SlotService
 
-router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/slots", tags=["slots"])
+router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/slots", tags=["slots"], dependencies=[Depends(RequireHr)])
 
 
 @router.get("/by-employee/{employee_id}", response_model=list[SlotListItemResponse])
