@@ -1,5 +1,7 @@
 import uuid
 
+from fastapi import HTTPException, status
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.core.constants import EvaluationStatus
@@ -9,9 +11,16 @@ from app.modules.reviews.review_model import Review
 from app.modules.reviews.review_repository import ReviewRepository, ReviewRepositoryProtocol
 from app.modules.events.event_schema import EventCreate
 from app.modules.events.event_service import EventService
-from app.modules.reviews.review_schema import ReviewCreate, ReviewResponse, ReviewUpdateByRound
+from app.modules.reviews.review_schema import (
+    InterviewerReviewsPayload,
+    ReviewCreate,
+    ReviewResponse,
+    ReviewUpdateByRound,
+)
 
 logger = get_logger(__name__)
+
+_INTERVIEWER_ENTITY = "interviewer"
 
 
 class ReviewService:
@@ -68,11 +77,34 @@ class ReviewService:
         reviews = self.repository.get_by_round(round_id)
         return [ReviewResponse.model_validate(r) for r in reviews]
 
+    @staticmethod
+    def _normalize_interviewer_reviews(reviews: dict) -> dict:
+        try:
+            payload = InterviewerReviewsPayload.model_validate(reviews)
+        except ValidationError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=exc.errors(),
+            ) from exc
+
+        scores = [answer.score for phase in payload.phases for answer in phase.answers]
+        if not scores:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Interviewer review must include at least one scored answer",
+            )
+        payload.average_rating = round(sum(scores) / len(scores), 1)
+        return payload.model_dump()
+
     def upsert_review(self, round_id: uuid.UUID, data: ReviewUpdateByRound) -> ReviewResponse:
+        reviews_payload = data.reviews
+        if data.entity_type.lower() == _INTERVIEWER_ENTITY:
+            reviews_payload = self._normalize_interviewer_reviews(data.reviews)
+
         review = self.repository.get_by_round_and_entity(round_id, data.entity_type)
         if review:
             logger.info("Updating review: id=%s | round_id=%s", review.id, round_id)
-            review.reviews = data.reviews
+            review.reviews = reviews_payload
             review.verdict = data.verdict
             self.repository.update(review)
         else:
@@ -80,7 +112,7 @@ class ReviewService:
             review = Review(
                 round_id=round_id,
                 entity_type=data.entity_type,
-                reviews=data.reviews,
+                reviews=reviews_payload,
                 verdict=data.verdict,
             )
             self.repository.create(review)
