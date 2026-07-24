@@ -35,6 +35,7 @@ from app.modules.todo import router as todo_router
 from app.modules.settings.settings_router import router as settings_router
 from app.modules.users import router as users_router
 from app.modules.users.user_admin_router import router as user_admin_router
+from app.modules.tenants.tenant_router import router as tenant_router
 
 logger = get_logger(__name__)
 
@@ -110,6 +111,7 @@ app.include_router(evaluation_candidates_router)
 app.include_router(email_router)
 app.include_router(user_admin_router)
 app.include_router(settings_router)
+app.include_router(tenant_router)
 
 
 @app.get("/health", tags=["health"])

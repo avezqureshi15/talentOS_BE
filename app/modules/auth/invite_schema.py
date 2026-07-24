@@ -7,6 +7,11 @@ class CreateInviteRequest(BaseModel):
     tenant_id: int | None = None
 
 
+class ResendInviteRequest(BaseModel):
+    email: EmailStr
+    tenant_id: int | None = None
+
+
 class InviteResponse(BaseModel):
     id: int
     email: str

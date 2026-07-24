@@ -12,7 +12,7 @@ from app.db.session import get_db
 from app.modules.auth.auth_dependencies import RequireAdmin
 from app.modules.auth.auth_schema import UserInfo
 from app.modules.auth.invite_model import TenantInvite
-from app.modules.auth.invite_schema import CreateInviteRequest, InviteResponse, PaginatedInviteResponse
+from app.modules.auth.invite_schema import CreateInviteRequest, InviteResponse, PaginatedInviteResponse, ResendInviteRequest
 from app.modules.users.user_model import User
 from app.modules.users.user_schema import (
     AdminUserResponse,
@@ -235,6 +235,39 @@ def list_invites(
         for i in invites
     ]
     return PaginatedInviteResponse(data=data, total=total, page=page, per_page=per_page, has_more=has_more)
+
+
+@router.post("/invites/resend", response_model=InviteResponse)
+def resend_invite(
+    body: ResendInviteRequest,
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(RequireAdmin),
+):
+    tid = _resolve_tenant(current_user, body.tenant_id)
+
+    invite = db.query(TenantInvite).filter(
+        TenantInvite.tenant_id == tid,
+        TenantInvite.email == body.email,
+        TenantInvite.accepted_at.is_(None),
+    ).order_by(TenantInvite.created_at.desc()).first()
+
+    if not invite:
+        raise HTTPException(status_code=404, detail="No pending invite found for this email")
+
+    invite.token = secrets.token_urlsafe(48)
+    invite.expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+    db.commit()
+    db.refresh(invite)
+    logger.info("Admin resent invite: email=%s tenant_id=%d", body.email, tid)
+    return InviteResponse(
+        id=invite.id,
+        email=invite.email,
+        role=invite.role,
+        token=invite.token,
+        expires_at=invite.expires_at.isoformat(),
+        accepted_at=invite.accepted_at.isoformat() if invite.accepted_at else None,
+        created_at=invite.created_at.isoformat(),
+    )
 
 
 @router.delete("/invites/{invite_id}")
