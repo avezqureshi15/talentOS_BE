@@ -51,4 +51,7 @@ class RoundDetailResponse(BaseModel):
     role: str | None = None
     jd_label: str | None = None
     interviewer: str | None = None
+    has_interview: bool = False
+    interviewers: list[str] = []
+    review_form_status: str | None = None
     reviews: list[ReviewEntity] = []

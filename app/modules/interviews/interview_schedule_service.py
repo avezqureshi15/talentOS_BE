@@ -128,8 +128,18 @@ class InterviewScheduleService:
             event_id=created.event_id, meet_link=result.meet_link, status=created.status,
         )
 
-    def reschedule_interview(self, interview_id: uuid.UUID, new_slot_id: uuid.UUID) -> ScheduleInterviewResponse:
-        logger.info("Rescheduling interview: id=%s | new_slot=%s", interview_id, new_slot_id)
+    def reschedule_interview(
+        self,
+        interview_id: uuid.UUID,
+        new_slot_id: uuid.UUID,
+        interviewer_ids: list[int] | None = None,
+    ) -> ScheduleInterviewResponse:
+        logger.info(
+            "Rescheduling interview: id=%s | new_slot=%s | interviewer_ids=%s",
+            interview_id,
+            new_slot_id,
+            interviewer_ids,
+        )
         interview = self.repository.get_by_id(interview_id)
         if not interview:
             raise InterviewNotFoundException(str(interview_id))
@@ -137,23 +147,47 @@ class InterviewScheduleService:
         if not new_slot:
             raise SlotNotFoundException(str(new_slot_id))
         old_slot_id = interview.slot_id
+        round_obj = self.repository.get_round_by_id(interview.round_id)
+
+        if interviewer_ids is not None:
+            self.repository.replace_round_interviewers(interview.round_id, interviewer_ids)
+
+        attendees = self.repository.get_interviewer_emails_for_round(interview.round_id)
+        candidate = (
+            self.repository.get_candidate_by_id(round_obj.candidate_id)
+            if round_obj and round_obj.candidate_id
+            else None
+        )
+        if candidate and candidate.candidate_email:
+            attendees = [candidate.candidate_email, *attendees]
+
         if interview.event_id:
             try:
                 get_calendar_service().update_event(
-                    event_id=interview.event_id, start=new_slot.start_at, end=new_slot.end_at, with_gmeet=True,
+                    event_id=interview.event_id,
+                    start=new_slot.start_at,
+                    end=new_slot.end_at,
+                    attendees=attendees,
+                    with_gmeet=False,
                 )
             except (HttpError, GoogleAPICallError) as exc:
                 logger.error("Calendar update failed: %s", exc)
                 raise CalendarApiFailedException("Failed to update calendar event") from exc
+
         self.repository.update_slot(interview_id, new_slot_id)
         self.repository.update_status(interview_id, InterviewStatus.RESCHEDULED.value)
         self.repository.update_slot_status(old_slot_id, SlotStatus.AVAILABLE.value)
         self.repository.update_slot_status(new_slot_id, SlotStatus.BOOKED.value)
-        round_obj = self.repository.get_round_by_id(interview.round_id)
+        self.repository.update_round_slot(interview.round_id, new_slot_id)
+
         if round_obj and round_obj.candidate_id:
-            self.repository.update_candidate_status(round_obj.candidate_id, EvaluationStatus.INTERVIEW_RESCHEDULED.value)
+            self.repository.update_candidate_status(
+                round_obj.candidate_id,
+                EvaluationStatus.INTERVIEW_RESCHEDULED.value,
+            )
         self.db.commit()
         self.db.refresh(interview)
+
         if round_obj and round_obj.candidate_id and self.event_service:
             self.event_service.create_event(_EventPayload(
                 entity_type="CANDIDATE",
@@ -162,11 +196,15 @@ class InterviewScheduleService:
                 state_code="INTERVIEW_RESCHEDULED",
                 actor_type="HR",
                 candidate_id=round_obj.candidate_id,
-                event_metadata={"round_id": str(interview.round_id), "old_slot": str(old_slot_id), "new_slot": str(new_slot_id)},
+                event_metadata={
+                    "round_id": str(interview.round_id),
+                    "old_slot": str(old_slot_id),
+                    "new_slot": str(new_slot_id),
+                    "interviewer_ids": interviewer_ids,
+                },
             ))
 
         if interview.meet_link:
-            attendees = self.repository.get_interviewer_emails_for_round(interview.round_id)
             title = round_obj.name if round_obj else "Interview"
             MeetMindClient().schedule_meeting(
                 meet_url=interview.meet_link,
@@ -177,9 +215,12 @@ class InterviewScheduleService:
         reschedule_interview_fallback(str(interview.id), new_slot.start_at)
         logger.info("Interview rescheduled: id=%s", interview.id)
         return ScheduleInterviewResponse(
-            id=str(interview.id), round_id=str(interview.round_id),
+            id=str(interview.id),
+            round_id=str(interview.round_id),
             slot_id=str(interview.slot_id) if interview.slot_id else None,
-            event_id=interview.event_id, status=interview.status,
+            event_id=interview.event_id,
+            meet_link=interview.meet_link,
+            status=interview.status,
         )
 
     def cancel_interview(self, interview_id: uuid.UUID) -> CancelInterviewResponse:

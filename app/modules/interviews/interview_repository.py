@@ -28,6 +28,8 @@ class InterviewRepositoryProtocol(Protocol):
     def get_hiring_request_by_id(self, hr_id: uuid.UUID) -> HiringRequest | None: ...
     def get_interviewer_emails_for_round(self, round_id: uuid.UUID) -> list[str]: ...
     def update_slot_status(self, slot_id: uuid.UUID | None, status: str) -> None: ...
+    def replace_round_interviewers(self, round_id: uuid.UUID, employee_ids: list[int]) -> None: ...
+    def update_round_slot(self, round_id: uuid.UUID, slot_id: uuid.UUID) -> None: ...
     def create_round(self, name: str, candidate_id: int, jd_id: uuid.UUID, slot_id: uuid.UUID) -> Round: ...
     def create_round_interviewer(self, round_id: uuid.UUID, employee_id: int) -> RoundInterviewer: ...
     def update_candidate_status(self, candidate_id: int, status: str) -> None: ...
@@ -129,6 +131,24 @@ class InterviewRepository:
         if slot_id is not None:
             self.db.query(Slot).filter(Slot.id == slot_id).update({"status": status})
             self.db.flush()
+
+    def replace_round_interviewers(self, round_id: uuid.UUID, employee_ids: list[int]) -> None:
+        logger.info(
+            "Replacing round interviewers: round_id=%s | count=%s",
+            round_id,
+            len(employee_ids),
+        )
+        self.db.query(RoundInterviewer).filter(RoundInterviewer.round_id == round_id).delete(
+            synchronize_session=False
+        )
+        for employee_id in employee_ids:
+            self.db.add(RoundInterviewer(round_id=round_id, employee_id=employee_id))
+        self.db.flush()
+
+    def update_round_slot(self, round_id: uuid.UUID, slot_id: uuid.UUID) -> None:
+        logger.info("Updating round slot: round_id=%s | slot_id=%s", round_id, slot_id)
+        self.db.query(Round).filter(Round.id == round_id).update({"slot_id": slot_id})
+        self.db.flush()
 
     def create_round(self, name: str, candidate_id: int, jd_id: uuid.UUID, slot_id: uuid.UUID) -> Round:
         r = Round(name=name, candidate_id=candidate_id, jd_id=jd_id, slot_id=slot_id)
