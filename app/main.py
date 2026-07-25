@@ -24,7 +24,6 @@ from app.modules.evaluations import router as evaluations_router
 from app.modules.forms import ask_router, form_router
 from app.modules.hiring_requests import router as hiring_requests_router
 from app.modules.interviews import router as interviews_router
-from app.modules.interviews.meetmind_webhook_router import router as meetmind_webhook_router
 from app.modules.reviews import router as reviews_router
 from app.modules.rounds import router as rounds_router
 from app.modules.jobs import router as jobs_router
@@ -73,7 +72,6 @@ app.include_router(designation_router)
 app.include_router(events_router)
 app.include_router(hiring_requests_router)
 app.include_router(interviews_router)
-app.include_router(meetmind_webhook_router)
 app.include_router(reviews_router)
 app.include_router(rounds_router)
 app.include_router(slots_router)

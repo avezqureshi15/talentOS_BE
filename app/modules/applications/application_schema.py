@@ -43,15 +43,6 @@ class EventInfo(BaseModel):
     actor_type: str | None = None
 
 
-class ActiveInterviewSnapshot(BaseModel):
-    id: str
-    status: str
-    start_at: str | None = None
-    round_id: str
-    round_name: str | None = None
-    interviewer_user_id: int | None = None
-    interviewer_name: str | None = None
-
 class ComparisonFieldValue(BaseModel):
     Expected: str
     Actual: str
@@ -88,7 +79,6 @@ class EvaluatedCandidate(BaseModel):
     review_verdict: str | None = None
     comparison_fields: list[ComparisonField] = []
     events: list[EventInfo] | None = None
-    active_interview: ActiveInterviewSnapshot | None = None
 
 
 class EvaluatedCandidatesResponse(BaseModel):

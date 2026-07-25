@@ -176,24 +176,15 @@ class FormService:
         form = self.repository.get_by_id(form_id)
         if not form:
             return FormValidateResponse(valid=False, reason="NOT_FOUND")
-
-        review_questions = None
-        if form.type == FormType.REVIEW.value and form.round_id:
-            from app.modules.interviews.review_questions_service import ReviewQuestionsService
-
-            review_questions = ReviewQuestionsService(self.db).get_questions_for_round(form.round_id)
-
         if form.status == FormStatus.SUBMITTED.value:
             return FormValidateResponse(
                 valid=False, reason="ALREADY_SUBMITTED", emp_id=form.employee.emp_id, type=form.type,
                 round_id=form.round_id, candidate_id=form.candidate_id,
-                review_questions=review_questions,
             )
         if form.status == FormStatus.EXPIRED.value:
             return FormValidateResponse(
                 valid=False, reason="EXPIRED", emp_id=form.employee.emp_id, type=form.type,
                 round_id=form.round_id, candidate_id=form.candidate_id,
-                review_questions=review_questions,
             )
         if is_form_expired(form):
             if form.status == FormStatus.SENT.value:
@@ -209,12 +200,10 @@ class FormService:
             return FormValidateResponse(
                 valid=False, reason="EXPIRED", emp_id=form.employee.emp_id, type=form.type,
                 round_id=form.round_id, candidate_id=form.candidate_id,
-                review_questions=review_questions,
             )
         return FormValidateResponse(
             valid=True, reason="VALID", emp_id=form.employee.emp_id, type=form.type,
             round_id=form.round_id, candidate_id=form.candidate_id,
-            review_questions=review_questions,
         )
 
     def notify_form(self, user_id: int, form_type: str, is_reminder: bool = True) -> tuple[Form, str]:

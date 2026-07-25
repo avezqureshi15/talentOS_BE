@@ -6,10 +6,6 @@ from app.common.clients.base_client import BaseClient, ClientError
 from app.core.config import settings
 from app.core.logger import get_logger
 from app.common.schemas.evaluation import AIEvaluationRequest, AIEvaluationResponse
-from app.common.schemas.review_questions import (
-    GenerateReviewQuestionsRequest,
-    GenerateReviewQuestionsResponse,
-)
 
 logger = get_logger(__name__)
 
@@ -24,7 +20,6 @@ class AIClient(BaseClient):
     Endpoints
     ---------
     - ``POST /api/v1/evaluation/evaluate-resume`` — resume scoring
-    - ``POST /api/v1/evaluation/generate-review-questions`` — post-interview rating questions
     - ``POST /api/v1/chat/stream`` — streaming chat (async)
     """
 
@@ -50,23 +45,6 @@ class AIClient(BaseClient):
         )
         response = self._post("api/v1/evaluation/evaluate-resume", json_data=request.model_dump())
         return AIEvaluationResponse.model_validate(response.json())
-
-    # ── review questions (sync) ──────────────────────────────────
-
-    def generate_review_questions(
-        self,
-        transcription: str | None = None,
-        jd_details: str | None = None,
-    ) -> GenerateReviewQuestionsResponse:
-        request = GenerateReviewQuestionsRequest(
-            transcription=transcription,
-            jd_details=jd_details,
-        )
-        response = self._post(
-            "api/v1/evaluation/generate-review-questions",
-            json_data=request.model_dump(exclude_none=True),
-        )
-        return GenerateReviewQuestionsResponse.model_validate(response.json())
 
     # ── streaming chat (async) ───────────────────────────────────
 

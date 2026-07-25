@@ -79,7 +79,6 @@ def reschedule_interview(
     return svc.reschedule_interview(
         interview_id=interview_id,
         new_slot_id=uuid.UUID(data.slot_id),
-        interviewer_ids=data.interviewer_ids,
     )
 
 @router.patch("/scheduling/{interview_id}/cancel", response_model=CancelInterviewResponse)

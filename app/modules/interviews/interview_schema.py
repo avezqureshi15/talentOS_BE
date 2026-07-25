@@ -64,7 +64,6 @@ class ScheduleInterviewResponse(BaseModel):
 
 class RescheduleInterviewRequest(BaseModel):
     slot_id: str
-    interviewer_ids: list[int] | None = None
 
 
 class BookInterviewRequest(BaseModel):

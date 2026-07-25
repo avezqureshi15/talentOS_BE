@@ -82,13 +82,6 @@ class Settings(BaseSettings):
     FORM_ESCALATION_HOURS: float = 3
     FORM_EXPIRY_HOURS: float = 24
 
-    # MeetMind integration (schedule + signed transcript webhook)
-    MEETMIND_BASE_URL: str = ""
-    MEETMIND_API_TOKEN: str = ""
-    MEETMIND_WEBHOOK_SECRET: str = ""
-    MEETMIND_EXTERNAL: str = "webhyre.ai"
-    INTERVIEW_FALLBACK_SECONDS: int = 60
-
     @model_validator(mode="after")
     def _apply_env_timing(self) -> "Settings":
         timing = _DEV_TIMING if self.APP_ENV == "development" else _PROD_TIMING
