@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, Uuid
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.constants import EvaluationStatus
@@ -33,6 +34,10 @@ class Candidate(Base):
     scheduled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     willing_to_relocate: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
+    candidate_type: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="REGULAR"
+    )
+
     status: Mapped[str] = mapped_column(
         String(30), nullable=False, default=EvaluationStatus.QUEUED.value, index=True
     )
@@ -59,3 +64,5 @@ class Candidate(Base):
 
     current_round_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), ForeignKey("rounds.id"), nullable=True)
     final_verdict: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    reviews: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    review_verdict: Mapped[str | None] = mapped_column(String(50), nullable=True)

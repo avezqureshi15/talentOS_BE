@@ -1,8 +1,10 @@
 from uuid import UUID
 
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.common.clients import SupabaseClient
+from app.common.exceptions.application_exception import ApplicationNotFoundException
 from app.common.exceptions.base_exception import BaseAppException
 from app.core.constants import EvaluationStatus
 from app.core.logger import get_logger
@@ -12,6 +14,7 @@ from app.modules.applications.application_schema import ApplicationCreate
 from app.modules.applications.application_state_service import ApplicationStateService
 from app.modules.evaluations.evaluation_schema import EvaluationResponse, WebhookRecord
 from app.modules.events.event_repository import EventRepository
+from app.modules.rounds.round_model import Round
 
 logger = get_logger(__name__)
 
@@ -53,6 +56,8 @@ class ApplicationService:
         offset: int = 0,
         exclude_finalized: bool = False,
         ai: bool = False,
+        search: str | None = None,
+        reject_reason: str | None = None,
     ) -> dict:
         if not self.repo:
             logger.warning("No DB session")
@@ -89,6 +94,8 @@ class ApplicationService:
             limit=limit,
             offset=offset,
             exclude_finalized=exclude_finalized,
+            search=search,
+            reject_reason=reject_reason,
         )
         events_map = self.repo.build_events_map(items, ai=ai) if ai else {}
         return {
@@ -100,6 +107,7 @@ class ApplicationService:
     def get_finalized_candidates_paginated(
         self,
         verdict: str | None = None,
+        job_id: str | None = None,
         limit: int = 20,
         offset: int = 0,
     ) -> dict:
@@ -107,6 +115,7 @@ class ApplicationService:
             return {"data": [], "total": 0, "limit": limit, "offset": offset}
         items, total = self.repo.get_finalized_candidates(
             verdict=verdict.upper() if verdict else None,
+            job_id=job_id,
             limit=limit,
             offset=offset,
         )
@@ -147,6 +156,20 @@ class ApplicationService:
     def update_candidate_status(self, candidate_id: int, new_status: str) -> EvaluationResponse:
         if not self.state_svc: raise ValueError("State service not available")
         return self.state_svc.update_candidate_status(candidate_id, new_status)
+
+    def move_to_next_round(self, candidate_id: int) -> EvaluationResponse:
+        candidate = self.repo.get_by_candidate_id(candidate_id)
+        if not candidate:
+            raise ApplicationNotFoundException(candidate_id)
+        if candidate.current_round_id:
+            current_round = self.db.query(Round).filter(Round.id == candidate.current_round_id).first()
+            if current_round and current_round.round_verdict is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Current round verdict must be filled before moving to the next round",
+                )
+        return self.update_candidate_status(candidate_id, "MOVE_TO_NEXT_ROUND")
+
     def create_application(self, data: ApplicationCreate) -> dict:
         logger.info("Creating application: job_id=%s | name=%s", data.job_id, data.name)
         job_title = self.supabase.fetch_job_title(data.job_id)

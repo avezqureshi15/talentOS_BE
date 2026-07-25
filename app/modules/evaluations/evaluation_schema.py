@@ -24,6 +24,7 @@ class WebhookRecord(BaseModel):
     how_did_you_hear: str | None = Field(None)
     linkedin_url: str | None = Field(None)
     willing_to_relocate: bool = False
+    candidate_type: str = "REGULAR"
     status: str | None = Field(None)
     created_at: datetime | None = Field(None)
 
@@ -74,6 +75,8 @@ class EvaluationResponse(BaseModel):
     error_reason: str | None
     current_round_id: str | None
     final_verdict: str | None
+    reviews: dict | None = None
+    review_verdict: str | None = None
     created_at: datetime
     updated_at: datetime
     evaluated_at: datetime | None

@@ -1,7 +1,9 @@
+from sqlalchemy import Text, cast, or_
 from sqlalchemy.orm import Session
 
 from app.modules.evaluations.evaluation_model import Candidate
 from app.modules.reviews.review_model import Review
+from app.modules.rounds.round_model import Round
 
 
 def get_candidates_by_job_paginated(
@@ -17,11 +19,18 @@ def get_candidates_by_job_paginated(
     limit: int = 20,
     offset: int = 0,
     exclude_finalized: bool = False,
+    search: str | None = None,
+    reject_reason: str | None = None,
 ) -> tuple[list[Candidate], int]:
     query = db.query(Candidate)
 
     if job_id:
         query = query.filter(Candidate.external_job_id == job_id)
+    if search:
+        like = f"%{search}%"
+        query = query.filter(
+            Candidate.candidate_name.ilike(like) | Candidate.candidate_email.ilike(like)
+        )
     if status:
         query = query.filter(Candidate.status == status)
     if schedule == "scheduled":
@@ -39,9 +48,26 @@ def get_candidates_by_job_paginated(
     if exclude_finalized:
         query = query.filter(Candidate.final_verdict.is_(None))
     if round_verdict:
-        from app.modules.rounds.round_model import Round
-        query = query.join(Round, Candidate.current_round_id == Round.id)
-        query = query.filter(Round.round_verdict == round_verdict)
+        query = query.outerjoin(Round, Candidate.current_round_id == Round.id)
+        query = query.filter(
+            or_(
+                Candidate.review_verdict == round_verdict,
+                Round.round_verdict == round_verdict,
+            )
+        )
+
+    if reject_reason:
+        _KEY_MAP = {"BUDGET": "CTC"}
+        raw_reasons = [r.strip().upper() for r in reject_reason.split(",")]
+        mapped_reasons = [_KEY_MAP.get(r, r) for r in raw_reasons]
+        quoted_reasons = [f'"{r}"' for r in raw_reasons]
+        query = query.filter(Candidate.reviews.isnot(None))
+        query = query.filter(
+            or_(
+                *[Candidate.reviews[r].astext.isnot(None) for r in mapped_reasons],
+                *[cast(Candidate.reviews["rejection_details"], Text).contains(q) for q in quoted_reasons],
+            )
+        )
 
     total = query.count()
     items = (
@@ -143,12 +169,15 @@ def build_active_interview_map(db: Session, candidates: list[Candidate]) -> dict
 def get_finalized_candidates(
     db: Session,
     verdict: str | None = None,
+    job_id: str | None = None,
     limit: int = 20,
     offset: int = 0,
 ) -> tuple[list[Candidate], int]:
     query = db.query(Candidate).filter(Candidate.final_verdict.isnot(None))
     if verdict:
         query = query.filter(Candidate.final_verdict == verdict)
+    if job_id:
+        query = query.filter(Candidate.external_job_id == job_id)
     total = query.count()
     items = query.order_by(Candidate.evaluated_at.desc().nullslast()).offset(offset).limit(limit).all()
     return items, total

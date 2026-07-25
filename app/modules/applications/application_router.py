@@ -17,6 +17,7 @@ router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/applications", tags=["appli
 
 @router.get("/final-verdicts", response_model=PaginatedEvaluatedCandidatesResponse)
 def get_finalized_candidates(
+    job_id: str | None = Query(default=None, description="Filter by job ID"),
     candidate_status: str | None = Query(default=None, description="Filter by final verdict (selected, rejected)"),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
@@ -25,6 +26,7 @@ def get_finalized_candidates(
     service = ApplicationService(db)
     return service.get_finalized_candidates_paginated(
         verdict=candidate_status,
+        job_id=job_id,
         limit=limit,
         offset=offset,
     )
@@ -44,6 +46,8 @@ def get_all_applications(
     final_verdict: str | None = Query(default=None, description='Set to "false" to exclude finalized candidates'),
     round_verdict: str | None = Query(default=None, description="Filter by round verdict (selected, rejected)"),
     ai: bool = Query(default=False, description="If true, omit cover_letter from response"),
+    q: str | None = Query(default=None, description="Search candidates by name or email"),
+    reject_reason: str | None = Query(default=None, description="Comma-separated rejection reasons (yoe,location,budget,notice_period)"),
     db: Session = Depends(get_db),
 ):
     service = ApplicationService(db)
@@ -60,6 +64,8 @@ def get_all_applications(
         offset=offset,
         exclude_finalized=final_verdict == "false",
         ai=ai,
+        search=q,
+        reject_reason=reject_reason,
     )
 
 
@@ -90,3 +96,9 @@ def update_final_verdict(
 def create_application(data: ApplicationCreate):
     service = ApplicationService()
     return service.create_application(data)
+
+
+@router.post("/candidates/{candidate_id}/move-to-next-round", response_model=EvaluationResponse)
+def move_candidate_to_next_round(candidate_id: int, db: Session = Depends(get_db)):
+    service = ApplicationService(db)
+    return service.move_to_next_round(candidate_id)

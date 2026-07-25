@@ -10,11 +10,10 @@ from app.modules.applications.application_repository_queries import (
     get_candidates_by_job_paginated as _get_candidates_by_job_paginated,
     get_finalized_candidates as _get_finalized_candidates,
 )
-from app.modules.applications.application_response import build_candidate_response, get_ai_review
+from app.modules.applications.application_response import build_candidate_response
 from app.modules.evaluations.evaluation_model import Candidate
 from app.modules.events.event_repository import EventRepository
 from app.modules.hiring_requests.hiring_request_model import HiringRequest
-from app.modules.reviews.review_model import Review
 
 logger = get_logger(__name__)
 
@@ -86,7 +85,6 @@ class ApplicationRepository:
         return result
 
     def to_candidate_dict(self, candidate: Candidate, ai: bool = False, events_map: dict[int, list[dict]] | None = None) -> dict:
-        ai_review = get_ai_review(self.db, candidate, self._review_map)
         events = events_map.get(candidate.id) if events_map else None
         active_interview = self._interview_map.get(candidate.id)
         return build_candidate_response(

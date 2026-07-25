@@ -31,6 +31,7 @@ class InterviewQueryRepository:
         search: str | None = None,
         page: int = 1,
         per_page: int = 20,
+        candidate_id: int | None = None,
     ) -> tuple[list[dict], int]:
         now = datetime.now(timezone.utc)
         query = (
@@ -61,6 +62,8 @@ class InterviewQueryRepository:
             .outerjoin(Candidate, Round.candidate_id == Candidate.id)
             .outerjoin(HiringRequest, Round.jd_id == HiringRequest.id)
         )
+        if candidate_id is not None:
+            query = query.filter(Round.candidate_id == candidate_id)
         if status_filter == _CANCELLED:
             query = query.filter(Interview.status == InterviewStatus.CANCELLED.value)
         else:
@@ -87,6 +90,42 @@ class InterviewQueryRepository:
             .all()
         )
         return [self._row_to_item(row, now) for row in rows], total
+
+    def get_by_id(self, interview_id: uuid.UUID) -> dict | None:
+        now = datetime.now(timezone.utc)
+        row = (
+            self.db.query(
+                Interview.id,
+                Interview.status.label("interview_status"),
+                Interview.updated_at.label("cancelled_at"),
+                Slot.start_at,
+                Slot.end_at,
+                Interview.event_id,
+                Interview.meet_link,
+                Round.jd_id,
+                Round.candidate_id,
+                User.id.label("interviewer_user_id"),
+                User.emp_id,
+                User.name.label("interviewer_name"),
+                User.email.label("interviewer_email"),
+                Candidate.candidate_name,
+                Candidate.candidate_email,
+                Candidate.external_application_id,
+                HiringRequest.title.label("position_title"),
+                Round.name.label("round_name"),
+            )
+            .join(Round, Interview.round_id == Round.id)
+            .join(RoundInterviewer, RoundInterviewer.round_id == Round.id)
+            .join(User, RoundInterviewer.employee_id == User.id)
+            .join(Slot, Interview.slot_id == Slot.id)
+            .outerjoin(Candidate, Round.candidate_id == Candidate.id)
+            .outerjoin(HiringRequest, Round.jd_id == HiringRequest.id)
+            .filter(Interview.id == interview_id)
+            .first()
+        )
+        if not row:
+            return None
+        return self._row_to_item(row, now)
 
     def _row_to_item(self, row, now: datetime) -> dict:
         start = row.start_at

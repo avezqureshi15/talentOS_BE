@@ -77,6 +77,7 @@ class EvaluationService:
             cover_letter=record.cover_letter,
             resume_url=record.resume_url,
             willing_to_relocate=record.willing_to_relocate,
+            candidate_type=record.candidate_type,
         )
 
         message = EvaluationMessage(

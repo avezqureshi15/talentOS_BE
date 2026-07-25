@@ -14,7 +14,7 @@ candidates table.
 """
 from sqlalchemy.orm import Session
 
-from app.common.clients import AIClient, AIClientError, ResumeClient, SupabaseClient
+from app.common.clients import AIClient, ClientError, ResumeClient, SupabaseClient
 from app.core.config import settings
 from app.core.constants import EvaluationStatus
 from app.core.logger import get_logger
@@ -107,7 +107,7 @@ class EvaluationProcessor:
                 jd_details=jd_details,
                 custom_evaluation_criteria="",
             )
-        except AIClientError as exc:
+        except ClientError as exc:
             raise TransientEvaluationError(str(exc)) from exc
         except Exception as exc:
             raise TransientEvaluationError(f"AI evaluation failed: {exc}") from exc

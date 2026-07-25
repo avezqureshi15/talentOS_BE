@@ -6,9 +6,12 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.session import get_db
 from app.modules.events.event_service import EventService
+from fastapi.responses import JSONResponse
+
 from app.modules.interviews.interview_schema import (
     BookInterviewRequest,
     CancelInterviewResponse,
+    InterviewListItem,
     InterviewListResponse,
     RescheduleInterviewRequest,
     ScheduleInterviewRequest,
@@ -28,12 +31,24 @@ def list_interviews(
     search: str | None = Query(None),
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
+    candidate_id: int | None = Query(None),
     db: Session = Depends(get_db),
 ):
     service = InterviewService(db)
     return service.list_interviews(
-        status_filter=status_filter, search=search, page=page, per_page=per_page,
+        status_filter=status_filter, search=search, page=page, per_page=per_page, candidate_id=candidate_id,
     )
+
+@router.get("/{interview_id}")
+def get_interview_detail(
+    interview_id: uuid.UUID,
+    db: Session = Depends(get_db),
+):
+    service = InterviewService(db)
+    result = service.get_interview_by_id(interview_id)
+    if not result:
+        return JSONResponse(status_code=404, content={"success": False, "error": "Interview not found"})
+    return {"success": True, "data": result}
 
 @router.post("/schedule", response_model=ScheduleMeetResponse, status_code=status.HTTP_201_CREATED)
 def schedule_meet(

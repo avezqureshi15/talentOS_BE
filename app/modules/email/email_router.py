@@ -22,7 +22,7 @@ def get_email_service() -> EmailService:
     return _email_service
 
 
-router = APIRouter(prefix="/email", tags=["email"])
+router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/email", tags=["email"])
 
 
 @router.post("/send", response_model=SendEmailResponse)

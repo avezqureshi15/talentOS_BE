@@ -52,6 +52,13 @@ class ActiveInterviewSnapshot(BaseModel):
     interviewer_user_id: int | None = None
     interviewer_name: str | None = None
 
+class ComparisonFieldValue(BaseModel):
+    Expected: str
+    Actual: str
+
+class ComparisonField(BaseModel):
+    label: str
+    value: ComparisonFieldValue
 
 class EvaluatedCandidate(BaseModel):
     id: str
@@ -77,6 +84,9 @@ class EvaluatedCandidate(BaseModel):
     scheduled: bool = False
     current_round_id: str | None = None
     final_verdict: str | None = None
+    reviews: dict | None = None
+    review_verdict: str | None = None
+    comparison_fields: list[ComparisonField] = []
     events: list[EventInfo] | None = None
     active_interview: ActiveInterviewSnapshot | None = None
 

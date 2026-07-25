@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from app.common.clients import AIClient, AIClientError, ResumeClient, SupabaseClient
+from app.common.clients import AIClient, ClientError, ResumeClient, SupabaseClient
 from app.core.config import settings
 from app.core.constants import EvaluationStatus
 from app.core.logger import get_logger
@@ -34,6 +34,7 @@ class ApplicationEvaluationService:
             "years_of_experience": record.years_of_experience, "notice_period": record.notice_period,
             "how_did_you_hear": record.how_did_you_hear, "linkedin_url": record.linkedin_url,
             "willing_to_relocate": record.willing_to_relocate,
+            "candidate_type": record.candidate_type,
         }
         result = self._evaluate_single(app_dict)
         return result or {"error": "Evaluation returned no result"}
@@ -60,6 +61,7 @@ class ApplicationEvaluationService:
                 years_of_experience=app.get("years_of_experience"), notice_period=app.get("notice_period"),
                 how_did_you_hear=app.get("how_did_you_hear"), linkedin_url=app.get("linkedin_url"),
                 willing_to_relocate=app.get("willing_to_relocate", False),
+                candidate_type=app.get("candidate_type", "REGULAR"),
             )
             EventService(self.db).create_event(EventCreate(
                 entity_type="CANDIDATE",
@@ -123,7 +125,7 @@ class ApplicationEvaluationService:
         jd_details = self.supabase.fetch_jd_details(job_id)
         try:
             ai_result = self.ai.evaluate_resume(resume_txt=resume_text, jd_details=jd_details, custom_evaluation_criteria="")
-        except AIClientError:
+        except ClientError:
             logger.warning("AI service failed — using mock evaluation")
             ai_result = self._mock_evaluation_fallback(candidate.candidate_name)
         except Exception as exc:
@@ -171,12 +173,11 @@ class ApplicationEvaluationService:
                 "- Notice period exceeds acceptable range"
             ),
             overall_score_percentage=45,
-            rejected_status=["YOE", "LOCATION", "NOTICE_PERIOD"],
-            rejected_reason=(
-                "Candidate has less than the required years of experience, "
-                "is located outside the preferred hiring regions, "
-                "and has a notice period longer than the acceptable limit."
-            ),
+            rejection_details=[
+                {"YOE": {"JD": "5+ yrs", "Candidate": "2 yrs"}},
+                {"LOCATION": {"JD": "India", "Candidate": "Remote, UAE"}},
+                {"NOTICE_PERIOD": {"JD": "15 days", "Candidate": "60 days"}},
+            ],
         )
 
     def _create_initial_review(self, ai_result: AIEvaluationResponse, candidate, job_id: str, verdict: str) -> None:
@@ -196,11 +197,21 @@ class ApplicationEvaluationService:
                     "CTC": {"actual": f"{candidate.current_ctc or '?'} LPA", "expected": "12 LPA"},
                     "LOCATION": {"actual": candidate.location or "?", "expected": "India"},
                     "NOTICE_PERIOD": {"actual": f"{candidate.notice_period or '?'} days", "expected": "15 days"},
-                    "rejected_status": [s for s in ai_result.rejected_status if s != "NONE"],
-                    "rejected_reason": ai_result.rejected_reason,
+                    "rejection_details": ai_result.rejection_details,
                 },
                 verdict=verdict,
             ))
+            candidate.reviews = {
+                "fitscore": ai_result.overall_score_percentage,
+                "summary": ai_result.resume_summary,
+                "summary_md": ai_result.resume_summary,
+                "YOE": {"actual": f"{candidate.years_of_experience or '?'} yrs", "expected": "5 yrs"},
+                "CTC": {"actual": f"{candidate.current_ctc or '?'} LPA", "expected": "12 LPA"},
+                "LOCATION": {"actual": candidate.location or "?", "expected": "India"},
+                "NOTICE_PERIOD": {"actual": f"{candidate.notice_period or '?'} days", "expected": "15 days"},
+                "rejection_details": ai_result.rejection_details,
+            }
+            candidate.review_verdict = verdict
             from app.modules.rounds.round_model import Round
             round_obj = self.db.query(Round).filter(Round.id == round_resp.id).first()
             if round_obj:

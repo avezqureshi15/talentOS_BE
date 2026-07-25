@@ -1,3 +1,5 @@
+import uuid
+
 import os
 
 from googleapiclient.errors import HttpError
@@ -82,6 +84,7 @@ class InterviewService:
         search: str | None = None,
         page: int = 1,
         per_page: int = 20,
+        candidate_id: int | None = None,
     ) -> InterviewListResponse:
         if not self.query_repo:
             return InterviewListResponse(data=InterviewsData(
@@ -90,7 +93,7 @@ class InterviewService:
                 ),
             ))
         items, total = self.query_repo.list_paginated(
-            status_filter=status_filter, search=search, page=page, per_page=per_page,
+            status_filter=status_filter, search=search, page=page, per_page=per_page, candidate_id=candidate_id,
         )
         interviews = [InterviewListItem(**item) for item in items]
         pagination = InterviewQueryRepository.build_pagination(page, per_page, total)
@@ -98,3 +101,11 @@ class InterviewService:
             interviews=interviews,
             pagination=InterviewPagination(**pagination),
         ))
+
+    def get_interview_by_id(self, interview_id: uuid.UUID) -> InterviewListItem | None:
+        if not self.query_repo:
+            return None
+        item = self.query_repo.get_by_id(interview_id)
+        if not item:
+            return None
+        return InterviewListItem(**item)
