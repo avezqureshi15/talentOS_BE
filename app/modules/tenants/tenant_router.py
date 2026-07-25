@@ -5,7 +5,8 @@ from app.core.config import settings
 from app.core.constants import DEFAULT_PAGE_SIZE
 from app.core.logger import get_logger
 from app.db.session import get_db
-from app.modules.auth.auth_dependencies import RequireSuperAdmin
+from app.core.authorization import require_permission
+from app.core.permissions import Permission
 from app.modules.auth.auth_schema import UserInfo
 from app.modules.tenants.tenant_service import TenantService, TenantError
 from app.modules.tenants.tenant_schema import (
@@ -21,7 +22,7 @@ logger = get_logger(__name__)
 router = APIRouter(
     prefix=f"{settings.API_V1_PREFIX}/superadmin/tenants",
     tags=["superadmin-tenants"],
-    dependencies=[Depends(RequireSuperAdmin)],
+    dependencies=[Depends(require_permission(Permission.TENANT_VIEW))],
 )
 
 
@@ -29,7 +30,7 @@ router = APIRouter(
 def create_tenant(
     body: CreateTenantRequest,
     db: Session = Depends(get_db),
-    current_user: UserInfo = Depends(RequireSuperAdmin),
+    current_user: UserInfo = Depends(require_permission(Permission.TENANT_EDIT)),
 ):
     service = TenantService(db)
     try:
@@ -50,7 +51,7 @@ def list_tenants(
     page: int = Query(1, ge=1),
     per_page: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=100),
     db: Session = Depends(get_db),
-    current_user: UserInfo = Depends(RequireSuperAdmin),
+    current_user: UserInfo = Depends(require_permission(Permission.TENANT_VIEW)),
 ):
     service = TenantService(db)
     return service.list_tenants(page=page, per_page=per_page, search=q, status_filter=status)
@@ -60,7 +61,7 @@ def list_tenants(
 def get_tenant(
     tenant_id: int,
     db: Session = Depends(get_db),
-    current_user: UserInfo = Depends(RequireSuperAdmin),
+    current_user: UserInfo = Depends(require_permission(Permission.TENANT_VIEW)),
 ):
     service = TenantService(db)
     try:
@@ -74,7 +75,7 @@ def update_tenant(
     tenant_id: int,
     body: UpdateTenantRequest,
     db: Session = Depends(get_db),
-    current_user: UserInfo = Depends(RequireSuperAdmin),
+    current_user: UserInfo = Depends(require_permission(Permission.TENANT_VIEW)),
 ):
     service = TenantService(db)
     data = body.model_dump(exclude_none=True)
@@ -88,7 +89,7 @@ def update_tenant(
 def delete_tenant(
     tenant_id: int,
     db: Session = Depends(get_db),
-    current_user: UserInfo = Depends(RequireSuperAdmin),
+    current_user: UserInfo = Depends(require_permission(Permission.TENANT_VIEW)),
 ):
     service = TenantService(db)
     try:

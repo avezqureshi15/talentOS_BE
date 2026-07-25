@@ -32,6 +32,7 @@ from app.modules.slots.slot_model import Slot  # noqa: E402, F401
 from app.modules.tenants.tenant_model import Tenant  # noqa: E402, F401
 from app.modules.todo.todo_model import Todo  # noqa: E402, F401
 from app.modules.users.user_model import User  # noqa: E402, F401
+from app.modules.users.permission_model import PermissionModel, RolePermission  # noqa: E402, F401
 
 target_metadata = Base.metadata
 

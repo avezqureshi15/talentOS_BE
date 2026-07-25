@@ -64,6 +64,7 @@ class UserInfo(BaseModel):
     tenant_id: int | None = None
     auth_provider: str
     is_active: bool
+    permissions: list[str] = []
 
     model_config = ConfigDict(from_attributes=True)
 

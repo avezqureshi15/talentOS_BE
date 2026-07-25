@@ -9,7 +9,8 @@ from app.core.constants import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 from app.core.logger import get_logger
 from app.core.security import hash_password
 from app.db.session import get_db
-from app.modules.auth.auth_dependencies import RequireAdmin
+from app.core.authorization import require_permission
+from app.core.permissions import Permission
 from app.modules.auth.auth_schema import UserInfo
 from app.modules.auth.invite_model import TenantInvite
 from app.modules.auth.invite_schema import CreateInviteRequest, InviteResponse, PaginatedInviteResponse, ResendInviteRequest
@@ -26,7 +27,7 @@ logger = get_logger(__name__)
 router = APIRouter(
     prefix=f"{settings.API_V1_PREFIX}/admin/users",
     tags=["admin-users"],
-    dependencies=[Depends(RequireAdmin)],
+    dependencies=[Depends(require_permission(Permission.USER_MANAGE))],
 )
 
 
@@ -60,7 +61,7 @@ def list_users(
     page: int = Query(1, ge=1),
     per_page: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
     db: Session = Depends(get_db),
-    current_user: UserInfo = Depends(RequireAdmin),
+    current_user: UserInfo = Depends(require_permission(Permission.USER_MANAGE)),
 ):
     tid = _resolve_tenant(current_user, tenant_id)
     query = db.query(User).filter(User.tenant_id == tid)
@@ -79,7 +80,7 @@ def list_users(
 def create_user(
     body: CreateUserRequest,
     db: Session = Depends(get_db),
-    current_user: UserInfo = Depends(RequireAdmin),
+    current_user: UserInfo = Depends(require_permission(Permission.USER_MANAGE)),
 ):
     tid = _resolve_tenant(current_user, body.tenant_id)
 
@@ -120,7 +121,7 @@ def update_user(
     user_id: int,
     body: UpdateUserRequest,
     db: Session = Depends(get_db),
-    current_user: UserInfo = Depends(RequireAdmin),
+    current_user: UserInfo = Depends(require_permission(Permission.USER_MANAGE)),
 ):
     tid = _resolve_tenant(current_user, body.tenant_id)
     user = db.query(User).filter(User.id == user_id, User.tenant_id == tid).first()
@@ -147,7 +148,7 @@ def deactivate_user(
     user_id: int,
     tenant_id: int | None = Query(None, description="Required for superadmin — scopes to tenant"),
     db: Session = Depends(get_db),
-    current_user: UserInfo = Depends(RequireAdmin),
+    current_user: UserInfo = Depends(require_permission(Permission.USER_MANAGE)),
 ):
     tid = _resolve_tenant(current_user, tenant_id)
     user = db.query(User).filter(User.id == user_id, User.tenant_id == tid).first()
@@ -167,7 +168,7 @@ def deactivate_user(
 def create_invite(
     body: CreateInviteRequest,
     db: Session = Depends(get_db),
-    current_user: UserInfo = Depends(RequireAdmin),
+    current_user: UserInfo = Depends(require_permission(Permission.USER_MANAGE)),
 ):
     tid = _resolve_tenant(current_user, body.tenant_id)
 
@@ -215,7 +216,7 @@ def list_invites(
     page: int = Query(1, ge=1),
     per_page: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
     db: Session = Depends(get_db),
-    current_user: UserInfo = Depends(RequireAdmin),
+    current_user: UserInfo = Depends(require_permission(Permission.USER_MANAGE)),
 ):
     tid = _resolve_tenant(current_user, tenant_id)
     query = db.query(TenantInvite).filter(TenantInvite.tenant_id == tid)
@@ -241,7 +242,7 @@ def list_invites(
 def resend_invite(
     body: ResendInviteRequest,
     db: Session = Depends(get_db),
-    current_user: UserInfo = Depends(RequireAdmin),
+    current_user: UserInfo = Depends(require_permission(Permission.USER_MANAGE)),
 ):
     tid = _resolve_tenant(current_user, body.tenant_id)
 
@@ -275,7 +276,7 @@ def revoke_invite(
     invite_id: int,
     tenant_id: int | None = Query(None, description="Required for superadmin — scopes to tenant"),
     db: Session = Depends(get_db),
-    current_user: UserInfo = Depends(RequireAdmin),
+    current_user: UserInfo = Depends(require_permission(Permission.USER_MANAGE)),
 ):
     tid = _resolve_tenant(current_user, tenant_id)
     invite = db.query(TenantInvite).filter(

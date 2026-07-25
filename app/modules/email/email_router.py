@@ -3,7 +3,8 @@ from app.common.schemas.email_schema import SendEmailRequest, SendEmailResponse
 from app.common.services.email_service import EmailService
 from app.core.config import settings
 from app.core.logger import get_logger
-from app.modules.auth.auth_dependencies import RequireHr
+from app.core.authorization import require_permission
+from app.core.permissions import Permission
 
 logger = get_logger(__name__)
 
@@ -23,7 +24,7 @@ def get_email_service() -> EmailService:
     return _email_service
 
 
-router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/email", tags=["email"], dependencies=[Depends(RequireHr)])
+router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/email", tags=["email"], dependencies=[Depends(require_permission(Permission.APPLICATION_VIEW))])
 
 
 @router.post("/send", response_model=SendEmailResponse)

@@ -15,6 +15,7 @@ from app.common.exceptions.base_exception import BaseAppException
 from app.modules.auth.auth_repository import AuthRepository
 from app.modules.auth.auth_schema import UserInfo
 from app.modules.tenants.tenant_model import Tenant
+from app.modules.users.permission_service import PermissionService
 
 logger = get_logger(__name__)
 
@@ -34,6 +35,8 @@ class AuthService:
         self.db = db
 
     def _build_user_info(self, user) -> UserInfo:
+        perm_service = PermissionService(self.db)
+        permissions = perm_service.get_permissions_for_role(user.role)
         return UserInfo(
             id=user.id,
             email=user.email,
@@ -42,6 +45,7 @@ class AuthService:
             tenant_id=user.tenant_id,
             auth_provider=user.auth_provider,
             is_active=user.is_active,
+            permissions=permissions,
         )
 
     # ── Google token verification ──────────────────────────────────────────
@@ -259,7 +263,7 @@ class AuthService:
 
     # ── JWT token management ──────────────────────────────────────────────
 
-    def _create_access_token(self, user_id: int, user_role: str = "hr", user_tenant_id: int | None = None, auth_provider: str = "google") -> tuple[str, int]:
+    def _create_access_token(self, user_id: int, user_role: str = "hr", user_tenant_id: int | None = None, auth_provider: str = "google", permissions: list[str] | None = None) -> tuple[str, int]:
         expires_in = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
         expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
         payload = {
@@ -267,6 +271,7 @@ class AuthService:
             "role": user_role,
             "tenant_id": user_tenant_id,
             "auth_provider": auth_provider,
+            "perms": permissions or [],
             "exp": expire,
             "type": "access",
         }
@@ -282,11 +287,14 @@ class AuthService:
 
     def create_tokens(self, user_id: int) -> tuple[str, str, int]:
         user = self.repo.get_user_by_id(user_id)
+        perm_service = PermissionService(self.db)
+        permissions = perm_service.get_permissions_for_role(user.role)
         access_token, expires_in = self._create_access_token(
             user_id,
             user_role=user.role,
             user_tenant_id=user.tenant_id,
             auth_provider=user.auth_provider,
+            permissions=permissions,
         )
         refresh_token = self._create_refresh_token(user_id)
         return access_token, refresh_token, expires_in
@@ -297,11 +305,14 @@ class AuthService:
         if not record:
             raise AuthError("Invalid or expired refresh token")
         user = self.repo.get_user_by_id(record.user_id)
+        perm_service = PermissionService(self.db)
+        permissions = perm_service.get_permissions_for_role(user.role if user else "hr")
         access_token, expires_in = self._create_access_token(
             record.user_id,
             user_role=user.role if user else "hr",
             user_tenant_id=user.tenant_id if user else None,
             auth_provider=user.auth_provider if user else "google",
+            permissions=permissions,
         )
         return access_token, expires_in
 
@@ -322,4 +333,8 @@ class AuthService:
         if not user:
             raise AuthError("User not found")
 
-        return self._build_user_info(user)
+        user_info = self._build_user_info(user)
+        jwt_perms = payload.get("perms", [])
+        if jwt_perms:
+            user_info.permissions = jwt_perms
+        return user_info
