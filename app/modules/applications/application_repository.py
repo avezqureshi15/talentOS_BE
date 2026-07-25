@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 from app.core.logger import get_logger
 from app.modules.applications import application_repository_mutations as _mut
 from app.modules.applications.application_repository_queries import (
+    build_active_interview_map,
+    build_review_map,
     get_candidates_by_job_paginated as _get_candidates_by_job_paginated,
     get_finalized_candidates as _get_finalized_candidates,
 )
@@ -19,6 +21,8 @@ logger = get_logger(__name__)
 class ApplicationRepository:
     def __init__(self, db: Session):
         self.db = db
+        self._review_map: dict[str, Review] = {}
+        self._interview_map: dict[int, dict] = {}
 
     def resolve_external_job_id(self, job_id: str) -> str | None:
         try:
@@ -52,7 +56,10 @@ class ApplicationRepository:
         return query.order_by(Candidate.fit_score.desc().nullslast()).all()
 
     def get_candidates_by_job_paginated(self, **kwargs) -> tuple[list[Candidate], int]:
-        return _get_candidates_by_job_paginated(self.db, **kwargs)
+        items, total = _get_candidates_by_job_paginated(self.db, **kwargs)
+        self._review_map = build_review_map(self.db, items)
+        self._interview_map = build_active_interview_map(self.db, items)
+        return items, total
 
     def get_finalized_candidates(self, **kwargs) -> tuple[list[Candidate], int]:
         return _get_finalized_candidates(self.db, **kwargs)
@@ -79,7 +86,14 @@ class ApplicationRepository:
 
     def to_candidate_dict(self, candidate: Candidate, ai: bool = False, events_map: dict[int, list[dict]] | None = None) -> dict:
         events = events_map.get(candidate.id) if events_map else None
-        return build_candidate_response(candidate, hide_cover_letter=ai, events=events)
+        active_interview = self._interview_map.get(candidate.id)
+        return build_candidate_response(
+            candidate,
+            ai_review,
+            hide_cover_letter=ai,
+            events=events,
+            active_interview=active_interview,
+        )
 
     def create_queued_candidate(self, application_id: str, job_id: str, **kwargs) -> Candidate:
         return _mut.create_queued_candidate(self.db, application_id, job_id, **kwargs)

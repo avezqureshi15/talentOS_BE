@@ -18,6 +18,8 @@ logger = get_logger(__name__)
 class InterviewRepositoryProtocol(Protocol):
     def create(self, interview: Interview) -> Interview: ...
     def get_by_id(self, interview_id: uuid.UUID) -> Interview | None: ...
+    def get_by_meet_link(self, meet_url: str) -> Interview | None: ...
+    def get_by_round_id(self, round_id: uuid.UUID) -> Interview | None: ...
     def update_status(self, interview_id: uuid.UUID, status: str) -> None: ...
     def update_slot(self, interview_id: uuid.UUID, slot_id: uuid.UUID) -> None: ...
     def get_round_by_id(self, round_id: uuid.UUID) -> Round | None: ...
@@ -26,9 +28,18 @@ class InterviewRepositoryProtocol(Protocol):
     def get_hiring_request_by_id(self, hr_id: uuid.UUID) -> HiringRequest | None: ...
     def get_interviewer_emails_for_round(self, round_id: uuid.UUID) -> list[str]: ...
     def update_slot_status(self, slot_id: uuid.UUID | None, status: str) -> None: ...
+    def replace_round_interviewers(self, round_id: uuid.UUID, employee_ids: list[int]) -> None: ...
+    def update_round_slot(self, round_id: uuid.UUID, slot_id: uuid.UUID) -> None: ...
     def create_round(self, name: str, candidate_id: int, jd_id: uuid.UUID, slot_id: uuid.UUID) -> Round: ...
     def create_round_interviewer(self, round_id: uuid.UUID, employee_id: int) -> RoundInterviewer: ...
     def update_candidate_status(self, candidate_id: int, status: str) -> None: ...
+    def save_review_questions(
+        self,
+        interview_id: uuid.UUID,
+        transcript_text: str | None,
+        review_questions: dict | None,
+        source: str | None,
+    ) -> None: ...
 
 
 class InterviewRepository:
@@ -44,6 +55,48 @@ class InterviewRepository:
     def get_by_id(self, interview_id: uuid.UUID) -> Interview | None:
         logger.debug("Fetching interview: id=%s", interview_id)
         return self.db.query(Interview).filter(Interview.id == interview_id).first()
+
+    def get_by_meet_link(self, meet_url: str) -> Interview | None:
+        normalized = (meet_url or "").strip().rstrip("/")
+        if not normalized:
+            return None
+        interview = (
+            self.db.query(Interview)
+            .filter(Interview.meet_link == normalized)
+            .order_by(Interview.created_at.desc())
+            .first()
+        )
+        if interview:
+            return interview
+        # Tolerate stored link with/without trailing slash
+        return (
+            self.db.query(Interview)
+            .filter(Interview.meet_link == f"{normalized}/")
+            .order_by(Interview.created_at.desc())
+            .first()
+        )
+
+    def get_by_round_id(self, round_id: uuid.UUID) -> Interview | None:
+        """Latest non-cancelled interview for the round; else latest overall."""
+        from app.core.constants import InterviewStatus
+
+        non_cancelled = (
+            self.db.query(Interview)
+            .filter(
+                Interview.round_id == round_id,
+                Interview.status != InterviewStatus.CANCELLED.value,
+            )
+            .order_by(Interview.created_at.desc())
+            .first()
+        )
+        if non_cancelled:
+            return non_cancelled
+        return (
+            self.db.query(Interview)
+            .filter(Interview.round_id == round_id)
+            .order_by(Interview.created_at.desc())
+            .first()
+        )
 
     def update_status(self, interview_id: uuid.UUID, status: str) -> None:
         logger.info("Updating interview status: id=%s | status=%s", interview_id, status)
@@ -79,6 +132,24 @@ class InterviewRepository:
             self.db.query(Slot).filter(Slot.id == slot_id).update({"status": status})
             self.db.flush()
 
+    def replace_round_interviewers(self, round_id: uuid.UUID, employee_ids: list[int]) -> None:
+        logger.info(
+            "Replacing round interviewers: round_id=%s | count=%s",
+            round_id,
+            len(employee_ids),
+        )
+        self.db.query(RoundInterviewer).filter(RoundInterviewer.round_id == round_id).delete(
+            synchronize_session=False
+        )
+        for employee_id in employee_ids:
+            self.db.add(RoundInterviewer(round_id=round_id, employee_id=employee_id))
+        self.db.flush()
+
+    def update_round_slot(self, round_id: uuid.UUID, slot_id: uuid.UUID) -> None:
+        logger.info("Updating round slot: round_id=%s | slot_id=%s", round_id, slot_id)
+        self.db.query(Round).filter(Round.id == round_id).update({"slot_id": slot_id})
+        self.db.flush()
+
     def create_round(self, name: str, candidate_id: int, jd_id: uuid.UUID, slot_id: uuid.UUID) -> Round:
         r = Round(name=name, candidate_id=candidate_id, jd_id=jd_id, slot_id=slot_id)
         self.db.add(r)
@@ -94,4 +165,25 @@ class InterviewRepository:
     def update_candidate_status(self, candidate_id: int, status: str) -> None:
         logger.info("Updating candidate status: id=%s | status=%s", candidate_id, status)
         self.db.query(Candidate).filter(Candidate.id == candidate_id).update({"status": status})
+        self.db.flush()
+
+    def save_review_questions(
+        self,
+        interview_id: uuid.UUID,
+        transcript_text: str | None,
+        review_questions: dict | None,
+        source: str | None,
+    ) -> None:
+        logger.info(
+            "Saving review questions | interview_id=%s source=%s",
+            interview_id,
+            source,
+        )
+        self.db.query(Interview).filter(Interview.id == interview_id).update(
+            {
+                "transcript_text": transcript_text,
+                "review_questions": review_questions,
+                "review_questions_source": source,
+            }
+        )
         self.db.flush()

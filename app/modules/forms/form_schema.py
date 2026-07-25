@@ -3,6 +3,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.common.schemas.review_questions import ReviewQuestionsPayload
+
 
 class AskFormRequest(BaseModel):
     emp_ids: list[str] = Field(..., min_length=1)
@@ -29,6 +31,7 @@ class FormValidateResponse(BaseModel):
     type: str | None = None
     round_id: UUID | None = None
     candidate_id: int | None = None
+    review_questions: ReviewQuestionsPayload | None = None
 
 
 class PendingMailTask(BaseModel):
