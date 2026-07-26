@@ -34,9 +34,8 @@ class Settings(BaseSettings):
 
     # Kafka / Redpanda
     KAFKA_BOOTSTRAP_SERVERS: str = "localhost:9092"
-    KAFKA_TOPIC_EVALUATION: str = "resume.evaluation.queue"
-    KAFKA_TOPIC_EVALUATION_DLQ: str = "resume.evaluation.dlq"
-    KAFKA_CONSUMER_GROUP: str = "resume-evaluators"
+    KAFKA_TOPIC_EVALUATION_ASYNC: str = "resume.evaluation.async"
+    KAFKA_TOPIC_EVALUATION_ASYNC_DLQ: str = "resume.evaluation.async.dlq"
     KAFKA_EVALUATION_PARTITIONS: int = 6
 
     # talentOS_AI resume evaluation service

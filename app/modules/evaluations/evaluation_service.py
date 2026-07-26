@@ -1,5 +1,4 @@
 import hmac
-from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
@@ -13,7 +12,7 @@ from app.common.exceptions.evaluation_exception import (
 )
 from app.modules.evaluations.evaluation_repository import EvaluationRepository
 from app.modules.evaluations.evaluation_schema import (
-    EvaluationMessage,
+    AsyncEvaluationMessage,
     EvaluationResponse,
     IngestResponse,
     SupabaseWebhookPayload,
@@ -43,8 +42,8 @@ class EvaluationService:
             logger.error("Webhook secret mismatch — rejecting request")
             raise WebhookUnauthorizedException()
 
-    def ingest(self, payload: SupabaseWebhookPayload) -> IngestResponse:
-        """Validate, deduplicate, persist QUEUED, and publish to Kafka."""
+    def ingest_async(self, payload: SupabaseWebhookPayload) -> IngestResponse:
+        """Validate, deduplicate, persist QUEUED, and publish to Kafka for async evaluation."""
         if payload.type != _EXPECTED_EVENT or payload.table != _EXPECTED_TABLE:
             raise WebhookInvalidPayloadException(
                 f"Expected {_EXPECTED_EVENT} on {_EXPECTED_TABLE}, got {payload.type} on {payload.table}"
@@ -55,9 +54,8 @@ class EvaluationService:
         if not record.job_id:
             raise WebhookInvalidPayloadException("Missing job_id in webhook record")
 
-        logger.info("Ingesting application: application_id=%s | job_id=%s", application_id, record.job_id)
+        logger.info("Ingesting async evaluation: application_id=%s | job_id=%s", application_id, record.job_id)
 
-        # Idempotency — Supabase webhooks are at-least-once.
         existing = self.repository.get_by_application_id(application_id)
         if existing is not None:
             logger.info("Duplicate application ignored: application_id=%s", application_id)
@@ -67,8 +65,7 @@ class EvaluationService:
                 detail="Application already ingested",
             )
 
-        # Persist QUEUED first — durable truth even if the publish fails.
-        evaluation = self.repository.create_queued(
+        self.repository.create_queued(
             application_id=application_id,
             job_id=str(record.job_id),
             candidate_name=record.name,
@@ -76,35 +73,47 @@ class EvaluationService:
             candidate_phone=record.phone,
             cover_letter=record.cover_letter,
             resume_url=record.resume_url,
+            current_ctc=record.current_ctc,
+            expected_ctc=record.expected_ctc,
+            location=record.location,
+            years_of_experience=record.years_of_experience,
+            notice_period=record.notice_period,
+            how_did_you_hear=record.how_did_you_hear,
+            linkedin_url=record.linkedin_url,
             willing_to_relocate=record.willing_to_relocate,
             candidate_type=record.candidate_type,
         )
 
-        message = EvaluationMessage(
+        message = AsyncEvaluationMessage(
             application_id=application_id,
             job_id=str(record.job_id),
-            resume_url=record.resume_url,
             candidate_name=record.name,
             candidate_email=record.email,
-            enqueued_at=datetime.now(timezone.utc).isoformat(),
+            candidate_phone=record.phone,
+            cover_letter=record.cover_letter,
+            resume_url=record.resume_url,
+            current_ctc=record.current_ctc,
+            expected_ctc=record.expected_ctc,
+            location=record.location,
+            years_of_experience=record.years_of_experience,
+            notice_period=record.notice_period,
+            how_did_you_hear=record.how_did_you_hear,
+            linkedin_url=record.linkedin_url,
+            willing_to_relocate=record.willing_to_relocate,
+            candidate_type=record.candidate_type,
         )
 
         try:
-            # Key by application_id (not job_id) so a burst of applications for a
-            # single newly-posted job is spread evenly across all partitions and
-            # processed in parallel by every worker, instead of serialising on one.
             publish(
-                topic=settings.KAFKA_TOPIC_EVALUATION,
+                topic=settings.KAFKA_TOPIC_EVALUATION_ASYNC,
                 key=application_id,
                 value=message.model_dump_json(),
             )
-        except Exception as exc:  # noqa: BLE001
-            # Row stays QUEUED so a webhook re-delivery (or a manual replay)
-            # can re-publish it without creating a duplicate.
+        except Exception as exc:
             logger.error("Failed to publish to Kafka: application_id=%s | %s", application_id, str(exc))
             raise QueuePublishException() from exc
 
-        logger.info("Application queued: application_id=%s", application_id)
+        logger.info("Application queued for async evaluation: application_id=%s", application_id)
         return IngestResponse(status="queued", application_id=application_id)
 
     def get_by_job(self, job_id: str, status: str | None = None) -> list[EvaluationResponse]:

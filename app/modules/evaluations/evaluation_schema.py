@@ -60,6 +60,31 @@ class EvaluationMessage(BaseModel):
     enqueued_at: str
 
 
+class AsyncEvaluationMessage(BaseModel):
+    """Payload for the async (Kafka) evaluation pipeline.
+
+    Carries all fields needed for full evaluation including downstream
+    artifact creation (round, review, events) — matching the sync path.
+    """
+
+    application_id: str
+    job_id: str
+    candidate_name: str | None = None
+    candidate_email: str | None = None
+    candidate_phone: str | None = None
+    cover_letter: str | None = None
+    resume_url: str | None = None
+    current_ctc: str | None = None
+    expected_ctc: str | None = None
+    location: str | None = None
+    years_of_experience: str | None = None
+    notice_period: str | None = None
+    how_did_you_hear: str | None = None
+    linkedin_url: str | None = None
+    willing_to_relocate: bool = False
+    candidate_type: str = "REGULAR"
+
+
 class EvaluationResponse(BaseModel):
     id: int
     application_id: Annotated[str, Field(validation_alias="external_application_id")]

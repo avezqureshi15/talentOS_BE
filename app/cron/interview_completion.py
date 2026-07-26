@@ -1,8 +1,10 @@
 import uuid
 from datetime import datetime, timezone
 
+from app.common.exceptions.cron_exception import CronTransientError
 from app.core.constants import EvaluationStatus, InterviewStatus
 from app.core.logger import get_logger
+from app.cron.retry import with_cron_retry
 from app.db.session import SessionLocal
 from app.modules.events.event_schema import EventCreate
 from app.modules.events.event_service import EventService
@@ -16,7 +18,8 @@ from app.modules.evaluations.evaluation_model import Candidate
 logger = get_logger(__name__)
 
 
-def complete_interview(interview_id: str) -> None:
+def _do_complete_interview(interview_id: str) -> None:
+    """Actual business logic — extracted so retry can wrap it cleanly."""
     started = datetime.now(timezone.utc)
     logger.info("Interview completion job started | interview_id=%s", interview_id)
     db = SessionLocal()
@@ -99,3 +102,19 @@ def complete_interview(interview_id: str) -> None:
         raise
     finally:
         db.close()
+
+
+def complete_interview(interview_id: str) -> None:
+    """Entry point called by APScheduler.
+
+    Retries transient errors up to 3 times, then persists to
+    ``failed_cron_jobs`` if all attempts fail.
+    """
+    with_cron_retry(
+        job_id=f"interview_complete_{interview_id}",
+        fn=lambda: _do_complete_interview(interview_id),
+        max_attempts=3,
+        job_name="Interview Completion",
+        trigger="date",
+        payload=interview_id,
+    )

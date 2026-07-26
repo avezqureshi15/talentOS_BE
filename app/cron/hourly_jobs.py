@@ -4,8 +4,10 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
+from app.common.exceptions.cron_exception import CronTransientError
 from app.core.config import settings
 from app.core.logger import get_logger
+from app.cron.retry import with_cron_retry
 from app.db.session import SessionLocal
 from app.modules.forms.form_service import FormService
 
@@ -31,49 +33,38 @@ def _log_job_boundary(job_id: str, phase: str, extra: str = "") -> None:
     logger.info("[%s] %s%s%s", name, phase, desc_part, extra_part)
 
 
-def _run_reminder_job() -> None:
-    db = SessionLocal()
+def _run_job_with_retry(job_id: str, job_fn, trigger: str = "cron") -> None:
     started = datetime.now(timezone.utc)
-    try:
-        count = FormService(db).run_reminder_job()
-        elapsed = (datetime.now(timezone.utc) - started).total_seconds()
-        if count > 0:
-            _log_job_boundary("form_reminder", "completed", f"reminders_sent={count} elapsed_seconds={elapsed:.2f}")
-    except Exception as exc:
-        elapsed = (datetime.now(timezone.utc) - started).total_seconds()
-        logger.error("[%s] FAILED after %.2fs | %s", JOB_NAMES["form_reminder"], elapsed, exc)
-    finally:
-        db.close()
+
+    def _execute() -> None:
+        db = SessionLocal()
+        try:
+            count = job_fn(db)
+            elapsed = (datetime.now(timezone.utc) - started).total_seconds()
+            if count > 0:
+                _log_job_boundary(job_id, "completed", f"count={count} elapsed_seconds={elapsed:.2f}")
+        finally:
+            db.close()
+
+    with_cron_retry(
+        job_id=job_id,
+        fn=_execute,
+        max_attempts=3,
+        job_name=JOB_NAMES.get(job_id),
+        trigger=trigger,
+    )
+
+
+def _run_reminder_job() -> None:
+    _run_job_with_retry("form_reminder", lambda db: FormService(db).run_reminder_job())
 
 
 def _run_escalation_job() -> None:
-    db = SessionLocal()
-    started = datetime.now(timezone.utc)
-    try:
-        count = FormService(db).run_escalation_job()
-        elapsed = (datetime.now(timezone.utc) - started).total_seconds()
-        if count > 0:
-            _log_job_boundary("form_escalation", "completed", f"escalations_triggered={count} elapsed_seconds={elapsed:.2f}")
-    except Exception as exc:
-        elapsed = (datetime.now(timezone.utc) - started).total_seconds()
-        logger.error("[%s] FAILED after %.2fs | %s", JOB_NAMES["form_escalation"], elapsed, exc)
-    finally:
-        db.close()
+    _run_job_with_retry("form_escalation", lambda db: FormService(db).run_escalation_job())
 
 
 def _run_expiry_job() -> None:
-    db = SessionLocal()
-    started = datetime.now(timezone.utc)
-    try:
-        count = FormService(db).run_expiry_reconciliation_job()
-        elapsed = (datetime.now(timezone.utc) - started).total_seconds()
-        if count > 0:
-            _log_job_boundary("form_expiry", "completed", f"forms_expired={count} elapsed_seconds={elapsed:.2f}")
-    except Exception as exc:
-        elapsed = (datetime.now(timezone.utc) - started).total_seconds()
-        logger.error("[%s] FAILED after %.2fs | %s", JOB_NAMES["form_expiry"], elapsed, exc)
-    finally:
-        db.close()
+    _run_job_with_retry("form_expiry", lambda db: FormService(db).run_expiry_reconciliation_job())
 
 
 def _cron_trigger(job_id: str) -> IntervalTrigger | CronTrigger:

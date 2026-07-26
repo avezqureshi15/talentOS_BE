@@ -40,9 +40,8 @@ services:
     environment:
       CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-http://localhost:5173,http://localhost:4173}
       KAFKA_BOOTSTRAP_SERVERS: redpanda:29092
-      KAFKA_TOPIC_EVALUATION: ${KAFKA_TOPIC_EVALUATION:-resume.evaluation.queue}
-      KAFKA_TOPIC_EVALUATION_DLQ: ${KAFKA_TOPIC_EVALUATION_DLQ:-resume.evaluation.dlq}
-      KAFKA_CONSUMER_GROUP: ${KAFKA_CONSUMER_GROUP:-resume-evaluators}
+      KAFKA_TOPIC_EVALUATION_ASYNC: ${KAFKA_TOPIC_EVALUATION_ASYNC:-resume.evaluation.async}
+      KAFKA_TOPIC_EVALUATION_ASYNC_DLQ: ${KAFKA_TOPIC_EVALUATION_ASYNC_DLQ:-resume.evaluation.async.dlq}
       KAFKA_EVALUATION_PARTITIONS: ${KAFKA_EVALUATION_PARTITIONS:-6}
       AI_SERVICE_BASE_URL: ${AI_SERVICE_BASE_URL:-http://host.docker.internal:8003}
       AI_SERVICE_TIMEOUT: ${AI_SERVICE_TIMEOUT:-60}
@@ -60,7 +59,19 @@ services:
         uvicorn app.main:app --host 0.0.0.0 --port 8001
       "
 
-  worker:
+  console:
+    image: redpandadata/console:v2.7.2
+    restart: unless-stopped
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKERS: redpanda:29092
+      CONSOLE_ACCESS_TYPE: public
+    ports:
+      - "8080:8080"
+
+  worker-full:
     build: .
     restart: unless-stopped
     depends_on:
@@ -69,15 +80,14 @@ services:
       app:
         condition: service_started
     deploy:
-      replicas: 1
+      replicas: 3
     env_file:
       - .env
     environment:
       CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-http://localhost:5173,http://localhost:4173}
       KAFKA_BOOTSTRAP_SERVERS: redpanda:29092
-      KAFKA_TOPIC_EVALUATION: ${KAFKA_TOPIC_EVALUATION:-resume.evaluation.queue}
-      KAFKA_TOPIC_EVALUATION_DLQ: ${KAFKA_TOPIC_EVALUATION_DLQ:-resume.evaluation.dlq}
-      KAFKA_CONSUMER_GROUP: ${KAFKA_CONSUMER_GROUP:-resume-evaluators}
+      KAFKA_TOPIC_EVALUATION_ASYNC: ${KAFKA_TOPIC_EVALUATION_ASYNC:-resume.evaluation.async}
+      KAFKA_TOPIC_EVALUATION_ASYNC_DLQ: ${KAFKA_TOPIC_EVALUATION_ASYNC_DLQ:-resume.evaluation.async.dlq}
       KAFKA_EVALUATION_PARTITIONS: ${KAFKA_EVALUATION_PARTITIONS:-6}
       AI_SERVICE_BASE_URL: ${AI_SERVICE_BASE_URL:-http://host.docker.internal:8003}
       AI_SERVICE_TIMEOUT: ${AI_SERVICE_TIMEOUT:-60}
@@ -86,4 +96,4 @@ services:
       EVALUATION_MIN_RESUME_CHARS: ${EVALUATION_MIN_RESUME_CHARS:-100}
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    command: python3 -m app.workers.evaluation_worker
+    command: python3 -m app.workers.evaluation_full_worker

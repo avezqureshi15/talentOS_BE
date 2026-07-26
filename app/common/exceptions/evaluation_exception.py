@@ -36,3 +36,14 @@ class QueuePublishException(BaseAppException):
             code=ErrorCode.QUEUE_PUBLISH_FAILED,
             status_code=502,
         )
+
+
+class TransientEvaluationError(BaseAppException):
+    """Retryable error — the worker will re-attempt with backoff."""
+
+    def __init__(self, message: str = "Transient evaluation error, will retry"):
+        super().__init__(
+            message=message,
+            code=ErrorCode.EVALUATION_FAILED,
+            status_code=0,
+        )

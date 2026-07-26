@@ -59,8 +59,23 @@ def init_scheduler() -> BackgroundScheduler:
     )
     _register_listeners(_scheduler)
     _scheduler.start()
+
+    _ensure_failed_jobs_table()
+
     logger.info("Scheduler started | jobstore=sqlalchemy timezone=UTC")
     return _scheduler
+
+
+def _ensure_failed_jobs_table() -> None:
+    """Create the ``failed_cron_jobs`` table if it doesn't exist yet."""
+    from app.cron.cron_model import FailedCronJob
+    from app.db.base import Base
+
+    try:
+        FailedCronJob.__table__.create(engine, checkfirst=True)
+        logger.info("Ensured table exists: failed_cron_jobs")
+    except Exception as exc:
+        logger.warning("Could not ensure failed_cron_jobs table: %s", exc)
 
 
 def shutdown_scheduler() -> None:

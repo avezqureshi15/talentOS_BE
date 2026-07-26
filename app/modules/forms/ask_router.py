@@ -8,8 +8,6 @@ from app.db.session import get_db
 from app.modules.forms.form_mail import send_slot_mail_task
 from app.modules.forms.form_schema import AskFormRequest, AskFormResponse
 from app.modules.forms.form_service import FormService
-from app.modules.rounds.round_service import RoundService
-from app.modules.rounds.round_schema import RoundDetailResponse
 from app.modules.users.user_repository import UserRepository
 
 router = APIRouter(prefix=settings.API_V1_PREFIX, tags=["forms"])
@@ -32,6 +30,9 @@ def ask_form(
 
 
 def _generate_review_forms(data: AskFormRequest, db: Session) -> AskFormResponse:
+    from app.modules.rounds.round_service import RoundService
+    from app.modules.rounds.round_schema import RoundDetailResponse
+
     if not data.round_id:
         raise HTTPException(status_code=400, detail="round_id is required for REVIEW type")
     if not data.candidate_id:

@@ -14,31 +14,31 @@ from app.modules.evaluations.evaluation_schema import (
 )
 from app.modules.evaluations.evaluation_service import EvaluationService
 
-# Ingest lives in the evaluations domain.
+webhook_router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/evaluations", tags=["evaluations"])
+
 router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/evaluations", tags=["evaluations"], dependencies=[Depends(require_permission(Permission.APPLICATION_EVALUATE))])
 
-# Candidate-read endpoints are exposed under the jobs path the HR/FE team consumes,
-# while the logic stays in the evaluations module/service.
 candidates_router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/jobs", tags=["evaluations"], dependencies=[Depends(require_permission(Permission.APPLICATION_EVALUATE))])
 
 
-@router.post("/ingest", response_model=IngestResponse, status_code=status.HTTP_202_ACCEPTED)
-def ingest_application(
+@webhook_router.post("/evaluate-async", response_model=IngestResponse, status_code=status.HTTP_202_ACCEPTED)
+def evaluate_async(
     payload: SupabaseWebhookPayload,
     x_webhook_secret: str | None = Header(default=None, alias="X-Webhook-Secret"),
     db: Session = Depends(get_db),
 ):
-    """Supabase database webhook target — fired on INSERT into job_applications.
+    """Async webhook target — fired on INSERT into job_applications.
 
     Verifies the shared secret, deduplicates, persists a QUEUED evaluation,
-    and publishes a task to Kafka. Returns 202 immediately.
+    and publishes a task to Kafka for full evaluation (AI + round/review/events).
+    Returns 202 immediately.
     """
     service = EvaluationService(db)
     service.verify_webhook_secret(x_webhook_secret)
-    return service.ingest(payload)
+    return service.ingest_async(payload)
 
 
-@router.post("/evaluate-sync", status_code=status.HTTP_200_OK)
+@webhook_router.post("/evaluate-sync", status_code=status.HTTP_200_OK)
 def evaluate_sync(
     payload: SupabaseWebhookPayload,
     x_webhook_secret: str | None = Header(default=None, alias="X-Webhook-Secret"),

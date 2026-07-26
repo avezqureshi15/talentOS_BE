@@ -23,6 +23,7 @@ from app.modules.email.email_router import router as email_router
 from app.modules.events import router as events_router
 from app.modules.employees import router as employees_router
 from app.modules.evaluations import candidates_router as evaluation_candidates_router
+from app.modules.evaluations import webhook_router as evaluation_webhook_router
 from app.modules.evaluations import router as evaluations_router
 from app.modules.forms import ask_router, form_router
 from app.modules.hiring_requests import router as hiring_requests_router
@@ -66,7 +67,10 @@ async def lifespan(app: FastAPI):
     setup_logging()
     logger.info("Starting %s v%s | env=%s", settings.APP_NAME, settings.APP_VERSION, settings.APP_ENV)
     run_migrations()
-    ensure_topics()
+    ensure_topics([
+        (settings.KAFKA_TOPIC_EVALUATION_ASYNC, settings.KAFKA_EVALUATION_PARTITIONS),
+        (settings.KAFKA_TOPIC_EVALUATION_ASYNC_DLQ, 1),
+    ])
     scheduler = init_scheduler()
     setup_form_jobs(scheduler)
     yield
@@ -108,6 +112,7 @@ app.include_router(form_router)
 app.include_router(alerts_router)
 app.include_router(employees_router)
 app.include_router(users_router)
+app.include_router(evaluation_webhook_router)
 app.include_router(evaluations_router)
 app.include_router(evaluation_candidates_router)
 app.include_router(email_router)
