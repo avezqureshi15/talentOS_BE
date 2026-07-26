@@ -5,12 +5,14 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.session import get_db
+from app.core.authorization import require_permission
+from app.core.permissions import Permission
 from app.modules.events.event_schema import EventCreate
 from app.modules.events.event_service import EventService
 from app.modules.reviews.review_schema import ReviewCreate, ReviewResponse, ReviewUpdateByRound
 from app.modules.reviews.review_service import ReviewService
 
-router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/reviews", tags=["reviews"])
+router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/reviews", tags=["reviews"], dependencies=[Depends(require_permission(Permission.REVIEW_VIEW_ALL))])
 
 
 @router.post("", response_model=ReviewResponse, status_code=status.HTTP_201_CREATED)

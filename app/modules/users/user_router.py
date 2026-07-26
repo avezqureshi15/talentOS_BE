@@ -4,6 +4,8 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.constants import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 from app.db.session import get_db
+from app.modules.auth.auth_dependencies import get_current_user
+from app.modules.auth.auth_schema import UserInfo
 from app.modules.users.user_schema import PaginatedUserResponse, UserResponse
 from app.modules.users.user_service import UserService
 
@@ -11,13 +13,21 @@ router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/users", tags=["users"])
 
 
 @router.get("/benched")
-def get_benched_candidates(designation: str = Query(...), db: Session = Depends(get_db)):
+def get_benched_candidates(
+    designation: str = Query(...),
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(get_current_user),
+):
     service = UserService(db)
     return service.get_benched_candidates(designation)
 
 
 @router.get("/{emp_id}", response_model=UserResponse | None)
-def get_user_by_emp_id(emp_id: str, db: Session = Depends(get_db)):
+def get_user_by_emp_id(
+    emp_id: str,
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(get_current_user),
+):
     service = UserService(db)
     user = service.get_user_by_emp_id(emp_id)
     if not user:
@@ -32,6 +42,12 @@ def list_users(
     per_page: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
     slotsInfo: bool = Query(False, description="Include slot availability info and sort by slot count"),
     db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(get_current_user),
 ):
     service = UserService(db)
-    return service.search_users(query=q, page=page, per_page=per_page, slots_info=slotsInfo)
+
+    tenant_id = current_user.tenant_id
+    if current_user.role == "superadmin":
+        tenant_id = None
+
+    return service.search_users(query=q, page=page, per_page=per_page, slots_info=slotsInfo, tenant_id=tenant_id)

@@ -17,6 +17,8 @@ if config.config_file_name is not None:
 
 from app.db.base import Base  # noqa: E402
 from app.modules.alerts.alert_model import Alert  # noqa: E402, F401
+from app.modules.auth.auth_model import RefreshToken  # noqa: E402, F401
+from app.modules.auth.invite_model import TenantInvite  # noqa: E402, F401
 from app.modules.designation.designation_model import Band, Designation, KpiDefinition  # noqa: E402, F401
 from app.modules.events.event_model import Event  # noqa: E402, F401
 from app.modules.evaluations.evaluation_model import Candidate  # noqa: E402, F401
@@ -25,9 +27,12 @@ from app.modules.hiring_requests.hiring_request_model import HiringRequest  # no
 from app.modules.interviews.models import Interview, RoundInterviewer  # noqa: E402, F401
 from app.modules.reviews.review_model import Review  # noqa: E402, F401
 from app.modules.rounds.round_model import Round  # noqa: E402, F401
+from app.modules.settings.settings_model import TenantSetting  # noqa: E402, F401
 from app.modules.slots.slot_model import Slot  # noqa: E402, F401
+from app.modules.tenants.tenant_model import Tenant  # noqa: E402, F401
 from app.modules.todo.todo_model import Todo  # noqa: E402, F401
 from app.modules.users.user_model import User  # noqa: E402, F401
+from app.modules.users.permission_model import PermissionModel, RolePermission  # noqa: E402, F401
 
 target_metadata = Base.metadata
 

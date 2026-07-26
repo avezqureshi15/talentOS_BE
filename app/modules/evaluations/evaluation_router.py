@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.session import get_db
+from app.core.authorization import require_permission
+from app.core.permissions import Permission
 from app.modules.evaluations.evaluation_schema import (
     EvaluationResponse,
     IngestResponse,
@@ -13,11 +15,11 @@ from app.modules.evaluations.evaluation_schema import (
 from app.modules.evaluations.evaluation_service import EvaluationService
 
 # Ingest lives in the evaluations domain.
-router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/evaluations", tags=["evaluations"])
+router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/evaluations", tags=["evaluations"], dependencies=[Depends(require_permission(Permission.APPLICATION_EVALUATE))])
 
 # Candidate-read endpoints are exposed under the jobs path the HR/FE team consumes,
 # while the logic stays in the evaluations module/service.
-candidates_router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/jobs", tags=["evaluations"])
+candidates_router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/jobs", tags=["evaluations"], dependencies=[Depends(require_permission(Permission.APPLICATION_EVALUATE))])
 
 
 @router.post("/ingest", response_model=IngestResponse, status_code=status.HTTP_202_ACCEPTED)

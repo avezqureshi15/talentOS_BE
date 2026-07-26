@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.session import get_db
+from app.core.authorization import require_permission
+from app.core.permissions import Permission
 from app.modules.rounds.round_schema import (
     PaginatedRoundResponse,
     RoundCreate,
@@ -17,7 +19,7 @@ from app.modules.reviews.review_schema import ReviewUpdateByRound
 from app.modules.reviews.review_service import ReviewService
 from app.modules.evaluations.evaluation_model import Candidate
 
-router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/rounds", tags=["rounds"])
+router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/rounds", tags=["rounds"], dependencies=[Depends(require_permission(Permission.APPLICATION_VIEW))])
 
 
 @router.post("", response_model=RoundResponse, status_code=status.HTTP_201_CREATED)

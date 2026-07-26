@@ -32,29 +32,36 @@ class AuthRepository:
         emp_id: str,
         email: str,
         name: str,
+        commit: bool = True,
         **extra: dict,
     ) -> User:
         now = datetime.now(timezone.utc)
+        defaults = {
+            "status": "active",
+            "user_type": "employee",
+            "designation": "Unassigned",
+            "department": "Unassigned",
+            "role": "user",
+            "work_mode": "remote",
+            "delivery_status": "active",
+            "work_location_type": "remote",
+            "doj": now.date(),
+            "date_of_birth": now.date(),
+            "band": "L1",
+            "auth_provider": "google",
+        }
+        defaults.update(extra)
         user = User(
             emp_id=emp_id,
             email=email,
             name=name,
-            status="active",
-            user_type="employee",
-            designation="Unassigned",
-            department="Unassigned",
-            role="user",
-            work_mode="remote",
-            delivery_status="active",
-            work_location_type="remote",
-            doj=now.date(),
-            date_of_birth=now.date(),
-            band="L1",
-            **extra,
+            **defaults,
         )
         self.db.add(user)
-        self.db.commit()
-        self.db.refresh(user)
+        if commit:
+            self.db.commit()
+        else:
+            self.db.flush()
         logger.info("Created user: email=%s id=%d", email, user.id)
         return user
 
@@ -69,7 +76,7 @@ class AuthRepository:
             expires_at=expires_at,
         )
         self.db.add(record)
-        self.db.commit()
+        self.db.flush()
         logger.debug("Created refresh token for user_id=%d", user_id)
         return record
 

@@ -1,12 +1,14 @@
 from uuid import UUID
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Depends, status
 
 from app.core.config import settings
+from app.core.authorization import require_permission
+from app.core.permissions import Permission
 from app.modules.jobs.job_schema import JobCreate, JobUpdate
 from app.modules.jobs.job_service import JobService
 
-router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/jobs", tags=["jobs"])
+router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/jobs", tags=["jobs"], dependencies=[Depends(require_permission(Permission.HIRING_REQUEST_VIEW))])
 
 
 @router.get("/")

@@ -1,6 +1,9 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
+
+
+VALID_ROLES = {"superadmin", "admin", "hr", "viewer"}
 
 
 class UserResponse(BaseModel):
@@ -27,12 +30,80 @@ class UserResponse(BaseModel):
     created_at: datetime
     slots_count: int = 0
     has_slots: bool = False
+    auth_provider: str = "google"
+    is_active: bool = True
+    tenant_id: int | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
 
+class AdminUserResponse(BaseModel):
+    id: int
+    email: str
+    name: str
+    role: str
+    is_active: bool
+    auth_provider: str
+    tenant_id: int | None = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CreateUserRequest(BaseModel):
+    name: str
+    email: str
+    password: str
+    role: str = "hr"
+    tenant_id: int | None = None
+
+    @field_validator("password")
+    @classmethod
+    def password_min_length(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters")
+        return v
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, v: str) -> str:
+        if v not in VALID_ROLES:
+            raise ValueError(f"Invalid role. Must be one of: {', '.join(sorted(VALID_ROLES))}")
+        return v
+
+
+class UpdateUserRequest(BaseModel):
+    name: str | None = None
+    role: str | None = None
+    is_active: bool | None = None
+    password: str | None = None
+    tenant_id: int | None = None
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, v: str | None) -> str | None:
+        if v is not None and v not in VALID_ROLES:
+            raise ValueError(f"Invalid role. Must be one of: {', '.join(sorted(VALID_ROLES))}")
+        return v
+
+    @field_validator("password")
+    @classmethod
+    def password_min_length(cls, v: str | None) -> str | None:
+        if v is not None and len(v) < 8:
+            raise ValueError("Password must be at least 8 characters")
+        return v
+
+
 class PaginatedUserResponse(BaseModel):
     data: list[UserResponse]
+    total: int
+    page: int
+    per_page: int
+    has_more: bool
+
+
+class PaginatedAdminUserResponse(BaseModel):
+    data: list[AdminUserResponse]
     total: int
     page: int
     per_page: int
