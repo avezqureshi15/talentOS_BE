@@ -22,6 +22,17 @@ class TenantResponse(BaseModel):
     is_active: bool
     verification_status: str
     user_count: int = 0
+    logo_url: str | None = None
+    website: str | None = None
+    phone: str | None = None
+    description: str | None = None
+    address_line1: str | None = None
+    address_line2: str | None = None
+    city: str | None = None
+    state: str | None = None
+    postal_code: str | None = None
+    country: str | None = None
+    gst_number: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -34,6 +45,20 @@ class PaginatedTenantResponse(BaseModel):
     page: int
     per_page: int
     has_more: bool
+
+
+class UpdateOrganizationRequest(BaseModel):
+    logo_url: str | None = None
+    website: str | None = None
+    phone: str | None = None
+    description: str | None = None
+    address_line1: str | None = None
+    address_line2: str | None = None
+    city: str | None = None
+    state: str | None = None
+    postal_code: str | None = None
+    country: str | None = None
+    gst_number: str | None = None
 
 
 class TenantAdminDetails(BaseModel):

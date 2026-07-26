@@ -241,25 +241,10 @@ class AuthService:
             logger.info("Existing user logged in: email=%s id=%d", email, user.id)
             return user
 
-        name = google_info.get("name", email.split("@")[0])
-        user = self.repo.create_user(
-            emp_id=f"u{secrets.token_hex(8)}",
-            email=email,
-            name=name,
-            auth_provider="google",
-            role="hr",
-            status="active",
-            user_type="employee",
-            designation="Unassigned",
-            department="Unassigned",
-            work_mode="remote",
-            delivery_status="active",
-            work_location_type="remote",
-            doj=datetime.now(timezone.utc).date(),
-            date_of_birth=datetime.now(timezone.utc).date(),
-            band="L1",
+        raise AuthError(
+            "You don't have an account yet. Please contact your administrator to get invited.",
+            status_code=403,
         )
-        return user
 
     # ── JWT token management ──────────────────────────────────────────────
 

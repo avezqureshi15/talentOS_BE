@@ -8,6 +8,7 @@ from app.core.config import settings
 from app.core.constants import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
 from app.core.logger import get_logger
 from app.core.security import hash_password
+from app.common.services.email_service import EmailService
 from app.db.session import get_db
 from app.core.authorization import require_permission
 from app.core.permissions import Permission
@@ -23,6 +24,46 @@ from app.modules.users.user_schema import (
 )
 
 logger = get_logger(__name__)
+
+
+def _send_invite_email(email: str, token: str) -> None:
+    if not settings.SMTP_USERNAME or not settings.SMTP_PASSWORD:
+        logger.warning("SMTP not configured — skipping invite email to %s", email)
+        return
+    try:
+        service = EmailService(
+            smtp_host=settings.SMTP_HOST,
+            smtp_port=settings.SMTP_PORT,
+            username=settings.SMTP_USERNAME,
+            password=settings.SMTP_PASSWORD,
+            use_tls=settings.SMTP_USE_TLS,
+        )
+        link = f"{settings.FRONTEND_BASE_URL}/auth/invite/{token}"
+        subject = "You're invited to join webHyre.ai"
+        body = f"""Hello,
+
+You have been invited to join webHyre.ai. Click the link below to set up your account:
+
+{link}
+
+This invite expires in 7 days.
+
+If you did not expect this invitation, you can ignore this email.
+
+Best,
+The webHyre.ai Team"""
+        html = f"""<p>Hello,</p>
+<p>You have been invited to join <strong>webHyre.ai</strong>. Click the button below to set up your account:</p>
+<p style="text-align:center;margin:24px 0">
+  <a href="{link}" style="display:inline-block;padding:12px 24px;background:#ffffff;color:#000000;text-decoration:none;border-radius:8px;font-weight:600">Accept Invite</a>
+</p>
+<p>This invite expires in 7 days.</p>
+<p>If you did not expect this invitation, you can ignore this email.</p>
+<p>Best,<br>The webHyre.ai Team</p>"""
+        service.send(to_email=email, subject=subject, body=body, html=html)
+    except Exception as exc:
+        logger.warning("Failed to send invite email to %s: %s", email, exc)
+
 
 router = APIRouter(
     prefix=f"{settings.API_V1_PREFIX}/admin/users",
@@ -199,6 +240,7 @@ def create_invite(
     db.commit()
     db.refresh(invite)
     logger.info("Admin created invite: email=%s tenant_id=%d", body.email, tid)
+    _send_invite_email(body.email, invite.token)
     return InviteResponse(
         id=invite.id,
         email=invite.email,
@@ -219,7 +261,10 @@ def list_invites(
     current_user: UserInfo = Depends(require_permission(Permission.USER_MANAGE)),
 ):
     tid = _resolve_tenant(current_user, tenant_id)
-    query = db.query(TenantInvite).filter(TenantInvite.tenant_id == tid)
+    query = db.query(TenantInvite).filter(
+        TenantInvite.tenant_id == tid,
+        TenantInvite.accepted_at.is_(None),
+    )
     total = query.count()
     invites = query.order_by(TenantInvite.created_at.desc()).offset((page - 1) * per_page).limit(per_page).all()
     has_more = (page * per_page) < total
@@ -260,6 +305,7 @@ def resend_invite(
     db.commit()
     db.refresh(invite)
     logger.info("Admin resent invite: email=%s tenant_id=%d", body.email, tid)
+    _send_invite_email(body.email, invite.token)
     return InviteResponse(
         id=invite.id,
         email=invite.email,
