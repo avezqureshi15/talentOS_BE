@@ -38,7 +38,7 @@ def create_queued_candidate(db: Session, application_id: str, job_id: str, **kwa
 
 
 def mark_processing(db: Session, candidate: Candidate) -> Candidate:
-    candidate.status = EvaluationStatus.PROCESSING.value
+    candidate.status = EvaluationStatus.RESUME_PROCESSING.value
     candidate.attempts += 1
     db.commit()
     db.refresh(candidate)

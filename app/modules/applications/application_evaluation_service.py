@@ -49,6 +49,7 @@ class ApplicationEvaluationService:
         if candidate and candidate.status in (
             EvaluationStatus.SHORTLISTED.value, EvaluationStatus.REJECTED.value,
             EvaluationStatus.INVALID.value, EvaluationStatus.FAILED.value,
+            EvaluationStatus.RESUME_SHORTLISTED.value, EvaluationStatus.RESUME_PROCESSING_FAILED.value,
         ):
             return self.repo.to_candidate_dict(candidate)
         if candidate is None:
@@ -140,12 +141,12 @@ class ApplicationEvaluationService:
                 remark=f"Unexpected error: {exc}",
                 event_metadata={"error_reason": f"Unexpected error: {exc}"},
             ))
-            candidate = self.repo.mark_result(candidate, EvaluationStatus.FAILED, error_reason=f"Unexpected error: {exc}")
+            candidate = self.repo.mark_result(candidate, EvaluationStatus.RESUME_PROCESSING_FAILED, error_reason=f"Unexpected error: {exc}")
             return self.repo.to_candidate_dict(candidate)
         threshold = settings.ATS_THRESHOLD_DEFAULT
         verdict = "shortlisted" if ai_result.overall_score_percentage >= threshold else "rejected"
         candidate = self.repo.mark_result(
-            candidate, status=EvaluationStatus.UNDER_EVALUATION,
+            candidate, status=EvaluationStatus.RESUME_SHORTLISTED,
             fit_score=ai_result.overall_score_percentage,
             summary_md=ai_result.resume_summary, ats_threshold_used=threshold,
         )
@@ -184,7 +185,8 @@ class ApplicationEvaluationService:
         try:
             jd_uuid = self.repo.resolve_hiring_request_id(job_id)
             round_resp = RoundService(self.db).create_round(RoundCreate(
-                name="Resume Shortlisting", candidate_id=candidate.id, jd_id=jd_uuid,
+                name="Resume Shortlisting", round_type="RESUME_SHORTLISTING",
+                candidate_id=candidate.id, jd_id=jd_uuid,
             ))
             self.db.refresh(candidate)
             self.repo.set_current_round_id(candidate, round_resp.id)

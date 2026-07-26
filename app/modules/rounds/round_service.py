@@ -38,6 +38,7 @@ class RoundService:
                     )
         round_obj = Round(
             name=data.name,
+            round_type=data.round_type,
             candidate_id=data.candidate_id,
             slot_id=data.slot_id,
             jd_id=data.jd_id,

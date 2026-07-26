@@ -15,6 +15,7 @@ class Round(Base):
     slot_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), ForeignKey("slots.id"), nullable=True)
     jd_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), ForeignKey("hiring_requests.id"), nullable=True)
     name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    round_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     round_verdict: Mapped[str | None] = mapped_column(String(50), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

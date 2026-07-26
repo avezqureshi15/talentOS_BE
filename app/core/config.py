@@ -61,7 +61,7 @@ class Settings(BaseSettings):
     ALLOWED_EMAIL_DOMAIN: str = ""
 
     # CORS
-    CORS_ALLOW_ORIGINS: str = "http://localhost:5173,http://localhost:4173"
+    CORS_ALLOW_ORIGINS: str = "http://localhost:5173,http://localhost:4173,http://localhost:5175,http://localhost:5174"
 
     # JWT
     JWT_SECRET: str = ""

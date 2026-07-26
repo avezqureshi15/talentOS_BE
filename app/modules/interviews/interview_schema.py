@@ -68,6 +68,7 @@ class RescheduleInterviewRequest(BaseModel):
 
 class BookInterviewRequest(BaseModel):
     round_name: str
+    round_type: str | None = None
     slot_id: str
     jd_id: str
     candidate_id: int

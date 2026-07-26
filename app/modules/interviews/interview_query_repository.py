@@ -32,6 +32,7 @@ class InterviewQueryRepository:
         page: int = 1,
         per_page: int = 20,
         candidate_id: int | None = None,
+        hiring_request_id: str | None = None,
     ) -> tuple[list[dict], int]:
         now = datetime.now(timezone.utc)
         query = (
@@ -64,6 +65,8 @@ class InterviewQueryRepository:
         )
         if candidate_id is not None:
             query = query.filter(Round.candidate_id == candidate_id)
+        if hiring_request_id:
+            query = query.filter(Round.jd_id == uuid.UUID(hiring_request_id))
         if status_filter == _CANCELLED:
             query = query.filter(Interview.status == InterviewStatus.CANCELLED.value)
         else:

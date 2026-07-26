@@ -34,11 +34,12 @@ def list_interviews(
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
     candidate_id: int | None = Query(None),
+    hiring_request_id: str | None = Query(None),
     db: Session = Depends(get_db),
 ):
     service = InterviewService(db)
     return service.list_interviews(
-        status_filter=status_filter, search=search, page=page, per_page=per_page, candidate_id=candidate_id,
+        status_filter=status_filter, search=search, page=page, per_page=per_page, candidate_id=candidate_id, hiring_request_id=hiring_request_id,
     )
 
 @router.get("/{interview_id}")

@@ -22,10 +22,8 @@ class BaseClient(ABC):
     - Consistent error handling → domain exceptions
     """
 
-    def __init__(self, base_url: str, timeout: int = 30, max_retries: int = 2):
-        if not base_url:
-            logger.warning("%s initialized with empty base_url", self.__class__.__name__)
-        self._base_url = base_url.rstrip("/")
+    def __init__(self, base_url: str = "", timeout: int = 30, max_retries: int = 2):
+        self._base_url = base_url.rstrip("/") if base_url else ""
         self._timeout = timeout
         self._max_retries = max_retries
         self._sync_client: httpx.Client | None = None

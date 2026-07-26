@@ -28,6 +28,7 @@ class ReviewEntity(BaseModel):
 
 class RoundCreate(BaseModel):
     name: str | None = None
+    round_type: str | None = None
     candidate_id: int | None = None
     slot_id: uuid.UUID | None = None
     jd_id: uuid.UUID | None = None
@@ -39,6 +40,7 @@ class RoundResponse(BaseModel):
     slot_id: uuid.UUID | None = None
     jd_id: uuid.UUID | None = None
     name: str | None = None
+    round_type: str | None = None
     round_verdict: str | None = None
     created_at: datetime
     updated_at: datetime
@@ -48,6 +50,7 @@ class RoundResponse(BaseModel):
 
 class RoundDetailResponse(BaseModel):
     id: uuid.UUID
+    round_type: str | None = None
     round: str | None = None
     duration: str | None = None
     interview_type: str | None = None

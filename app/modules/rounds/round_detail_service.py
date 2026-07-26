@@ -82,6 +82,7 @@ class RoundDetailService:
 
         return RoundDetailResponse(
             id=round_obj.id,
+            round_type=round_obj.round_type,
             round=round_obj.name,
             duration=self._compute_duration(slot),
             interview_type=round_obj.name,

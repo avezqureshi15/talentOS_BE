@@ -34,7 +34,8 @@ class BookingService:
             raise SlotNotFoundException(data.slot_id)
 
         round_obj = self.repository.create_round(
-            name=data.round_name, candidate_id=data.candidate_id,
+            name=data.round_name, round_type=data.round_type,
+            candidate_id=data.candidate_id,
             jd_id=uuid.UUID(data.jd_id), slot_id=uuid.UUID(data.slot_id),
         )
         for emp_id in data.interviewer_ids:
