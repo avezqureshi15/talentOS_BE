@@ -17,6 +17,7 @@ class Round(Base):
     name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     round_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     round_verdict: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    rh_external_session_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

@@ -23,4 +23,6 @@ dependencies = [
     "google-api-python-client>=2.100.0",
     "python-jose[cryptography]>=3.3.0",
     "passlib[bcrypt]>=1.7.4",
+    "pyjwt[crypto]>=2.9.0",
+    "cryptography>=42.0.0",
 ]

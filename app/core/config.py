@@ -25,6 +25,14 @@ class Settings(BaseSettings):
     SUPABASE_FUNCTIONS_BASE_URL: str = ""
     RESEND_API_KEY: str = ""
 
+    SERVICE_NAME: str = "talentos-be"
+
+    JWKS_URL_AI_RECRUITMENT_POC: str = ""
+
+    # ai-recruitment-poc (RH) integration
+    RH_SERVICE_URL: str = ""
+    RH_SERVICE_PRIVATE_KEY_PATH: str = ""
+
     # Supabase webhook verification (shared secret sent as X-Webhook-Secret header).
     # When empty, verification is skipped (local dev only — set this in prod).
     SUPABASE_WEBHOOK_SECRET: str = ""

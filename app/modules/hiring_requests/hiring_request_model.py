@@ -21,6 +21,7 @@ class HiringRequest(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     custom_evaluation_criteria: Mapped[str | None] = mapped_column(Text, nullable=True)
     external_job_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), unique=True, nullable=True)
+    rh_external_job_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

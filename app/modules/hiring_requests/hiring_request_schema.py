@@ -14,6 +14,8 @@ class HiringRequestCreate(BaseModel):
     benefits: list[str] | None = Field(None)
     is_active: bool = Field(False)
     custom_evaluation_criteria: str | None = Field(None)
+    external_job_id: str | None = Field(None)
+    rh_external_job_id: str | None = Field(None)
 
 
 class HiringRequestUpdate(BaseModel):
@@ -40,6 +42,7 @@ class HiringRequestResponse(BaseModel):
     is_active: bool
     custom_evaluation_criteria: str | None
     external_job_id: UUID | None
+    rh_external_job_id: str | None
     deleted_at: datetime | None
     created_at: datetime
     updated_at: datetime
