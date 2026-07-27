@@ -10,6 +10,7 @@ from app.modules.applications.application_schema import (
     EvaluatedCandidate,
     FinalVerdictUpdate,
     PaginatedEvaluatedCandidatesResponse,
+    RoundStatusUpdate,
 )
 from app.modules.applications.application_service import ApplicationService
 from app.modules.evaluations.evaluation_schema import EvaluationResponse
@@ -92,6 +93,16 @@ def update_final_verdict(
 ):
     service = ApplicationService(db)
     return service.set_final_verdict(candidate_id, data.verdict)
+
+
+@router.patch("/{candidate_id}/round-status")
+def update_candidate_round_status(
+    candidate_id: int,
+    data: RoundStatusUpdate,
+    db: Session = Depends(get_db),
+):
+    service = ApplicationService(db)
+    return service.set_candidate_round_status(candidate_id, data)
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED)

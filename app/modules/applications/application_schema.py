@@ -69,6 +69,7 @@ class EvaluatedCandidate(BaseModel):
     linkedin_url: str | None = None
     willing_to_relocate: bool = False
     status: str | None = None
+    stage: str | None = None
     fit_score: int | None = None
     summary_md: str | None = None
     evaluated_at: str | None = None
@@ -87,6 +88,13 @@ class EvaluatedCandidatesResponse(BaseModel):
 
 class FinalVerdictUpdate(BaseModel):
     verdict: Literal["SELECTED", "REJECTED"]
+
+
+class RoundStatusUpdate(BaseModel):
+    stage: str
+    status: str
+    current_round_id: str
+    scheduled_at: str | None = None
 
 
 class PaginatedEvaluatedCandidatesResponse(BaseModel):

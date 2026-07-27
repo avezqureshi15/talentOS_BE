@@ -151,15 +151,22 @@ async def trigger_interview(
     body: TriggerInterviewRequest,
     db: Session = Depends(get_db),
 ):
-    rh_job_id = _get_rh_job_id(hiring_request_id, db)
-    rh_candidate_id = _get_rh_candidate_id(candidate_id, db)
-    client = AiRecruitmentClient()
+    # FIXME: When ai-recruitment-poc service is up, remove this fallback.
+    # The external POC call should create the interview and return an ID
+    # that we link to our local round via rh_external_session_id.
+    interview_id = None
+    created = None
+    try:
+        rh_job_id = _get_rh_job_id(hiring_request_id, db)
+        rh_candidate_id = _get_rh_candidate_id(candidate_id, db)
+        client = AiRecruitmentClient()
+        created = await client.trigger_interview(rh_job_id, rh_candidate_id, body.interview_type)
+        if created:
+            interview_id = created.get("id")
+    except Exception:
+        # POC unavailable — round created locally without external link
+        pass
 
-    created = await client.trigger_interview(rh_job_id, rh_candidate_id, body.interview_type)
-    if not created:
-        raise HTTPException(status_code=502, detail="Failed to create interview in ai-recruitment-poc")
-
-    interview_id = created.get("id")
     round_obj = Round(
         candidate_id=candidate_id,
         jd_id=uuid.UUID(hiring_request_id) if isinstance(hiring_request_id, str) else hiring_request_id,
@@ -174,5 +181,5 @@ async def trigger_interview(
     return {
         "round_id": str(round_obj.id),
         "rh_external_session_id": interview_id,
-        "status": created.get("status"),
+        "status": created.get("status") if created else "created_locally",
     }

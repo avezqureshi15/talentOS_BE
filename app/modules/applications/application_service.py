@@ -153,6 +153,55 @@ class ApplicationService:
         if not self.state_svc: raise ValueError("State service not available")
         return self.state_svc.set_final_verdict(candidate_id, verdict)
 
+    def set_candidate_round_status(self, candidate_id: int, data) -> dict:
+        from app.modules.evaluations.evaluation_model import Candidate
+        candidate = self.db.query(Candidate).filter(Candidate.id == candidate_id).first()
+        if not candidate:
+            raise HTTPException(status_code=404, detail="Candidate not found")
+        candidate.stage = data.stage
+        candidate.status = data.status
+        candidate.current_round_id = data.current_round_id
+        self.db.commit()
+
+        if data.scheduled_at and data.stage in ("AI_SCREENING", "AI_INTERVIEW"):
+            try:
+                from datetime import datetime, timedelta, timezone
+                from apscheduler.triggers.date import DateTrigger
+                from app.scheduler import get_scheduler
+                from app.core.config import settings
+                from app.modules.events.event_schema import EventCreate
+                from app.modules.events.event_service import EventService
+                delay = settings.AI_ROUND_EVALUATION_DELAY_MINUTES
+                if delay > 0:
+                    run_date = datetime.now(timezone.utc) + timedelta(minutes=delay)
+                else:
+                    run_date = datetime.fromisoformat(data.scheduled_at)
+                job_id = f"ai_round_complete_{data.current_round_id}"
+                get_scheduler().add_job(
+                    "app.cron.ai_round_completion:complete_ai_round",
+                    trigger=DateTrigger(run_date=run_date),
+                    args=[candidate_id, data.current_round_id],
+                    id=job_id,
+                    replace_existing=True,
+                    misfire_grace_time=1800,
+                )
+                logger.info("AI round completion scheduled | job_id=%s run_date=%s", job_id, run_date)
+
+                event_name = "AI Screening Scheduled" if data.stage == "AI_SCREENING" else "AI Interview Scheduled"
+                EventService(self.db).create_event(EventCreate(
+                    entity_type="CANDIDATE",
+                    entity_id=str(candidate_id),
+                    candidate_id=candidate_id,
+                    event_name=event_name,
+                    state_code=data.status,
+                    actor_type="SYSTEM",
+                    event_metadata={"round_id": data.current_round_id, "stage": data.stage, "scheduled_at": data.scheduled_at},
+                ))
+            except Exception as exc:
+                logger.warning("Failed to schedule AI round completion | %s", exc)
+
+        return {"success": True}
+
     def update_candidate_status(self, candidate_id: int, new_status: str) -> EvaluationResponse:
         if not self.state_svc: raise ValueError("State service not available")
         return self.state_svc.update_candidate_status(candidate_id, new_status)

@@ -34,6 +34,7 @@ def build_candidate_response(candidate: Candidate, hide_cover_letter: bool = Fal
         "willing_to_relocate": candidate.willing_to_relocate if candidate.willing_to_relocate is not None else False,
         "candidate_type": candidate.candidate_type,
         "status": candidate.status,
+        "stage": candidate.stage,
         "fit_score": candidate.fit_score,
         "summary_md": candidate.summary_md,
         "evaluated_at": candidate.evaluated_at.isoformat() if candidate.evaluated_at else None,

@@ -42,6 +42,8 @@ class Candidate(Base):
         String(30), nullable=False, default=EvaluationStatus.QUEUED.value, index=True
     )
 
+    stage: Mapped[str | None] = mapped_column(String(50), nullable=True)
+
     fit_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
     summary_md: Mapped[str | None] = mapped_column(Text, nullable=True)
     ats_threshold_used: Mapped[int | None] = mapped_column(Integer, nullable=True)

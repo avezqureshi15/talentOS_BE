@@ -26,7 +26,7 @@ from app.common.clients import AIClient, ClientError, ResumeClient, SupabaseClie
 from app.common.exceptions.evaluation_exception import TransientEvaluationError
 from app.common.schemas.evaluation import AIEvaluationResponse
 from app.core.config import settings
-from app.core.constants import EvaluationStatus
+from app.core.constants import EvaluationStatus, PipelineStage
 from app.core.kafka import ConsumedMessage, consume, publish
 from app.core.logger import get_logger
 from app.db.session import SessionLocal
@@ -262,6 +262,7 @@ def _create_initial_review(
             "rejection_details": ai_result.rejection_details,
         }
         candidate.review_verdict = verdict
+        candidate.stage = PipelineStage.RESUME_SHORTLISTED.value
 
         round_obj = db.query(Round).filter(Round.id == round_resp.id).first()
         if round_obj:

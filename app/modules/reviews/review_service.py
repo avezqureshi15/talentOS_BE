@@ -2,7 +2,7 @@ import uuid
 
 from sqlalchemy.orm import Session
 
-from app.core.constants import EvaluationStatus
+from app.core.constants import EvaluationStatus, PipelineStage
 from app.core.logger import get_logger
 from app.modules.evaluations.evaluation_model import Candidate
 from app.modules.reviews.review_model import Review
@@ -101,7 +101,7 @@ class ReviewService:
                     event_metadata={"round_id": str(round_id), "verdict": data.verdict},
                 ))
                 self.db.query(Candidate).filter(Candidate.id == round_obj.candidate_id).update(
-                    {"status": EvaluationStatus.UNDER_EVALUATION.value}
+                    {"status": EvaluationStatus.UNDER_EVALUATION.value, "stage": PipelineStage.EVALUATED.value}
                 )
                 self.db.flush()
                 EventService(self.db).create_event(EventCreate(

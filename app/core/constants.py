@@ -36,6 +36,40 @@ class ErrorCode(str, Enum):
     CRON_JOB_FAILED = "CRON_JOB_FAILED"
 
 
+class PipelineStage(str, Enum):
+    RESUME_SHORTLISTING = "RESUME_SHORTLISTED"
+    SCREENING = "SCREENING"
+    INTERVIEW = "INTERVIEW"
+    WAITING_FOR_EVALUATION = "WAITING_FOR_EVALUATION"
+    EVALUATED = "EVALUATED"
+    SELECTED = "SELECTED"
+    REJECTED = "REJECTED"
+
+
+def get_pipeline_stage(status: str, final_verdict: str | None = None) -> str | None:
+    if final_verdict == "SELECTED":
+        return PipelineStage.SELECTED.value
+    if final_verdict == "REJECTED":
+        return PipelineStage.REJECTED.value
+    stage_map: dict[str, str] = {
+        EvaluationStatus.QUEUED.value: PipelineStage.RESUME_SHORTLISTING.value,
+        EvaluationStatus.PROCESSING.value: PipelineStage.RESUME_SHORTLISTING.value,
+        EvaluationStatus.RESUME_PROCESSING.value: PipelineStage.RESUME_SHORTLISTING.value,
+        EvaluationStatus.RESUME_SHORTLISTED.value: PipelineStage.RESUME_SHORTLISTING.value,
+        EvaluationStatus.SHORTLISTED.value: PipelineStage.RESUME_SHORTLISTING.value,
+        EvaluationStatus.REJECTED.value: PipelineStage.RESUME_SHORTLISTING.value,
+        EvaluationStatus.INVALID.value: PipelineStage.RESUME_SHORTLISTING.value,
+        EvaluationStatus.RESUME_PROCESSING_FAILED.value: PipelineStage.RESUME_SHORTLISTING.value,
+        EvaluationStatus.FAILED.value: PipelineStage.RESUME_SHORTLISTING.value,
+        EvaluationStatus.MOVE_TO_NEXT_ROUND.value: PipelineStage.SCREENING.value,
+        EvaluationStatus.WAITING_FOR_REVIEW.value: PipelineStage.WAITING_FOR_EVALUATION.value,
+        EvaluationStatus.INTERVIEW_SCHEDULED.value: PipelineStage.INTERVIEW.value,
+        EvaluationStatus.INTERVIEW_RESCHEDULED.value: PipelineStage.INTERVIEW.value,
+        EvaluationStatus.INTERVIEW_CANCELLED.value: PipelineStage.INTERVIEW.value,
+    }
+    return stage_map.get(status)
+
+
 class EvaluationStatus(str, Enum):
     QUEUED = "QUEUED"
     PROCESSING = "PROCESSING"

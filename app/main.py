@@ -7,6 +7,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.common.handlers import register_exception_handlers
+from google.auth.transport import requests as google_requests
+
 from app.core.config import settings
 from app.core.kafka import ensure_topics
 from app.core.logger import get_logger, setup_logging
@@ -76,6 +78,13 @@ async def lifespan(app: FastAPI):
     ])
     scheduler = init_scheduler()
     setup_form_jobs(scheduler)
+
+    try:
+        _ = google_requests.Request()
+        logger.info("Google auth session warmed up")
+    except Exception as exc:
+        logger.warning("Google auth session warm-up failed: %s", exc)
+
     yield
     shutdown_scheduler()
     engine.dispose()
