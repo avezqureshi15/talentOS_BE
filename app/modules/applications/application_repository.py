@@ -7,6 +7,7 @@ from app.modules.applications import application_repository_mutations as _mut
 from app.modules.applications.application_repository_queries import (
     get_candidates_by_job_paginated as _get_candidates_by_job_paginated,
     get_finalized_candidates as _get_finalized_candidates,
+    build_disqualified_by_map as _build_disqualified_by_map,
 )
 from app.modules.applications.application_response import build_candidate_response
 from app.modules.evaluations.evaluation_model import Candidate
@@ -77,9 +78,23 @@ class ApplicationRepository:
             ]
         return result
 
-    def to_candidate_dict(self, candidate: Candidate, ai: bool = False, events_map: dict[int, list[dict]] | None = None) -> dict:
+    def build_disqualified_by_map(self, candidates: list[Candidate]) -> dict[int, list[str]]:
+        return _build_disqualified_by_map(self.db, candidates)
+
+    def to_candidate_dict(
+        self,
+        candidate: Candidate,
+        ai: bool = False,
+        events_map: dict[int, list[dict]] | None = None,
+        disqualified_by: list[str] | None = None,
+    ) -> dict:
         events = events_map.get(candidate.id) if events_map else None
-        return build_candidate_response(candidate, hide_cover_letter=ai, events=events)
+        return build_candidate_response(
+            candidate,
+            hide_cover_letter=ai,
+            events=events,
+            disqualified_by=disqualified_by,
+        )
 
     def create_queued_candidate(self, application_id: str, job_id: str, **kwargs) -> Candidate:
         return _mut.create_queued_candidate(self.db, application_id, job_id, **kwargs)

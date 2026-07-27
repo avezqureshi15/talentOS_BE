@@ -1,9 +1,12 @@
 from sqlalchemy import Text, cast, or_
 from sqlalchemy.orm import Session
 
+from app.modules.applications.application_response import extract_disqualified_by
 from app.modules.evaluations.evaluation_model import Candidate
 from app.modules.reviews.review_model import Review
 from app.modules.rounds.round_model import Round
+
+RESUME_SHORTLISTING_ROUND_TYPE = "RESUME_SHORTLISTING"
 
 
 def get_candidates_by_job_paginated(
@@ -95,6 +98,50 @@ def build_review_map(db: Session, candidates: list[Candidate]) -> dict[str, Revi
         for rv in ai_reviews:
             review_map[str(rv.round_id)] = rv
     return review_map
+
+
+def build_disqualified_by_map(db: Session, candidates: list[Candidate]) -> dict[int, list[str]]:
+    """Map candidate_id -> disqualification tags from resume-shortlisting AI reviews."""
+    if not candidates:
+        return {}
+
+    candidate_ids = [c.id for c in candidates]
+    result: dict[int, list[str]] = {cid: [] for cid in candidate_ids}
+
+    resume_rounds = (
+        db.query(Round)
+        .filter(
+            Round.candidate_id.in_(candidate_ids),
+            Round.round_type == RESUME_SHORTLISTING_ROUND_TYPE,
+        )
+        .all()
+    )
+    if not resume_rounds:
+        return result
+
+    round_to_candidate = {r.id: r.candidate_id for r in resume_rounds if r.candidate_id is not None}
+    ai_reviews = (
+        db.query(Review)
+        .filter(
+            Review.round_id.in_(list(round_to_candidate.keys())),
+            Review.entity_type == "AI",
+        )
+        .all()
+    )
+    for review in ai_reviews:
+        candidate_id = round_to_candidate.get(review.round_id)
+        if candidate_id is None:
+            continue
+        payload = review.reviews if isinstance(review.reviews, dict) else {}
+        rejection_details = payload.get("rejection_details")
+        tags = extract_disqualified_by(rejection_details if isinstance(rejection_details, list) else None)
+        if tags:
+            existing = result[candidate_id]
+            for tag in tags:
+                if tag not in existing:
+                    existing.append(tag)
+
+    return result
 
 
 def get_finalized_candidates(
