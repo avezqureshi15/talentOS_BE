@@ -2,7 +2,7 @@ from uuid import UUID
 
 from app.common.clients import AIClient, ClientError, ResumeClient, SupabaseClient
 from app.core.config import settings
-from app.core.constants import EvaluationStatus
+from app.core.constants import EvaluationStatus, PipelineStage
 from app.core.logger import get_logger
 from app.common.schemas.evaluation import AIEvaluationResponse
 from app.modules.applications.application_repository import ApplicationRepository
@@ -146,7 +146,7 @@ class ApplicationEvaluationService:
         threshold = settings.ATS_THRESHOLD_DEFAULT
         verdict = "shortlisted" if ai_result.overall_score_percentage >= threshold else "rejected"
         candidate = self.repo.mark_result(
-            candidate, status=EvaluationStatus.RESUME_SHORTLISTED,
+            candidate, status=EvaluationStatus.UNDER_EVALUATION,
             fit_score=ai_result.overall_score_percentage,
             summary_md=ai_result.resume_summary, ats_threshold_used=threshold,
         )
@@ -214,6 +214,7 @@ class ApplicationEvaluationService:
                 "rejection_details": ai_result.rejection_details,
             }
             candidate.review_verdict = verdict
+            candidate.stage = PipelineStage.RESUME_SHORTLISTED.value
             from app.modules.rounds.round_model import Round
             round_obj = self.db.query(Round).filter(Round.id == round_resp.id).first()
             if round_obj:

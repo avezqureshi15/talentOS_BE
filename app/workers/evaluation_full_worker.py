@@ -184,7 +184,7 @@ def _evaluate_full(message: AsyncEvaluationMessage) -> None:
 
         candidate = repo.mark_result(
             candidate,
-            status=EvaluationStatus.RESUME_SHORTLISTED,
+            status=EvaluationStatus.UNDER_EVALUATION,
             fit_score=ai_result.overall_score_percentage,
             summary_md=ai_result.resume_summary,
             ats_threshold_used=threshold,

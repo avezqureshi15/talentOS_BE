@@ -1,7 +1,7 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Uuid
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Time, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -18,6 +18,10 @@ class Round(Base):
     round_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     round_verdict: Mapped[str | None] = mapped_column(String(50), nullable=True)
     rh_external_session_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    scheduled_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    scheduled_time: Mapped[time | None] = mapped_column(Time, nullable=True)
+    scheduled_end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    scheduled_end_time: Mapped[time | None] = mapped_column(Time, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

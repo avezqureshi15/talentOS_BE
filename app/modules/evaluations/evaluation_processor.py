@@ -113,8 +113,7 @@ class EvaluationProcessor:
             raise TransientEvaluationError(f"AI evaluation failed: {exc}") from exc
 
         threshold = settings.ATS_THRESHOLD_DEFAULT
-        is_shortlisted = ai_result.overall_score_percentage >= threshold
-        status = EvaluationStatus.SHORTLISTED if is_shortlisted else EvaluationStatus.REJECTED
+        status = EvaluationStatus.UNDER_EVALUATION
 
         self.repository.mark_result(
             evaluation,

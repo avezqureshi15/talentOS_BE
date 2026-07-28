@@ -101,7 +101,7 @@ class ReviewService:
                     event_metadata={"round_id": str(round_id), "verdict": data.verdict},
                 ))
                 self.db.query(Candidate).filter(Candidate.id == round_obj.candidate_id).update(
-                    {"status": EvaluationStatus.UNDER_EVALUATION.value, "stage": PipelineStage.EVALUATED.value}
+                    {"status": EvaluationStatus.UNDER_EVALUATION.value}
                 )
                 self.db.flush()
                 EventService(self.db).create_event(EventCreate(

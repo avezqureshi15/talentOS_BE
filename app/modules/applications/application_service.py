@@ -41,6 +41,7 @@ class ApplicationService:
                 {"event_name": e.event_name, "created_at": e.created_at.isoformat(), "actor_type": e.actor_type}
                 for e in raw_events
             ]
+        self.repo.attach_interview_data([candidate])
         return self.repo.to_candidate_dict(candidate, ai=ai, events_map={candidate.id: events} if events else None)
     def get_applications_paginated(
         self,
@@ -99,6 +100,7 @@ class ApplicationService:
         )
         events_map = self.repo.build_events_map(items, ai=ai) if ai else {}
         disqualified_map = self.repo.build_disqualified_by_map(items)
+        self.repo.attach_interview_data(items)
         return {
             "data": [
                 self.repo.to_candidate_dict(
@@ -122,12 +124,14 @@ class ApplicationService:
     ) -> dict:
         if not self.repo:
             return {"data": [], "total": 0, "limit": limit, "offset": offset}
+        resolved_job_id = self.repo.resolve_external_job_id(job_id) if job_id else None
         items, total = self.repo.get_finalized_candidates(
             verdict=verdict.upper() if verdict else None,
-            job_id=job_id,
+            job_id=resolved_job_id,
             limit=limit,
             offset=offset,
         )
+        self.repo.attach_interview_data(items)
         return {
             "data": [self.repo.to_candidate_dict(e) for e in items],
             "total": total,
@@ -171,43 +175,6 @@ class ApplicationService:
         candidate.status = data.status
         candidate.current_round_id = data.current_round_id
         self.db.commit()
-
-        if data.scheduled_at and data.stage in ("AI_SCREENING", "AI_INTERVIEW"):
-            try:
-                from datetime import datetime, timedelta, timezone
-                from apscheduler.triggers.date import DateTrigger
-                from app.scheduler import get_scheduler
-                from app.core.config import settings
-                from app.modules.events.event_schema import EventCreate
-                from app.modules.events.event_service import EventService
-                delay = settings.AI_ROUND_EVALUATION_DELAY_MINUTES
-                if delay > 0:
-                    run_date = datetime.now(timezone.utc) + timedelta(minutes=delay)
-                else:
-                    run_date = datetime.fromisoformat(data.scheduled_at)
-                job_id = f"ai_round_complete_{data.current_round_id}"
-                get_scheduler().add_job(
-                    "app.cron.ai_round_completion:complete_ai_round",
-                    trigger=DateTrigger(run_date=run_date),
-                    args=[candidate_id, data.current_round_id],
-                    id=job_id,
-                    replace_existing=True,
-                    misfire_grace_time=1800,
-                )
-                logger.info("AI round completion scheduled | job_id=%s run_date=%s", job_id, run_date)
-
-                event_name = "AI Screening Scheduled" if data.stage == "AI_SCREENING" else "AI Interview Scheduled"
-                EventService(self.db).create_event(EventCreate(
-                    entity_type="CANDIDATE",
-                    entity_id=str(candidate_id),
-                    candidate_id=candidate_id,
-                    event_name=event_name,
-                    state_code=data.status,
-                    actor_type="SYSTEM",
-                    event_metadata={"round_id": data.current_round_id, "stage": data.stage, "scheduled_at": data.scheduled_at},
-                ))
-            except Exception as exc:
-                logger.warning("Failed to schedule AI round completion | %s", exc)
 
         return {"success": True}
 

@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 from pydantic import BaseModel
 
@@ -142,6 +143,10 @@ class TriggerInterviewRequest(BaseModel):
     round_name: str | None = None
     interview_type: str | None = "AI_INTERVIEW"
     round_type: str | None = "AI_INTERVIEW"
+    scheduled_date: str | None = None
+    scheduled_time: str | None = None
+    scheduled_end_date: str | None = None
+    scheduled_end_time: str | None = None
 
 
 @router.post("/candidates/{candidate_id}/trigger-interview", status_code=status.HTTP_201_CREATED)
@@ -167,12 +172,32 @@ async def trigger_interview(
         # POC unavailable — round created locally without external link
         pass
 
+    def _parse_date(val: str | None):
+        if not val:
+            return None
+        try:
+            return datetime.strptime(val, "%Y-%m-%d").date()
+        except ValueError:
+            return None
+
+    def _parse_time(val: str | None):
+        if not val:
+            return None
+        try:
+            return datetime.strptime(val, "%H:%M").time()
+        except ValueError:
+            return None
+
     round_obj = Round(
         candidate_id=candidate_id,
         jd_id=uuid.UUID(hiring_request_id) if isinstance(hiring_request_id, str) else hiring_request_id,
         name=body.round_name or f"{body.round_type} Round",
         round_type=body.round_type,
         rh_external_session_id=interview_id,
+        scheduled_date=_parse_date(body.scheduled_date),
+        scheduled_time=_parse_time(body.scheduled_time),
+        scheduled_end_date=_parse_date(body.scheduled_end_date),
+        scheduled_end_time=_parse_time(body.scheduled_end_time),
     )
     db.add(round_obj)
     db.commit()

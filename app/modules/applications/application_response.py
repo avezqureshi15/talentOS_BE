@@ -15,12 +15,6 @@ def extract_comparison_fields(reviews: dict | None) -> list[dict]:
 
 
 def extract_disqualified_by(rejection_details: list | None) -> list[str]:
-    """Derive unique uppercase disqualification tags from AI rejection_details.
-
-    Supports stored shapes:
-    - [{"YOE": {"JD": "...", "Candidate": "..."}}]
-    - [{"criterion": "YOE", "JD": "...", "Candidate": "..."}]
-    """
     if not rejection_details:
         return []
     tags: list[str] = []
@@ -47,8 +41,9 @@ def build_candidate_response(
     hide_cover_letter: bool = False,
     events: list[dict] | None = None,
     disqualified_by: list[str] | None = None,
+    interview_data: dict | None = None,
 ) -> dict:
-    return {
+    result = {
         "id": candidate.external_application_id,
         "candidate_id": candidate.id,
         "job_id": candidate.external_job_id,
@@ -79,4 +74,14 @@ def build_candidate_response(
         "comparison_fields": extract_comparison_fields(candidate.reviews),
         "disqualified_by": disqualified_by or [],
         "events": events,
+        "interview_id": None,
+        "interviewer_emp_id": None,
+        "interviewer_name": None,
+        "round_name": None,
     }
+    if interview_data:
+        result["interview_id"] = interview_data.get("interview_id")
+        result["interviewer_emp_id"] = interview_data.get("interviewer_emp_id")
+        result["interviewer_name"] = interview_data.get("interviewer_name")
+        result["round_name"] = interview_data.get("round_name")
+    return result

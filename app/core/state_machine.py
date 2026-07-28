@@ -15,6 +15,10 @@ TRANSITIONS: dict[str, StateTransition] = {
         set_final_verdict="REJECTED",
         set_status="MOVED_OUT_OF_HIRING_PIPELINE",
     ),
+    "final.selection.ON_HOLD": StateTransition(
+        set_final_verdict="ON_HOLD",
+        set_status="ON_HOLD",
+    ),
     "final.selection.SELECTED": StateTransition(
         set_final_verdict="SELECTED",
         set_status="MOVED_OUT_OF_HIRING_PIPELINE",
