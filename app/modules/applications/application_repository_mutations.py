@@ -88,7 +88,8 @@ def update_status(db: Session, candidate_id: int, new_status: str) -> Candidate 
     if candidate.final_verdict is not None:
         return None
     candidate.status = new_status
-    candidate.stage = get_pipeline_stage(new_status, candidate.final_verdict)
+    if new_status != "MOVE_TO_NEXT_ROUND":
+        candidate.stage = get_pipeline_stage(new_status, candidate.final_verdict)
     db.flush()
     logger.info("Updated candidate status: candidate_id=%s | status=%s", candidate_id, new_status)
     return candidate
@@ -108,7 +109,8 @@ def apply_transition(db: Session, candidate_id: int, final_verdict: str | None =
         candidate.status = status
     else:
         return candidate
-    candidate.stage = get_pipeline_stage(candidate.status, candidate.final_verdict)
+    if candidate.status != "MOVE_TO_NEXT_ROUND":
+        candidate.stage = get_pipeline_stage(candidate.status, candidate.final_verdict)
     db.commit()
     db.refresh(candidate)
     logger.info("Applied transition: candidate_id=%s | final_verdict=%s | status=%s", candidate_id, final_verdict, status)

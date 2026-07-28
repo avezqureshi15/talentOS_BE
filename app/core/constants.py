@@ -37,31 +37,33 @@ class ErrorCode(str, Enum):
 
 
 class PipelineStage(str, Enum):
-    RESUME_SHORTLISTING = "RESUME_SHORTLISTED"
+    RESUME_SHORTLISTING = "RESUME_SHORTLISTING"
+    RESUME_SHORTLISTED = "RESUME_SHORTLISTED"
     SCREENING = "SCREENING"
     INTERVIEW = "INTERVIEW"
     WAITING_FOR_EVALUATION = "WAITING_FOR_EVALUATION"
+    MOVE_TO_NEXT_ROUND="MOVE_TO_NEXT_ROUND"
     EVALUATED = "EVALUATED"
+    DECISION = "DECISION"
     SELECTED = "SELECTED"
     REJECTED = "REJECTED"
 
 
 def get_pipeline_stage(status: str, final_verdict: str | None = None) -> str | None:
-    if final_verdict == "SELECTED":
-        return PipelineStage.SELECTED.value
-    if final_verdict == "REJECTED":
-        return PipelineStage.REJECTED.value
+    if final_verdict in ("SELECTED", "REJECTED", "ON_HOLD"):
+        return PipelineStage.DECISION.value
     stage_map: dict[str, str] = {
         EvaluationStatus.QUEUED.value: PipelineStage.RESUME_SHORTLISTING.value,
         EvaluationStatus.PROCESSING.value: PipelineStage.RESUME_SHORTLISTING.value,
         EvaluationStatus.RESUME_PROCESSING.value: PipelineStage.RESUME_SHORTLISTING.value,
-        EvaluationStatus.RESUME_SHORTLISTED.value: PipelineStage.RESUME_SHORTLISTING.value,
-        EvaluationStatus.SHORTLISTED.value: PipelineStage.RESUME_SHORTLISTING.value,
+        EvaluationStatus.RESUME_SHORTLISTED.value: PipelineStage.RESUME_SHORTLISTED.value,
+        EvaluationStatus.UNDER_EVALUATION.value: PipelineStage.RESUME_SHORTLISTED.value,
+        EvaluationStatus.SHORTLISTED.value: PipelineStage.RESUME_SHORTLISTED.value,
         EvaluationStatus.REJECTED.value: PipelineStage.RESUME_SHORTLISTING.value,
         EvaluationStatus.INVALID.value: PipelineStage.RESUME_SHORTLISTING.value,
         EvaluationStatus.RESUME_PROCESSING_FAILED.value: PipelineStage.RESUME_SHORTLISTING.value,
         EvaluationStatus.FAILED.value: PipelineStage.RESUME_SHORTLISTING.value,
-        EvaluationStatus.MOVE_TO_NEXT_ROUND.value: PipelineStage.SCREENING.value,
+        EvaluationStatus.MOVE_TO_NEXT_ROUND.value: PipelineStage.MOVE_TO_NEXT_ROUND.value,
         EvaluationStatus.WAITING_FOR_REVIEW.value: PipelineStage.WAITING_FOR_EVALUATION.value,
         EvaluationStatus.INTERVIEW_SCHEDULED.value: PipelineStage.INTERVIEW.value,
         EvaluationStatus.INTERVIEW_RESCHEDULED.value: PipelineStage.INTERVIEW.value,

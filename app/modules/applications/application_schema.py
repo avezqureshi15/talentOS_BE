@@ -80,6 +80,10 @@ class EvaluatedCandidate(BaseModel):
     review_verdict: str | None = None
     comparison_fields: list[ComparisonField] = []
     events: list[EventInfo] | None = None
+    interview_id: str | None = None
+    interviewer_emp_id: str | None = None
+    interviewer_name: str | None = None
+    round_name: str | None = None
 
 
 class EvaluatedCandidatesResponse(BaseModel):
@@ -87,7 +91,7 @@ class EvaluatedCandidatesResponse(BaseModel):
 
 
 class FinalVerdictUpdate(BaseModel):
-    verdict: Literal["SELECTED", "REJECTED"]
+    verdict: Literal["ON_HOLD", "SELECTED", "REJECTED"]
 
 
 class RoundStatusUpdate(BaseModel):

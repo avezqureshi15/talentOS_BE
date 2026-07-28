@@ -177,7 +177,13 @@ class GoogleCalendarService:
                 meet_link=meet_link,
                 calendar_link=event.get("htmlLink", ""),
             )
-        except (HttpError, GoogleAPICallError) as exc:
+        except HttpError as exc:
+            if exc.resp.status == 410:
+                logger.warning("Calendar event already deleted, cannot update: event_id=%s", event_id)
+                return CalendarEventResponse(event_id=event_id, meet_link=None, calendar_link="")
+            logger.exception("Google Calendar API failed: event_id=%s", event_id)
+            raise
+        except GoogleAPICallError:
             logger.exception("Google Calendar API failed: event_id=%s", event_id)
             raise
         except Exception:
@@ -192,7 +198,13 @@ class GoogleCalendarService:
                 num_retries=_RETRIES
             )
             logger.info("Calendar event cancelled: event_id=%s", event_id)
-        except (HttpError, GoogleAPICallError) as exc:
+        except HttpError as exc:
+            if exc.resp.status == 410:
+                logger.warning("Calendar event already deleted: event_id=%s", event_id)
+                return
+            logger.exception("Google Calendar API failed: event_id=%s", event_id)
+            raise
+        except GoogleAPICallError:
             logger.exception("Google Calendar API failed: event_id=%s", event_id)
             raise
         except Exception:

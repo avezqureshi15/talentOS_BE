@@ -14,8 +14,8 @@ def extract_comparison_fields(reviews: dict | None) -> list[dict]:
     return result
 
 
-def build_candidate_response(candidate: Candidate, hide_cover_letter: bool = False, events: list[dict] | None = None) -> dict:
-    return {
+def build_candidate_response(candidate: Candidate, hide_cover_letter: bool = False, events: list[dict] | None = None, interview_data: dict | None = None) -> dict:
+    result = {
         "id": candidate.external_application_id,
         "candidate_id": candidate.id,
         "job_id": candidate.external_job_id,
@@ -45,4 +45,14 @@ def build_candidate_response(candidate: Candidate, hide_cover_letter: bool = Fal
         "review_verdict": candidate.review_verdict,
         "comparison_fields": extract_comparison_fields(candidate.reviews),
         "events": events,
+        "interview_id": None,
+        "interviewer_emp_id": None,
+        "interviewer_name": None,
+        "round_name": None,
     }
+    if interview_data:
+        result["interview_id"] = interview_data.get("interview_id")
+        result["interviewer_emp_id"] = interview_data.get("interviewer_emp_id")
+        result["interviewer_name"] = interview_data.get("interviewer_name")
+        result["round_name"] = interview_data.get("round_name")
+    return result

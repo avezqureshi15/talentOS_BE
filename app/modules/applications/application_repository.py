@@ -1,5 +1,6 @@
 from uuid import UUID
 
+from sqlalchemy import String, cast
 from sqlalchemy.orm import Session
 
 from app.core.logger import get_logger
@@ -12,6 +13,10 @@ from app.modules.applications.application_response import build_candidate_respon
 from app.modules.evaluations.evaluation_model import Candidate
 from app.modules.events.event_repository import EventRepository
 from app.modules.hiring_requests.hiring_request_model import HiringRequest
+from app.modules.interviews.models.interview import Interview
+from app.modules.interviews.models.round_interviewer import RoundInterviewer
+from app.modules.rounds.round_model import Round
+from app.modules.users.user_model import User
 
 logger = get_logger(__name__)
 
@@ -77,9 +82,39 @@ class ApplicationRepository:
             ]
         return result
 
+    def attach_interview_data(self, candidates: list[Candidate]) -> None:
+        round_ids = [str(c.current_round_id) for c in candidates if c.current_round_id]
+        if not round_ids:
+            return
+        logger.warning("attach_interview_data: round_ids_str=%s", round_ids)
+        rows = (
+            self.db.query(Interview, Round, RoundInterviewer, User)
+            .join(Round, Interview.round_id == Round.id)
+            .join(RoundInterviewer, Round.id == RoundInterviewer.round_id)
+            .join(User, RoundInterviewer.employee_id == User.id)
+            .filter(cast(Interview.round_id, String).in_(round_ids))
+            .all()
+        )
+        logger.warning("attach_interview_data: rows_found=%d", len(rows))
+        interview_by_round: dict[str, dict] = {}
+        for interview, round_, ri, user in rows:
+            rid = str(interview.round_id)
+            if rid not in interview_by_round:
+                interview_by_round[rid] = {
+                    "interview_id": str(interview.id),
+                    "interviewer_emp_id": str(ri.employee_id),
+                    "interviewer_name": user.name,
+                    "round_name": round_.name or "",
+                }
+        for c in candidates:
+            rid = str(c.current_round_id) if c.current_round_id else None
+            if rid and rid in interview_by_round:
+                c._interview_data = interview_by_round[rid]
+
     def to_candidate_dict(self, candidate: Candidate, ai: bool = False, events_map: dict[int, list[dict]] | None = None) -> dict:
         events = events_map.get(candidate.id) if events_map else None
-        return build_candidate_response(candidate, hide_cover_letter=ai, events=events)
+        interview_data = getattr(candidate, '_interview_data', None)
+        return build_candidate_response(candidate, hide_cover_letter=ai, events=events, interview_data=interview_data)
 
     def create_queued_candidate(self, application_id: str, job_id: str, **kwargs) -> Candidate:
         return _mut.create_queued_candidate(self.db, application_id, job_id, **kwargs)
