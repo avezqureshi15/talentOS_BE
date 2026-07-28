@@ -14,7 +14,35 @@ def extract_comparison_fields(reviews: dict | None) -> list[dict]:
     return result
 
 
-def build_candidate_response(candidate: Candidate, hide_cover_letter: bool = False, events: list[dict] | None = None, interview_data: dict | None = None) -> dict:
+def extract_disqualified_by(rejection_details: list | None) -> list[str]:
+    if not rejection_details:
+        return []
+    tags: list[str] = []
+    seen: set[str] = set()
+    for item in rejection_details:
+        if not isinstance(item, dict):
+            continue
+        criterion = item.get("criterion")
+        if isinstance(criterion, str) and criterion.strip():
+            tag = criterion.strip().upper()
+        else:
+            keys = [k for k in item.keys() if k not in ("JD", "Candidate", "criterion")]
+            if not keys:
+                continue
+            tag = str(keys[0]).strip().upper()
+        if tag and tag not in seen:
+            seen.add(tag)
+            tags.append(tag)
+    return tags
+
+
+def build_candidate_response(
+    candidate: Candidate,
+    hide_cover_letter: bool = False,
+    events: list[dict] | None = None,
+    disqualified_by: list[str] | None = None,
+    interview_data: dict | None = None,
+) -> dict:
     result = {
         "id": candidate.external_application_id,
         "candidate_id": candidate.id,
@@ -44,6 +72,7 @@ def build_candidate_response(candidate: Candidate, hide_cover_letter: bool = Fal
         "reviews": candidate.reviews,
         "review_verdict": candidate.review_verdict,
         "comparison_fields": extract_comparison_fields(candidate.reviews),
+        "disqualified_by": disqualified_by or [],
         "events": events,
         "interview_id": None,
         "interviewer_emp_id": None,

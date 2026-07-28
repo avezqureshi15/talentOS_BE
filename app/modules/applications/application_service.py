@@ -99,9 +99,18 @@ class ApplicationService:
             reject_reason=reject_reason,
         )
         events_map = self.repo.build_events_map(items, ai=ai) if ai else {}
+        disqualified_map = self.repo.build_disqualified_by_map(items)
         self.repo.attach_interview_data(items)
         return {
-            "data": [self.repo.to_candidate_dict(e, ai=ai, events_map=events_map) for e in items],
+            "data": [
+                self.repo.to_candidate_dict(
+                    e,
+                    ai=ai,
+                    events_map=events_map,
+                    disqualified_by=disqualified_map.get(e.id, []),
+                )
+                for e in items
+            ],
             "total": total,
             "limit": limit,
             "offset": offset,
