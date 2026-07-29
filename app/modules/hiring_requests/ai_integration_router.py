@@ -21,11 +21,29 @@ router = APIRouter(
 )
 
 
-def _get_rh_job_id(hiring_request_id: str, db: Session) -> str:
+async def _get_or_create_rh_job(hiring_request_id: str, db: Session) -> str:
     hr = db.query(HiringRequest).filter(HiringRequest.id == hiring_request_id).first()
-    if not hr or not hr.rh_external_job_id:
-        raise HTTPException(status_code=404, detail="No linked ai-recruitment-poc job found")
-    return hr.rh_external_job_id
+    if not hr:
+        raise HTTPException(status_code=404, detail="Hiring request not found")
+
+    if hr.rh_external_job_id:
+        return hr.rh_external_job_id
+
+    client = AiRecruitmentClient()
+    created = await client.create_job(
+        title=hr.title,
+        description=hr.description,
+        required_skills=hr.requirements,
+        location=hr.location,
+        department=hr.department,
+        employment_type=hr.type,
+    )
+    if not created:
+        raise HTTPException(status_code=502, detail="Failed to create job in ai-recruitment-poc")
+
+    hr.rh_external_job_id = created["id"]
+    db.commit()
+    return created["id"]
 
 
 def _get_rh_candidate_id(candidate_id: int, db: Session) -> str:
@@ -41,7 +59,7 @@ async def get_screening_result(
     candidate_id: int,
     db: Session = Depends(get_db),
 ):
-    rh_job_id = _get_rh_job_id(hiring_request_id, db)
+    rh_job_id = await _get_or_create_rh_job(hiring_request_id, db)
     rh_candidate_id = _get_rh_candidate_id(candidate_id, db)
     client = AiRecruitmentClient()
     result = await client.get_screening_result(rh_job_id, rh_candidate_id)
@@ -56,7 +74,7 @@ async def list_interviews(
     candidate_id: int,
     db: Session = Depends(get_db),
 ):
-    rh_job_id = _get_rh_job_id(hiring_request_id, db)
+    rh_job_id = await _get_or_create_rh_job(hiring_request_id, db)
     rh_candidate_id = _get_rh_candidate_id(candidate_id, db)
     client = AiRecruitmentClient()
     result = await client.list_interviews(rh_job_id, rh_candidate_id)
@@ -72,7 +90,7 @@ async def get_interview_detail(
     interview_id: str,
     db: Session = Depends(get_db),
 ):
-    rh_job_id = _get_rh_job_id(hiring_request_id, db)
+    rh_job_id = await _get_or_create_rh_job(hiring_request_id, db)
     rh_candidate_id = _get_rh_candidate_id(candidate_id, db)
     client = AiRecruitmentClient()
     result = await client.get_interview_detail(rh_job_id, rh_candidate_id, interview_id)
@@ -86,7 +104,7 @@ async def list_ai_candidates(
     hiring_request_id: str,
     db: Session = Depends(get_db),
 ):
-    rh_job_id = _get_rh_job_id(hiring_request_id, db)
+    rh_job_id = await _get_or_create_rh_job(hiring_request_id, db)
     client = AiRecruitmentClient()
     result = await client.list_candidates(rh_job_id)
     if result is None:
@@ -108,7 +126,7 @@ async def move_to_screening(
     body: MoveToScreeningRequest,
     db: Session = Depends(get_db),
 ):
-    rh_job_id = _get_rh_job_id(hiring_request_id, db)
+    rh_job_id = await _get_or_create_rh_job(hiring_request_id, db)
     client = AiRecruitmentClient()
 
     created = await client.create_candidate(
@@ -162,7 +180,7 @@ async def trigger_interview(
     interview_id = None
     created = None
     try:
-        rh_job_id = _get_rh_job_id(hiring_request_id, db)
+        rh_job_id = await _get_or_create_rh_job(hiring_request_id, db)
         rh_candidate_id = _get_rh_candidate_id(candidate_id, db)
         client = AiRecruitmentClient()
         created = await client.trigger_interview(rh_job_id, rh_candidate_id, body.interview_type)

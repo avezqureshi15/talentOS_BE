@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     # ai-recruitment-poc (RH) integration
     RH_SERVICE_URL: str = ""
     RH_SERVICE_PRIVATE_KEY_PATH: str = ""
+    RH_API_KEY: str = ""
 
     # Supabase webhook verification (shared secret sent as X-Webhook-Secret header).
     # When empty, verification is skipped (local dev only — set this in prod).

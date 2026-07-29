@@ -11,7 +11,32 @@ class AiRecruitmentClient:
         self.base_url = settings.RH_SERVICE_URL
 
     def _headers(self) -> dict[str, str]:
+        if settings.RH_API_KEY:
+            return {"Authorization": f"Bearer {settings.RH_API_KEY}"}
         return {"Authorization": f"Bearer {create_service_token()}"}
+
+    async def create_job(self, title: str, description: str, required_skills: list[str] | None = None, location: str | None = None, department: str | None = None, employment_type: str | None = None) -> dict | None:
+        if not self.base_url:
+            return None
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.post(
+                    f"{self.base_url}/internal/talentos/jobs",
+                    json={
+                        "title": title,
+                        "description": description,
+                        "required_skills": required_skills,
+                        "location": location,
+                        "department": department,
+                        "employment_type": employment_type,
+                    },
+                    headers=self._headers(),
+                )
+                if resp.is_error:
+                    return None
+                return resp.json()
+        except Exception:
+            return None
 
     async def create_candidate(self, job_id: str, name: str, email: str, phone: str | None = None, resume_url: str | None = None) -> dict | None:
         if not self.base_url:
