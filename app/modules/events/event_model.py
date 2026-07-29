@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, Index, Integer, String, Text, Uuid
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, Uuid
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -15,7 +15,7 @@ class Event(Base):
     entity_type: Mapped[str] = mapped_column(String(50), nullable=False)
     entity_id: Mapped[str] = mapped_column(String, nullable=False)
     job_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
-    candidate_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    candidate_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("candidates.id", ondelete="CASCADE"), nullable=True)
     event_name: Mapped[str] = mapped_column(String(100), nullable=False)
     state_code: Mapped[str] = mapped_column(String(100), nullable=False)
     actor_type: Mapped[str | None] = mapped_column(String(20), nullable=True)

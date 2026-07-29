@@ -25,8 +25,8 @@ class Form(Base):
     id: Mapped[uuid.UUID] = mapped_column(SA_Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     employee_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     type: Mapped[str] = mapped_column(String(10), nullable=False, default=FormType.SLOTS.value)
-    round_id: Mapped[uuid.UUID | None] = mapped_column(SA_Uuid(as_uuid=True), ForeignKey("rounds.id"), nullable=True)
-    candidate_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("candidates.id"), nullable=True)
+    round_id: Mapped[uuid.UUID | None] = mapped_column(SA_Uuid(as_uuid=True), ForeignKey("rounds.id", ondelete="CASCADE"), nullable=True)
+    candidate_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("candidates.id", ondelete="CASCADE"), nullable=True)
     status: Mapped[str] = mapped_column(
         String(10), nullable=False, default=FormStatus.SENT.value
     )

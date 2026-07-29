@@ -64,7 +64,7 @@ class Candidate(Base):
     )
     evaluated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    current_round_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), ForeignKey("rounds.id"), nullable=True)
+    current_round_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), ForeignKey("rounds.id", ondelete="SET NULL"), nullable=True)
     rh_external_candidate_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     final_verdict: Mapped[str | None] = mapped_column(String(50), nullable=True)
     reviews: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
