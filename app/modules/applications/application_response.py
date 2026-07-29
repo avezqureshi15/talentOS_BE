@@ -78,10 +78,14 @@ def build_candidate_response(
         "interviewer_emp_id": None,
         "interviewer_name": None,
         "round_name": None,
+        "scheduled_at": None,
+        "scheduled_end_at": None,
     }
     if interview_data:
         result["interview_id"] = interview_data.get("interview_id")
         result["interviewer_emp_id"] = interview_data.get("interviewer_emp_id")
         result["interviewer_name"] = interview_data.get("interviewer_name")
         result["round_name"] = interview_data.get("round_name")
+        result["scheduled_at"] = interview_data.get("scheduled_at")
+        result["scheduled_end_at"] = interview_data.get("scheduled_end_at")
     return result

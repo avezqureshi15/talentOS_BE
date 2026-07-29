@@ -1,3 +1,4 @@
+from datetime import datetime
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -36,12 +37,26 @@ class RoundService:
                         status_code=400,
                         detail="Current round verdict must be filled before scheduling a new round",
                     )
+        def _parse_date(val: str | None):
+            if not val: return None
+            try: return datetime.strptime(val, "%Y-%m-%d").date()
+            except ValueError: return None
+
+        def _parse_time(val: str | None):
+            if not val: return None
+            try: return datetime.strptime(val, "%H:%M").time()
+            except ValueError: return None
+
         round_obj = Round(
             name=data.name,
             round_type=data.round_type,
             candidate_id=data.candidate_id,
             slot_id=data.slot_id,
             jd_id=data.jd_id,
+            scheduled_date=_parse_date(data.scheduled_date),
+            scheduled_time=_parse_time(data.scheduled_time),
+            scheduled_end_date=_parse_date(data.scheduled_end_date),
+            scheduled_end_time=_parse_time(data.scheduled_end_time),
         )
         self.repository.create(round_obj)
         self.db.commit()

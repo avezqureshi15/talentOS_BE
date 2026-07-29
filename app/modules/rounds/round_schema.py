@@ -32,6 +32,10 @@ class RoundCreate(BaseModel):
     candidate_id: int | None = None
     slot_id: uuid.UUID | None = None
     jd_id: uuid.UUID | None = None
+    scheduled_date: str | None = None
+    scheduled_time: str | None = None
+    scheduled_end_date: str | None = None
+    scheduled_end_time: str | None = None
 
 
 class RoundResponse(BaseModel):

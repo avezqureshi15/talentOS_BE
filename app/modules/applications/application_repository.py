@@ -17,6 +17,7 @@ from app.modules.hiring_requests.hiring_request_model import HiringRequest
 from app.modules.interviews.models.interview import Interview
 from app.modules.interviews.models.round_interviewer import RoundInterviewer
 from app.modules.rounds.round_model import Round
+from app.modules.slots.slot_model import Slot
 from app.modules.users.user_model import User
 
 logger = get_logger(__name__)
@@ -92,23 +93,59 @@ class ApplicationRepository:
             return
         logger.warning("attach_interview_data: round_ids_str=%s", round_ids)
         rows = (
-            self.db.query(Interview, Round, RoundInterviewer, User)
+            self.db.query(Interview, Round, RoundInterviewer, User, Slot)
             .join(Round, Interview.round_id == Round.id)
             .join(RoundInterviewer, Round.id == RoundInterviewer.round_id)
             .join(User, RoundInterviewer.employee_id == User.id)
+            .outerjoin(Slot, Round.slot_id == Slot.id)
             .filter(cast(Interview.round_id, String).in_(round_ids))
             .all()
         )
         logger.warning("attach_interview_data: rows_found=%d", len(rows))
         interview_by_round: dict[str, dict] = {}
-        for interview, round_, ri, user in rows:
+        for interview, round_, ri, user, slot in rows:
             rid = str(interview.round_id)
             if rid not in interview_by_round:
+                scheduled_at = None
+                scheduled_end_at = None
+                if slot and slot.start_at:
+                    scheduled_at = slot.start_at.isoformat()
+                    scheduled_end_at = slot.end_at.isoformat() if slot.end_at else None
+                elif round_.scheduled_date and round_.scheduled_time:
+                    scheduled_at = f"{round_.scheduled_date.isoformat()}T{round_.scheduled_time.isoformat()}"
+                    if round_.scheduled_end_date and round_.scheduled_end_time:
+                        scheduled_end_at = f"{round_.scheduled_end_date.isoformat()}T{round_.scheduled_end_time.isoformat()}"
                 interview_by_round[rid] = {
                     "interview_id": str(interview.id),
                     "interviewer_emp_id": str(ri.employee_id),
                     "interviewer_name": user.name,
                     "round_name": round_.name or "",
+                    "scheduled_at": scheduled_at,
+                    "scheduled_end_at": scheduled_end_at,
+                }
+        found_ids = set(interview_by_round.keys())
+        missing_ids = [rid for rid in round_ids if rid not in found_ids]
+        if missing_ids:
+            fallback_rounds = (
+                self.db.query(Round)
+                .filter(cast(Round.id, String).in_(missing_ids))
+                .all()
+            )
+            for r in fallback_rounds:
+                rid = str(r.id)
+                scheduled_at = None
+                scheduled_end_at = None
+                if r.scheduled_date and r.scheduled_time:
+                    scheduled_at = f"{r.scheduled_date.isoformat()}T{r.scheduled_time.isoformat()}"
+                    if r.scheduled_end_date and r.scheduled_end_time:
+                        scheduled_end_at = f"{r.scheduled_end_date.isoformat()}T{r.scheduled_end_time.isoformat()}"
+                interview_by_round[rid] = {
+                    "interview_id": None,
+                    "interviewer_emp_id": None,
+                    "interviewer_name": None,
+                    "round_name": r.name or "",
+                    "scheduled_at": scheduled_at,
+                    "scheduled_end_at": scheduled_end_at,
                 }
         for c in candidates:
             rid = str(c.current_round_id) if c.current_round_id else None

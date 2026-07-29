@@ -85,6 +85,8 @@ class EvaluatedCandidate(BaseModel):
     interviewer_emp_id: str | None = None
     interviewer_name: str | None = None
     round_name: str | None = None
+    scheduled_at: str | None = None
+    scheduled_end_at: str | None = None
 
 
 class EvaluatedCandidatesResponse(BaseModel):
