@@ -63,6 +63,27 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, set[Permission]] = {
     },
 }
 
+PERMISSION_ENDPOINTS: dict[str, str] = {
+    Permission.APPLICATION_VIEW.value: "GET /api/v1/applications",
+    Permission.APPLICATION_EVALUATE.value: "POST /api/v1/evaluations/evaluate-async",
+    Permission.APPLICATION_REJECT.value: "POST /api/v1/rounds/{round_id}/reject",
+    Permission.HIRING_REQUEST_CREATE.value: "POST /api/v1/hiring-requests",
+    Permission.HIRING_REQUEST_EDIT.value: "PUT /api/v1/hiring-requests/{id}",
+    Permission.HIRING_REQUEST_VIEW.value: "GET /api/v1/hiring-requests",
+    Permission.HIRING_REQUEST_DELETE.value: "DELETE /api/v1/hiring-requests/{id}",
+    Permission.USER_INVITE.value: "POST /api/v1/admin/users/invites",
+    Permission.USER_MANAGE.value: "PATCH /api/v1/admin/users/{user_id}",
+    Permission.TENANT_VIEW.value: "GET /api/v1/superadmin/tenants",
+    Permission.TENANT_EDIT.value: "PATCH /api/v1/superadmin/tenants/{tenant_id}",
+    Permission.SETTINGS_VIEW.value: "GET /api/v1/settings",
+    Permission.SETTINGS_EDIT.value: "PATCH /api/v1/settings",
+    Permission.SLOT_SUBMIT.value: "POST /api/v1/slots",
+    Permission.SLOT_VIEW_ALL.value: "GET /api/v1/slots/employee",
+    Permission.REVIEW_SUBMIT.value: "POST /api/v1/reviews",
+    Permission.REVIEW_VIEW_ALL.value: "GET /api/v1/reviews/round/{round_id}",
+    Permission.CHAT.value: "GET /api/v1/chat/chats",
+}
+
 PERMISSION_META: dict[str, dict[str, str]] = {
     permission.value: {
         "name": " ".join(w.capitalize() for w in permission.value.split(".")),

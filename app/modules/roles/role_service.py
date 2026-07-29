@@ -61,6 +61,7 @@ class RoleService:
                 name=p.name,
                 group=p.group,
                 assigned=p.code in assigned_set,
+                endpoint=getattr(p, "endpoint", "") or "",
             )
             for p in all_permissions
         ]
@@ -79,7 +80,7 @@ class RoleService:
             ]
 
         return [
-            PermissionInfo(code=r.code, name=r.name, group=r.group)
+            PermissionInfo(code=r.code, name=r.name, group=r.group, endpoint=getattr(r, "endpoint", "") or "")
             for r in rows
         ]
 

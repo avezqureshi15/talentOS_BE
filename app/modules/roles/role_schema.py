@@ -6,6 +6,7 @@ class PermissionInfo(BaseModel):
     name: str
     group: str
     assigned: bool = False
+    endpoint: str = ""
 
     model_config = ConfigDict(from_attributes=True)
 

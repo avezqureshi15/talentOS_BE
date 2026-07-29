@@ -17,6 +17,7 @@ if config.config_file_name is not None:
 
 from app.db.base import Base  # noqa: E402
 from app.modules.alerts.alert_model import Alert  # noqa: E402, F401
+from app.modules.api_keys.api_key_model import ApiKey, ApiKeyPermission  # noqa: E402, F401
 from app.modules.auth.auth_model import RefreshToken  # noqa: E402, F401
 from app.modules.auth.invite_model import TenantInvite  # noqa: E402, F401
 from app.modules.designation.designation_model import Band, Designation, KpiDefinition  # noqa: E402, F401

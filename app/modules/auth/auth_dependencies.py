@@ -1,6 +1,7 @@
 from fastapi import Depends, Header, HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.permissions import Permission
 from app.db.session import get_db
 from app.modules.auth.auth_schema import UserInfo
 
@@ -9,11 +10,30 @@ def get_current_user(
     authorization: str = Header(..., alias="Authorization"),
     db: Session = Depends(get_db),
 ) -> UserInfo:
-    from app.modules.auth.auth_service import AuthService
-
     scheme, _, token = authorization.partition(" ")
     if scheme.lower() != "bearer" or not token:
         raise HTTPException(status_code=401, detail="Invalid authorization header")
+
+    from app.modules.api_keys.api_key_service import ApiKeyService
+
+    if token.startswith("tal_"):
+        api_key = ApiKeyService.validate_api_key(token, db)
+        if not api_key:
+            raise HTTPException(status_code=401, detail="Invalid or revoked API key")
+
+        permissions = ApiKeyService.get_permissions_for_key(api_key.id, db)
+        return UserInfo(
+            id=-api_key.id,
+            email=api_key.name,
+            name=api_key.name,
+            role="superadmin",
+            tenant_id=None,
+            auth_provider="api_key",
+            is_active=True,
+            permissions=permissions,
+        )
+
+    from app.modules.auth.auth_service import AuthService
 
     service = AuthService(db)
     try:

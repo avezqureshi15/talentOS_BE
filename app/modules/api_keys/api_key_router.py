@@ -1,0 +1,119 @@
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
+
+from app.core.authorization import require_permission
+from app.core.config import settings
+from app.core.constants import DEFAULT_PAGE_SIZE
+from app.core.permissions import Permission
+from app.db.session import get_db
+from app.modules.api_keys.api_key_schema import (
+    ApiKeyCreatedResponse,
+    ApiKeyDetailResponse,
+    ApiKeyListResponse,
+    ApiKeyResponse,
+    CreateAppRequest,
+    UpdateAppRequest,
+    UpdatePermissionsRequest,
+)
+from app.modules.api_keys.api_key_service import ApiKeyService
+from app.modules.auth.auth_schema import UserInfo
+
+router = APIRouter(
+    prefix=f"{settings.API_V1_PREFIX}/superadmin/apps",
+    tags=["superadmin-apps"],
+    dependencies=[Depends(require_permission(Permission.TENANT_EDIT))],
+)
+
+
+@router.post("", response_model=ApiKeyCreatedResponse)
+def create_app(
+    body: CreateAppRequest,
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(require_permission(Permission.TENANT_EDIT)),
+):
+    service = ApiKeyService(db)
+    result = service.create_app(
+        name=body.name,
+        description=body.description,
+        created_by_user_id=current_user.id,
+    )
+    return result
+
+
+@router.get("", response_model=ApiKeyListResponse)
+def list_apps(
+    q: str | None = Query(None, description="Search by app name"),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(require_permission(Permission.TENANT_EDIT)),
+):
+    service = ApiKeyService(db)
+    return service.list_apps(page=page, per_page=per_page, search=q)
+
+
+@router.get("/{app_id}", response_model=ApiKeyDetailResponse)
+def get_app(
+    app_id: int,
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(require_permission(Permission.TENANT_EDIT)),
+):
+    service = ApiKeyService(db)
+    result = service.get_app(app_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="App not found")
+    return result
+
+
+@router.patch("/{app_id}", response_model=ApiKeyResponse)
+def update_app(
+    app_id: int,
+    body: UpdateAppRequest,
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(require_permission(Permission.TENANT_EDIT)),
+):
+    service = ApiKeyService(db)
+    result = service.update_app(app_id, name=body.name, description=body.description)
+    if not result:
+        raise HTTPException(status_code=404, detail="App not found")
+    return result
+
+
+@router.delete("/{app_id}")
+def revoke_app(
+    app_id: int,
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(require_permission(Permission.TENANT_EDIT)),
+):
+    service = ApiKeyService(db)
+    ok = service.revoke_app(app_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="App not found")
+    return {"message": "App revoked successfully"}
+
+
+@router.post("/{app_id}/rotate", response_model=ApiKeyCreatedResponse)
+def rotate_key(
+    app_id: int,
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(require_permission(Permission.TENANT_EDIT)),
+):
+    service = ApiKeyService(db)
+    result = service.rotate_key(app_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="App not found")
+    return result
+
+
+@router.put("/{app_id}/permissions", response_model=ApiKeyDetailResponse)
+def update_app_permissions(
+    app_id: int,
+    body: UpdatePermissionsRequest,
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(require_permission(Permission.TENANT_EDIT)),
+):
+    service = ApiKeyService(db)
+    result = service.update_permissions(app_id, body.permission_codes)
+    if not result:
+        raise HTTPException(status_code=404, detail="App not found")
+    return result

@@ -43,6 +43,7 @@ from app.modules.todo import router as todo_router
 from app.modules.settings.settings_router import router as settings_router
 from app.modules.users import router as users_router
 from app.modules.users.user_admin_router import router as user_admin_router
+from app.modules.api_keys.api_key_router import router as api_key_router
 from app.modules.tenants.tenant_router import router as tenant_router
 from app.modules.tenants.org_router import router as org_router
 from app.modules.roles.role_router import router as role_router
@@ -135,6 +136,7 @@ app.include_router(email_router)
 app.include_router(user_admin_router)
 app.include_router(settings_router)
 app.include_router(tenant_router)
+app.include_router(api_key_router)
 app.include_router(org_router)
 app.include_router(role_router)
 

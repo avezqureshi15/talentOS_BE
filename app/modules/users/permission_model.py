@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, Column, Integer, String, UniqueConstraint
 
 from app.db.base import Base
 
@@ -10,6 +10,8 @@ class PermissionModel(Base):
     code = Column(String(100), unique=True, nullable=False, index=True)
     name = Column(String(255), nullable=False)
     group = Column(String(50), nullable=False, default="general")
+    endpoint = Column(String(255), nullable=False, default="")
+    is_default = Column(Boolean, nullable=False, default=False)
 
 
 class RolePermission(Base):
