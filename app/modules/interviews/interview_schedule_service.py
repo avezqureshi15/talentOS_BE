@@ -1,24 +1,29 @@
 import uuid
 from typing import Protocol
 
-from apscheduler.triggers.date import DateTrigger
 from google.api_core.exceptions import GoogleAPICallError
 from googleapiclient.errors import HttpError
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.common.clients.meetmind_client import MeetMindClient
 from app.common.exceptions.calendar_exception import CalendarApiFailedException
 from app.common.exceptions.interview_exception import InterviewNotFoundException
 from app.common.exceptions.round_exception import RoundNotFoundException
 from app.common.exceptions.slot_exception import SlotNotFoundException
+from app.core.config import settings
 from app.core.constants import EvaluationStatus, InterviewStatus
 from app.core.logger import get_logger
+from app.cron.interview_fallback import (
+    remove_interview_fallback,
+    reschedule_interview_fallback,
+    schedule_interview_fallback,
+)
 from app.modules.interviews.interview_helpers import get_calendar_service
 from app.modules.interviews.interview_repository import InterviewRepository, InterviewRepositoryProtocol
 from app.modules.interviews.interview_schema import CancelInterviewResponse, ScheduleInterviewResponse
 from app.modules.interviews.models.interview import Interview
 from app.modules.slots.slot_model import SlotStatus
-from app.scheduler import get_scheduler
 
 logger = get_logger(__name__)
 
@@ -102,17 +107,21 @@ class InterviewScheduleService:
         if commit:
             self.db.commit()
             self.db.refresh(created)
-        job_id = f"interview_complete_{created.id}"
-        get_scheduler().add_job(
-            "app.cron.interview_completion:complete_interview",
-            trigger=DateTrigger(run_date=slot.end_at),
-            args=[str(created.id)],
-            id=job_id,
-            replace_existing=True,
-            misfire_grace_time=1800,
+
+        if result.meet_link:
+            MeetMindClient().schedule_meeting(
+                meet_url=result.meet_link,
+                title=title,
+                participant_emails=attendees,
+            )
+
+        schedule_interview_fallback(str(created.id), slot.start_at)
+        logger.info(
+            "Interview scheduled: id=%s | event_id=%s | fallback_in_seconds=%s",
+            created.id,
+            result.event_id,
+            settings.INTERVIEW_FALLBACK_SECONDS,
         )
-        logger.info("Completion job scheduled | job_id=%s run_date=%s", job_id, slot.end_at)
-        logger.info("Interview scheduled: id=%s | event_id=%s", created.id, result.event_id)
         return ScheduleInterviewResponse(
             id=str(created.id), round_id=str(created.round_id),
             slot_id=str(created.slot_id) if created.slot_id else None,
@@ -155,15 +164,17 @@ class InterviewScheduleService:
                 candidate_id=round_obj.candidate_id,
                 event_metadata={"round_id": str(interview.round_id), "old_slot": str(old_slot_id), "new_slot": str(new_slot_id)},
             ))
-        try:
-            job_id = f"interview_complete_{interview.id}"
-            get_scheduler().reschedule_job(
-                job_id,
-                trigger=DateTrigger(run_date=new_slot.end_at),
+
+        if interview.meet_link:
+            attendees = self.repository.get_interviewer_emails_for_round(interview.round_id)
+            title = round_obj.name if round_obj else "Interview"
+            MeetMindClient().schedule_meeting(
+                meet_url=interview.meet_link,
+                title=title or "Interview",
+                participant_emails=attendees,
             )
-            logger.info("Completion job rescheduled | job_id=%s new_run_date=%s", job_id, new_slot.end_at)
-        except Exception as exc:
-            logger.warning("Failed to reschedule completion job | job_id=interview_complete_%s | %s", interview.id, exc)
+
+        reschedule_interview_fallback(str(interview.id), new_slot.start_at)
         logger.info("Interview rescheduled: id=%s", interview.id)
         return ScheduleInterviewResponse(
             id=str(interview.id), round_id=str(interview.round_id),
@@ -199,11 +210,6 @@ class InterviewScheduleService:
                 candidate_id=round_obj.candidate_id,
                 event_metadata={"round_id": str(interview.round_id)},
             ))
-        try:
-            job_id = f"interview_complete_{interview.id}"
-            get_scheduler().remove_job(job_id)
-            logger.info("Completion job removed | job_id=%s", job_id)
-        except Exception:
-            logger.debug("No completion job to remove | interview_id=%s", interview.id)
+        remove_interview_fallback(str(interview.id))
         logger.info("Interview cancelled: id=%s", interview.id)
         return CancelInterviewResponse(id=str(interview.id), status=interview.status)
