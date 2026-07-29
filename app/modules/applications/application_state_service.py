@@ -46,7 +46,7 @@ class ApplicationStateService:
 
         if t.set_final_verdict is not None:
             existing = self.repo.get_final_verdict(candidate_id)
-            if existing:
+            if existing and existing != "ON_HOLD":
                 raise CandidateFinalizedException(candidate_id, existing)
 
         candidate = self.repo.apply_transition(candidate_id, final_verdict=t.set_final_verdict, status=t.set_status)
