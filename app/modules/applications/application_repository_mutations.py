@@ -3,7 +3,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.core.constants import EvaluationStatus
+from app.core.constants import EvaluationStatus, get_pipeline_stage
 from app.core.logger import get_logger
 from app.modules.evaluations.evaluation_model import Candidate
 
@@ -11,6 +11,7 @@ logger = get_logger(__name__)
 
 
 def create_queued_candidate(db: Session, application_id: str, job_id: str, **kwargs) -> Candidate:
+    status = EvaluationStatus.QUEUED.value
     candidate = Candidate(
         external_application_id=application_id,
         external_job_id=job_id,
@@ -28,7 +29,8 @@ def create_queued_candidate(db: Session, application_id: str, job_id: str, **kwa
         linkedin_url=kwargs.get("linkedin_url"),
         willing_to_relocate=kwargs.get("willing_to_relocate", False),
         candidate_type=kwargs.get("candidate_type", "REGULAR"),
-        status=EvaluationStatus.QUEUED.value,
+        status=status,
+        stage=get_pipeline_stage(status),
     )
     db.add(candidate)
     db.commit()
@@ -39,6 +41,7 @@ def create_queued_candidate(db: Session, application_id: str, job_id: str, **kwa
 
 def mark_processing(db: Session, candidate: Candidate) -> Candidate:
     candidate.status = EvaluationStatus.RESUME_PROCESSING.value
+    candidate.stage = get_pipeline_stage(candidate.status)
     candidate.attempts += 1
     db.commit()
     db.refresh(candidate)
@@ -47,6 +50,7 @@ def mark_processing(db: Session, candidate: Candidate) -> Candidate:
 
 def mark_result(db: Session, candidate: Candidate, status: EvaluationStatus, fit_score: int | None = None, summary_md: str | None = None, ats_threshold_used: int | None = None, error_reason: str | None = None) -> Candidate:
     candidate.status = status.value
+    candidate.stage = get_pipeline_stage(status.value, candidate.final_verdict)
     candidate.fit_score = fit_score
     candidate.summary_md = summary_md
     candidate.ats_threshold_used = ats_threshold_used
@@ -70,6 +74,7 @@ def set_final_verdict(db: Session, candidate_id: int, verdict: str) -> Candidate
     if not candidate:
         return None
     candidate.final_verdict = verdict
+    candidate.stage = get_pipeline_stage(candidate.status, verdict)
     db.commit()
     db.refresh(candidate)
     logger.info("Set final_verdict: candidate_id=%s | verdict=%s", candidate_id, verdict)
@@ -83,6 +88,8 @@ def update_status(db: Session, candidate_id: int, new_status: str) -> Candidate 
     if candidate.final_verdict is not None:
         return None
     candidate.status = new_status
+    if new_status != "MOVE_TO_NEXT_ROUND":
+        candidate.stage = get_pipeline_stage(new_status, candidate.final_verdict)
     db.flush()
     logger.info("Updated candidate status: candidate_id=%s | status=%s", candidate_id, new_status)
     return candidate
@@ -102,6 +109,8 @@ def apply_transition(db: Session, candidate_id: int, final_verdict: str | None =
         candidate.status = status
     else:
         return candidate
+    if candidate.status != "MOVE_TO_NEXT_ROUND":
+        candidate.stage = get_pipeline_stage(candidate.status, candidate.final_verdict)
     db.commit()
     db.refresh(candidate)
     logger.info("Applied transition: candidate_id=%s | final_verdict=%s | status=%s", candidate_id, final_verdict, status)

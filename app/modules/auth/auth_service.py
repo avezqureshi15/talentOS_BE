@@ -1,5 +1,6 @@
 import hashlib
 import secrets
+import threading
 from datetime import datetime, timedelta, timezone
 
 from google.auth.transport import requests as google_requests
@@ -29,6 +30,19 @@ INVITE_TOKEN_BYTES = 48
 INVITE_EXPIRE_DAYS = 7
 
 
+_google_request_session: google_requests.Request | None = None
+_google_session_lock = threading.Lock()
+
+
+def _get_google_session() -> google_requests.Request:
+    global _google_request_session
+    if _google_request_session is None:
+        with _google_session_lock:
+            if _google_request_session is None:
+                _google_request_session = google_requests.Request()
+    return _google_request_session
+
+
 class AuthService:
     def __init__(self, db: Session):
         self.repo = AuthRepository(db)
@@ -54,7 +68,7 @@ class AuthService:
         try:
             info = id_token.verify_oauth2_token(
                 credential,
-                google_requests.Request(),
+                _get_google_session(),
                 settings.GOOGLE_CLIENT_ID,
             )
             if info.get("iss") not in {"accounts.google.com", "https://accounts.google.com"}:

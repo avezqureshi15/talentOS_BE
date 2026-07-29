@@ -13,7 +13,7 @@ class Interview(Base):
     __tablename__ = "interviews"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    round_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("rounds.id"), nullable=False)
+    round_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("rounds.id", ondelete="CASCADE"), nullable=False)
     slot_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), ForeignKey("slots.id"), nullable=True)
     event_id: Mapped[str | None] = mapped_column(String(500), nullable=True)
     meet_link: Mapped[str | None] = mapped_column(String(1024), nullable=True)

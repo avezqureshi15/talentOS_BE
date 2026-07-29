@@ -41,6 +41,7 @@ class ApplicationService:
                 {"event_name": e.event_name, "created_at": e.created_at.isoformat(), "actor_type": e.actor_type}
                 for e in raw_events
             ]
+        self.repo.attach_interview_data([candidate])
         return self.repo.to_candidate_dict(candidate, ai=ai, events_map={candidate.id: events} if events else None)
     def get_applications_paginated(
         self,
@@ -98,8 +99,18 @@ class ApplicationService:
             reject_reason=reject_reason,
         )
         events_map = self.repo.build_events_map(items, ai=ai) if ai else {}
+        disqualified_map = self.repo.build_disqualified_by_map(items)
+        self.repo.attach_interview_data(items)
         return {
-            "data": [self.repo.to_candidate_dict(e, ai=ai, events_map=events_map) for e in items],
+            "data": [
+                self.repo.to_candidate_dict(
+                    e,
+                    ai=ai,
+                    events_map=events_map,
+                    disqualified_by=disqualified_map.get(e.id, []),
+                )
+                for e in items
+            ],
             "total": total,
             "limit": limit,
             "offset": offset,
@@ -113,12 +124,14 @@ class ApplicationService:
     ) -> dict:
         if not self.repo:
             return {"data": [], "total": 0, "limit": limit, "offset": offset}
+        resolved_job_id = self.repo.resolve_external_job_id(job_id) if job_id else None
         items, total = self.repo.get_finalized_candidates(
             verdict=verdict.upper() if verdict else None,
-            job_id=job_id,
+            job_id=resolved_job_id,
             limit=limit,
             offset=offset,
         )
+        self.repo.attach_interview_data(items)
         return {
             "data": [self.repo.to_candidate_dict(e) for e in items],
             "total": total,
@@ -152,6 +165,18 @@ class ApplicationService:
     def set_final_verdict(self, candidate_id: int, verdict: str) -> EvaluationResponse:
         if not self.state_svc: raise ValueError("State service not available")
         return self.state_svc.set_final_verdict(candidate_id, verdict)
+
+    def set_candidate_round_status(self, candidate_id: int, data) -> dict:
+        from app.modules.evaluations.evaluation_model import Candidate
+        candidate = self.db.query(Candidate).filter(Candidate.id == candidate_id).first()
+        if not candidate:
+            raise HTTPException(status_code=404, detail="Candidate not found")
+        candidate.stage = data.stage
+        candidate.status = data.status
+        candidate.current_round_id = data.current_round_id
+        self.db.commit()
+
+        return {"success": True}
 
     def update_candidate_status(self, candidate_id: int, new_status: str) -> EvaluationResponse:
         if not self.state_svc: raise ValueError("State service not available")

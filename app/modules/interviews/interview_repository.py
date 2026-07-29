@@ -3,6 +3,7 @@ from typing import Protocol
 
 from sqlalchemy.orm import Session
 
+from app.core.constants import get_pipeline_stage
 from app.core.logger import get_logger
 from app.modules.evaluations.evaluation_model import Candidate
 from app.modules.hiring_requests.hiring_request_model import HiringRequest
@@ -144,7 +145,7 @@ class InterviewRepository:
 
     def update_candidate_status(self, candidate_id: int, status: str) -> None:
         logger.info("Updating candidate status: id=%s | status=%s", candidate_id, status)
-        self.db.query(Candidate).filter(Candidate.id == candidate_id).update({"status": status})
+        self.db.query(Candidate).filter(Candidate.id == candidate_id).update({"status": status, "stage": get_pipeline_stage(status)})
         self.db.flush()
 
     def save_review_questions(

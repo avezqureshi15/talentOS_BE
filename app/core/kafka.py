@@ -134,6 +134,9 @@ def consume(
             "auto.offset.reset": auto_offset_reset,
             "enable.auto.commit": False,
             "max.poll.interval.ms": max_poll_interval_ms,
+            "session.timeout.ms": 60000,
+            "heartbeat.interval.ms": 20000,
+            "log.connection.close": False,
         }
     )
     consumer.subscribe(topics)
@@ -143,11 +146,16 @@ def consume(
         group_id, topics, settings.KAFKA_BOOTSTRAP_SERVERS,
     )
 
+    poll_count = 0
     try:
         while running:
             msg = consumer.poll(1.0)
             if msg is None:
+                poll_count += 1
+                if poll_count % 60 == 0:
+                    logger.info("Waiting for messages on topics=%s (group=%s)", topics, group_id)
                 continue
+            poll_count = 0
             if msg.error():
                 if msg.error().code() == KafkaError._PARTITION_EOF:
                     continue

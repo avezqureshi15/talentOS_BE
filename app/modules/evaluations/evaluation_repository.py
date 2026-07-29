@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
-from app.core.constants import EvaluationStatus
+from app.core.constants import EvaluationStatus, get_pipeline_stage
 from app.core.logger import get_logger
 from app.modules.evaluations.evaluation_model import Candidate
 
@@ -59,6 +59,7 @@ class EvaluationRepository:
             willing_to_relocate=willing_to_relocate,
             candidate_type=candidate_type,
             status=EvaluationStatus.QUEUED.value,
+            stage=get_pipeline_stage(EvaluationStatus.QUEUED.value),
         )
         self.db.add(evaluation)
         self.db.commit()
@@ -68,6 +69,7 @@ class EvaluationRepository:
 
     def mark_processing(self, evaluation: Candidate) -> Candidate:
         evaluation.status = EvaluationStatus.PROCESSING.value
+        evaluation.stage = get_pipeline_stage(evaluation.status)
         evaluation.attempts += 1
         self.db.commit()
         self.db.refresh(evaluation)
@@ -91,6 +93,7 @@ class EvaluationRepository:
         error_reason: str | None = None,
     ) -> Candidate:
         evaluation.status = status.value
+        evaluation.stage = get_pipeline_stage(status.value, evaluation.final_verdict)
         evaluation.fit_score = fit_score
         evaluation.summary_md = summary_md
         evaluation.ats_threshold_used = ats_threshold_used

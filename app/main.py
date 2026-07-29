@@ -7,6 +7,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.common.handlers import register_exception_handlers
+from google.auth.transport import requests as google_requests
+
 from app.core.config import settings
 from app.core.kafka import ensure_topics
 from app.core.logger import get_logger, setup_logging
@@ -28,6 +30,7 @@ from app.modules.evaluations import router as evaluations_router
 from app.modules.forms import ask_router, form_router
 from app.modules.hiring_requests import router as hiring_requests_router
 from app.modules.hiring_requests.hiring_request_internal_router import router as hiring_requests_internal_router
+from app.modules.hiring_requests.hiring_request_export_router import router as hiring_requests_export_router
 from app.modules.hiring_requests.ai_integration_router import router as ai_integration_router
 from app.core.internal_router import router as internal_router
 from app.modules.interviews import router as interviews_router
@@ -77,6 +80,13 @@ async def lifespan(app: FastAPI):
     ])
     scheduler = init_scheduler()
     setup_form_jobs(scheduler)
+
+    try:
+        _ = google_requests.Request()
+        logger.info("Google auth session warmed up")
+    except Exception as exc:
+        logger.warning("Google auth session warm-up failed: %s", exc)
+
     yield
     shutdown_scheduler()
     engine.dispose()
@@ -107,6 +117,7 @@ app.include_router(chat_router)
 app.include_router(designation_router)
 app.include_router(events_router)
 app.include_router(hiring_requests_router)
+app.include_router(hiring_requests_export_router)
 app.include_router(interviews_router)
 app.include_router(meetmind_webhook_router)
 app.include_router(reviews_router)

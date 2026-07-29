@@ -4,7 +4,7 @@ from fastapi import HTTPException, status
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
-from app.core.constants import EvaluationStatus
+from app.core.constants import EvaluationStatus, PipelineStage
 from app.core.logger import get_logger
 from app.modules.evaluations.evaluation_model import Candidate
 from app.modules.reviews.review_model import Review

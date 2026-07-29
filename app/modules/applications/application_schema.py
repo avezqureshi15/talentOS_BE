@@ -69,6 +69,7 @@ class EvaluatedCandidate(BaseModel):
     linkedin_url: str | None = None
     willing_to_relocate: bool = False
     status: str | None = None
+    stage: str | None = None
     fit_score: int | None = None
     summary_md: str | None = None
     evaluated_at: str | None = None
@@ -78,7 +79,12 @@ class EvaluatedCandidate(BaseModel):
     reviews: dict | None = None
     review_verdict: str | None = None
     comparison_fields: list[ComparisonField] = []
+    disqualified_by: list[str] = []
     events: list[EventInfo] | None = None
+    interview_id: str | None = None
+    interviewer_emp_id: str | None = None
+    interviewer_name: str | None = None
+    round_name: str | None = None
 
 
 class EvaluatedCandidatesResponse(BaseModel):
@@ -86,7 +92,14 @@ class EvaluatedCandidatesResponse(BaseModel):
 
 
 class FinalVerdictUpdate(BaseModel):
-    verdict: Literal["SELECTED", "REJECTED"]
+    verdict: Literal["ON_HOLD", "SELECTED", "REJECTED"]
+
+
+class RoundStatusUpdate(BaseModel):
+    stage: str
+    status: str
+    current_round_id: str
+    scheduled_at: str | None = None
 
 
 class PaginatedEvaluatedCandidatesResponse(BaseModel):

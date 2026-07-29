@@ -5,12 +5,14 @@ _DEV_TIMING = {
     "FORM_REMINDER_HOURS": 0.002778,
     "FORM_ESCALATION_HOURS": 0.005556,
     "FORM_EXPIRY_HOURS": 24,
+    "AI_ROUND_EVALUATION_DELAY_MINUTES": 1,
 }
 
 _PROD_TIMING = {
     "FORM_REMINDER_HOURS": 2,
     "FORM_ESCALATION_HOURS": 3,
     "FORM_EXPIRY_HOURS": 24,
+    "AI_ROUND_EVALUATION_DELAY_MINUTES": 0,
 }
 
 
@@ -73,7 +75,7 @@ class Settings(BaseSettings):
     # JWT
     JWT_SECRET: str = ""
     JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     # SMTP / Email
@@ -95,6 +97,7 @@ class Settings(BaseSettings):
     MEETMIND_WEBHOOK_SECRET: str = ""
     MEETMIND_EXTERNAL: str = "webhyre.ai"
     INTERVIEW_FALLBACK_SECONDS: int = 60
+    AI_ROUND_EVALUATION_DELAY_MINUTES: int = 0
 
     @model_validator(mode="after")
     def _apply_env_timing(self) -> "Settings":
@@ -102,6 +105,7 @@ class Settings(BaseSettings):
         self.FORM_REMINDER_HOURS = timing["FORM_REMINDER_HOURS"]
         self.FORM_ESCALATION_HOURS = timing["FORM_ESCALATION_HOURS"]
         self.FORM_EXPIRY_HOURS = timing["FORM_EXPIRY_HOURS"]
+        self.AI_ROUND_EVALUATION_DELAY_MINUTES = timing["AI_ROUND_EVALUATION_DELAY_MINUTES"]
         return self
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "case_sensitive": True}
