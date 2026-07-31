@@ -69,7 +69,7 @@ PERMISSION_ENDPOINTS: dict[str, str] = {
     Permission.APPLICATION_REJECT.value: "POST /api/v1/rounds/{round_id}/reject",
     Permission.HIRING_REQUEST_CREATE.value: "POST /api/v1/hiring-requests",
     Permission.HIRING_REQUEST_EDIT.value: "PUT /api/v1/hiring-requests/{id}",
-    Permission.HIRING_REQUEST_VIEW.value: "GET /api/v1/hiring-requests",
+    Permission.HIRING_REQUEST_VIEW.value: "GET /api/v1/hiring-requests, GET /api/v1/hiring-requests/{id}",
     Permission.HIRING_REQUEST_DELETE.value: "DELETE /api/v1/hiring-requests/{id}",
     Permission.USER_INVITE.value: "POST /api/v1/admin/users/invites",
     Permission.USER_MANAGE.value: "PATCH /api/v1/admin/users/{user_id}",
@@ -88,6 +88,7 @@ PERMISSION_META: dict[str, dict[str, str]] = {
     permission.value: {
         "name": " ".join(w.capitalize() for w in permission.value.split(".")),
         "group": permission.value.split(".")[0],
+        "endpoint": PERMISSION_ENDPOINTS.get(permission.value, ""),
     }
     for permission in Permission
 }

@@ -15,7 +15,7 @@ class AiRecruitmentClient:
             return {"Authorization": f"Bearer {settings.RH_API_KEY}"}
         return {"Authorization": f"Bearer {create_service_token()}"}
 
-    async def create_job(self, title: str, description: str, required_skills: list[str] | None = None, location: str | None = None, department: str | None = None, employment_type: str | None = None) -> dict | None:
+    async def create_job(self, title: str, description: str, required_skills: list[str] | None = None, location: str | None = None, department: str | None = None, employment_type: str | None = None, external_job_id: str | None = None) -> dict | None:
         if not self.base_url:
             return None
         try:
@@ -29,6 +29,7 @@ class AiRecruitmentClient:
                         "location": location,
                         "department": department,
                         "employment_type": employment_type,
+                        "external_job_id": external_job_id,
                     },
                     headers=self._headers(),
                 )
@@ -122,6 +123,38 @@ class AiRecruitmentClient:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(
                     f"{self.base_url}/internal/talentos/jobs/{job_id}/candidates/{candidate_id}/interviews/{interview_id}",
+                    headers=self._headers(),
+                )
+                if resp.is_error:
+                    return None
+                return resp.json()
+        except Exception:
+            return None
+
+    async def create_candidate_with_screening(
+        self,
+        external_job_id: str,
+        name: str,
+        email: str,
+        phone: str | None = None,
+        external_candidate_id: str | None = None,
+        force: bool = False,
+    ) -> dict | None:
+        if not self.base_url:
+            return None
+        DUMMY_UUID = "00000000-0000-0000-0000-000000000000"
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(
+                    f"{self.base_url}/internal/talentos/jobs/{DUMMY_UUID}/candidates/with-screening",
+                    json={
+                        "name": name,
+                        "email": email,
+                        "phone": phone,
+                        "external_job_id": external_job_id,
+                        "external_candidate_id": external_candidate_id,
+                        "force": force,
+                    },
                     headers=self._headers(),
                 )
                 if resp.is_error:

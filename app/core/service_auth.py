@@ -41,3 +41,12 @@ async def verify_service_jwt(authorization: str | None = Header(None)):
         raise
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid service token signature")
+
+
+def verify_service_api_key(authorization: str | None = Header(None)):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="No service token provided")
+    token = authorization.split(" ")[1]
+    if token != settings.SERVICE_API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid service API key")
+    return token

@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -15,9 +15,9 @@ router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/hiring-requests", tags=["hi
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
-def create_hiring_request(data: HiringRequestCreate, db: Session = Depends(get_db)):
+def create_hiring_request(data: HiringRequestCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     service = HiringRequestService(db)
-    return service.create_hiring_request(data)
+    return service.create_hiring_request(data, background_tasks)
 
 
 @router.get("/")

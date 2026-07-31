@@ -1,6 +1,8 @@
+import asyncio
 from datetime import datetime
 from uuid import UUID
 
+from fastapi import BackgroundTasks
 from sqlalchemy import exc as sa_exc
 from sqlalchemy.orm import Session
 
@@ -11,6 +13,7 @@ from app.common.exceptions.hiring_request_exception import (
     HiringRequestNotUpdatedException,
 )
 from app.core.logger import get_logger
+from app.db.session import SessionLocal
 from app.modules.hiring_requests.hiring_request_model import HiringRequest
 from app.modules.hiring_requests.hiring_request_repository import HiringRequestRepository
 from app.modules.hiring_requests.hiring_request_schema import (
@@ -24,6 +27,40 @@ from app.modules.jobs.job_service import JobService
 logger = get_logger(__name__)
 
 
+def _sync_rh_job(hr_id: str) -> None:
+    from app.core.ai_recruitment_client import AiRecruitmentClient
+
+    db = SessionLocal()
+    try:
+        hr = db.query(HiringRequest).filter(HiringRequest.id == hr_id).first()
+        if not hr or hr.rh_external_job_id:
+            return
+
+        client = AiRecruitmentClient()
+        created = asyncio.run(
+            client.create_job(
+                title=hr.title,
+                description=hr.description,
+                required_skills=hr.requirements,
+                location=hr.location,
+                department=hr.department,
+                employment_type=hr.type,
+                external_job_id=str(hr.id),
+            )
+        )
+        if not created or not created.get("id"):
+            logger.warning("RH job sync failed for hiring request %s", hr_id)
+            return
+
+        hr.rh_external_job_id = created["id"]
+        db.commit()
+        logger.info("RH job created for hiring request %s: rh_job_id=%s", hr_id, created["id"])
+    except Exception:
+        logger.exception("RH job sync failed for hiring request %s", hr_id)
+    finally:
+        db.close()
+
+
 class HiringRequestService:
     def __init__(self, db: Session):
         self.repository = HiringRequestRepository(db)
@@ -33,7 +70,7 @@ class HiringRequestService:
         total = self.repository.count_active()
         return total + 1
 
-    def create_hiring_request(self, data: HiringRequestCreate) -> dict:
+    def create_hiring_request(self, data: HiringRequestCreate, background_tasks: BackgroundTasks | None = None) -> dict:
         serial = self._next_serial()
         prefixed = f"#{serial} {data.title}"
         logger.info("Creating hiring request: title=%s", prefixed)
@@ -54,6 +91,9 @@ class HiringRequestService:
             raise HiringRequestNotCreatedException(
                 "Job listing created in Supabase but failed to save locally"
             ) from exc
+
+        if background_tasks is not None:
+            background_tasks.add_task(_sync_rh_job, str(local_record.id))
 
         response = HiringRequestResponse.model_validate(local_record).model_dump()
         return {"data": response, "supabase_job": job_response}

@@ -112,49 +112,48 @@ async def list_ai_candidates(
     return result
 
 
-class MoveToScreeningRequest(BaseModel):
-    name: str
-    email: str
-    phone: str | None = None
-    resume_url: str | None = None
+class MoveToAiScreeningRequest(BaseModel):
+    force: bool = False
 
 
 @router.post("/candidates/{candidate_id}/move-to-screening", status_code=status.HTTP_202_ACCEPTED)
-async def move_to_screening(
+async def move_to_ai_screening(
     hiring_request_id: str,
     candidate_id: int,
-    body: MoveToScreeningRequest,
+    body: MoveToAiScreeningRequest,
     db: Session = Depends(get_db),
 ):
-    rh_job_id = await _get_or_create_rh_job(hiring_request_id, db)
-    client = AiRecruitmentClient()
-
-    created = await client.create_candidate(
-        job_id=rh_job_id,
-        name=body.name,
-        email=body.email,
-        phone=body.phone,
-        resume_url=body.resume_url,
-    )
-    if not created:
-        raise HTTPException(status_code=502, detail="Failed to create candidate in ai-recruitment-poc")
-
-    rh_candidate_id = created["id"]
+    hr = db.query(HiringRequest).filter(HiringRequest.id == hiring_request_id).first()
+    if not hr:
+        raise HTTPException(status_code=404, detail="Hiring request not found")
 
     candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
-    if candidate:
-        candidate.rh_external_candidate_id = rh_candidate_id
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    try:
+        client = AiRecruitmentClient()
+        result = await client.create_candidate_with_screening(
+            external_job_id=str(hr.id),
+            name=candidate.candidate_name or "Unknown",
+            email=candidate.candidate_email or "",
+            phone=candidate.candidate_phone,
+            external_candidate_id=str(candidate.id),
+            force=body.force,
+        )
+
+        if not result:
+            raise HTTPException(status_code=502, detail="Failed to move candidate to AI screening")
+
+        candidate.rh_external_candidate_id = result["candidate"]["id"]
+        candidate.status = "SCREENING_ROUND_SCHEDULED"
+        candidate.stage = "AI_SCREENING"
         db.commit()
+    except Exception:
+        db.rollback()
+        raise
 
-    triggered = await client.trigger_screening(rh_job_id, rh_candidate_id)
-    if not triggered:
-        raise HTTPException(status_code=502, detail="Failed to trigger screening")
-
-    return {
-        "rh_candidate_id": rh_candidate_id,
-        "screening_call_id": triggered.get("screening_call_id"),
-        "status": triggered.get("status"),
-    }
+    return result
 
 
 class TriggerInterviewRequest(BaseModel):
