@@ -18,6 +18,8 @@ class Round(Base):
     round_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     round_verdict: Mapped[str | None] = mapped_column(String(50), nullable=True)
     rh_external_session_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    rh_interview_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    rh_unique_token: Mapped[str | None] = mapped_column(String(255), nullable=True)
     scheduled_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     scheduled_time: Mapped[time | None] = mapped_column(Time, nullable=True)
     scheduled_end_date: Mapped[date | None] = mapped_column(Date, nullable=True)

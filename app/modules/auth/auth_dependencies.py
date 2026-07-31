@@ -22,12 +22,13 @@ def get_current_user(
             raise HTTPException(status_code=401, detail="Invalid or revoked API key")
 
         permissions = ApiKeyService.get_permissions_for_key(api_key.id, db)
+        is_tenant_scoped = api_key.tenant_id is not None
         return UserInfo(
             id=-api_key.id,
             email=api_key.name,
             name=api_key.name,
-            role="superadmin",
-            tenant_id=None,
+            role="admin" if is_tenant_scoped else "superadmin",
+            tenant_id=api_key.tenant_id,
             auth_provider="api_key",
             is_active=True,
             permissions=permissions,

@@ -15,6 +15,7 @@ class Permission(str, Enum):
     USER_MANAGE = "user.manage"
     TENANT_VIEW = "tenant.view"
     TENANT_EDIT = "tenant.edit"
+    API_KEY_MANAGE = "api_key.manage"
     SETTINGS_VIEW = "settings.view"
     SETTINGS_EDIT = "settings.edit"
     SLOT_SUBMIT = "slot.submit"
@@ -36,6 +37,7 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, set[Permission]] = {
         Permission.HIRING_REQUEST_DELETE,
         Permission.USER_INVITE,
         Permission.USER_MANAGE,
+        Permission.API_KEY_MANAGE,
         Permission.SETTINGS_VIEW,
         Permission.SETTINGS_EDIT,
         Permission.SLOT_VIEW_ALL,
@@ -75,6 +77,7 @@ PERMISSION_ENDPOINTS: dict[str, str] = {
     Permission.USER_MANAGE.value: "PATCH /api/v1/admin/users/{user_id}",
     Permission.TENANT_VIEW.value: "GET /api/v1/superadmin/tenants",
     Permission.TENANT_EDIT.value: "PATCH /api/v1/superadmin/tenants/{tenant_id}",
+    Permission.API_KEY_MANAGE.value: "GET /api/v1/admin/apps, POST /api/v1/admin/apps",
     Permission.SETTINGS_VIEW.value: "GET /api/v1/settings",
     Permission.SETTINGS_EDIT.value: "PATCH /api/v1/settings",
     Permission.SLOT_SUBMIT.value: "POST /api/v1/slots",

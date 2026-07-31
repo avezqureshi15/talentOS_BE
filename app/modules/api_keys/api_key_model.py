@@ -15,6 +15,9 @@ class ApiKey(Base):
     key_hash: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     key_prefix: Mapped[str] = mapped_column(String(8), nullable=False)
     created_by_user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    tenant_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("tenants.id"), nullable=True, index=True
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

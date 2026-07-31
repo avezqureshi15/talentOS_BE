@@ -85,22 +85,6 @@ class AiRecruitmentClient:
         except Exception:
             return None
 
-    async def trigger_interview(self, job_id: str, candidate_id: str, interview_type: str | None = None) -> dict | None:
-        if not self.base_url:
-            return None
-        try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                resp = await client.post(
-                    f"{self.base_url}/internal/talentos/jobs/{job_id}/candidates/{candidate_id}/trigger-interview",
-                    json={"interview_type": interview_type},
-                    headers=self._headers(),
-                )
-                if resp.is_error:
-                    return None
-                return resp.json()
-        except Exception:
-            return None
-
     async def list_interviews(self, job_id: str, candidate_id: str) -> list | None:
         if not self.base_url:
             return None
@@ -154,6 +138,40 @@ class AiRecruitmentClient:
                         "external_job_id": external_job_id,
                         "external_candidate_id": external_candidate_id,
                         "force": force,
+                    },
+                    headers=self._headers(),
+                )
+                if resp.is_error:
+                    return None
+                return resp.json()
+        except Exception:
+            return None
+
+    async def create_candidate_with_interview(
+        self,
+        external_job_id: str,
+        name: str,
+        email: str,
+        phone: str | None = None,
+        external_candidate_id: str | None = None,
+        force: bool = False,
+        interview_type: str | None = "AI_INTERVIEW",
+    ) -> dict | None:
+        if not self.base_url:
+            return None
+        DUMMY_UUID = "00000000-0000-0000-0000-000000000000"
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(
+                    f"{self.base_url}/internal/talentos/jobs/{DUMMY_UUID}/candidates/with-interview",
+                    json={
+                        "name": name,
+                        "email": email,
+                        "phone": phone,
+                        "external_job_id": external_job_id,
+                        "external_candidate_id": external_candidate_id,
+                        "force": force,
+                        "interview_type": interview_type,
                     },
                     headers=self._headers(),
                 )

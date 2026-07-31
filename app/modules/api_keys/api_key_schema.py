@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict
 class CreateAppRequest(BaseModel):
     name: str
     description: str | None = None
+    tenant_id: int | None = None
 
 
 class UpdateAppRequest(BaseModel):
@@ -18,6 +19,8 @@ class ApiKeyResponse(BaseModel):
     name: str
     description: str | None = None
     key_prefix: str
+    tenant_id: int | None = None
+    tenant_name: str | None = None
     is_active: bool
     expires_at: datetime | None = None
     last_used_at: datetime | None = None

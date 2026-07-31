@@ -17,39 +17,32 @@ from app.modules.api_keys.api_key_schema import (
 )
 from app.modules.api_keys.api_key_service import ApiKeyService
 from app.modules.auth.auth_schema import UserInfo
-from app.modules.tenants.tenant_model import Tenant
 
 router = APIRouter(
-    prefix=f"{settings.API_V1_PREFIX}/superadmin/apps",
-    tags=["superadmin-apps"],
-    dependencies=[Depends(require_permission(Permission.TENANT_EDIT))],
+    prefix=f"{settings.API_V1_PREFIX}/admin/apps",
+    tags=["admin-apps"],
+    dependencies=[Depends(require_permission(Permission.API_KEY_MANAGE))],
 )
 
 
-def _validate_tenant(db: Session, tenant_id: int | None) -> int | None:
-    if tenant_id is None:
-        raise HTTPException(status_code=400, detail="Superadmin must provide a tenant_id")
-    tenant = db.execute(
-        Tenant.__table__.select().where(Tenant.id == tenant_id)
-    ).scalar_one_or_none()
-    if not tenant:
-        raise HTTPException(status_code=404, detail="Tenant not found")
-    return tenant_id
+def _own_tenant_id(current_user: UserInfo) -> int:
+    if current_user.tenant_id is None:
+        raise HTTPException(status_code=400, detail="Admin user has no tenant")
+    return current_user.tenant_id
 
 
 @router.post("", response_model=ApiKeyCreatedResponse)
 def create_app(
     body: CreateAppRequest,
     db: Session = Depends(get_db),
-    current_user: UserInfo = Depends(require_permission(Permission.TENANT_EDIT)),
+    current_user: UserInfo = Depends(require_permission(Permission.API_KEY_MANAGE)),
 ):
-    tenant_id = _validate_tenant(db, body.tenant_id)
     service = ApiKeyService(db)
     result = service.create_app(
         name=body.name,
         description=body.description,
         created_by_user_id=current_user.id,
-        tenant_id=tenant_id,
+        tenant_id=_own_tenant_id(current_user),
     )
     return result
 
@@ -57,24 +50,23 @@ def create_app(
 @router.get("", response_model=ApiKeyListResponse)
 def list_apps(
     q: str | None = Query(None, description="Search by app name"),
-    tenant_id: int | None = Query(None, description="Filter by tenant"),
     page: int = Query(1, ge=1),
     per_page: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=100),
     db: Session = Depends(get_db),
-    current_user: UserInfo = Depends(require_permission(Permission.TENANT_EDIT)),
+    current_user: UserInfo = Depends(require_permission(Permission.API_KEY_MANAGE)),
 ):
     service = ApiKeyService(db)
-    return service.list_apps(page=page, per_page=per_page, search=q, tenant_id=tenant_id)
+    return service.list_apps(page=page, per_page=per_page, search=q, tenant_id=_own_tenant_id(current_user))
 
 
 @router.get("/{app_id}", response_model=ApiKeyDetailResponse)
 def get_app(
     app_id: int,
     db: Session = Depends(get_db),
-    current_user: UserInfo = Depends(require_permission(Permission.TENANT_EDIT)),
+    current_user: UserInfo = Depends(require_permission(Permission.API_KEY_MANAGE)),
 ):
     service = ApiKeyService(db)
-    result = service.get_app(app_id)
+    result = service.get_app(app_id, tenant_id=_own_tenant_id(current_user))
     if not result:
         raise HTTPException(status_code=404, detail="App not found")
     return result
@@ -85,10 +77,10 @@ def update_app(
     app_id: int,
     body: UpdateAppRequest,
     db: Session = Depends(get_db),
-    current_user: UserInfo = Depends(require_permission(Permission.TENANT_EDIT)),
+    current_user: UserInfo = Depends(require_permission(Permission.API_KEY_MANAGE)),
 ):
     service = ApiKeyService(db)
-    result = service.update_app(app_id, name=body.name, description=body.description)
+    result = service.update_app(app_id, name=body.name, description=body.description, tenant_id=_own_tenant_id(current_user))
     if not result:
         raise HTTPException(status_code=404, detail="App not found")
     return result
@@ -98,10 +90,10 @@ def update_app(
 def revoke_app(
     app_id: int,
     db: Session = Depends(get_db),
-    current_user: UserInfo = Depends(require_permission(Permission.TENANT_EDIT)),
+    current_user: UserInfo = Depends(require_permission(Permission.API_KEY_MANAGE)),
 ):
     service = ApiKeyService(db)
-    ok = service.revoke_app(app_id)
+    ok = service.revoke_app(app_id, tenant_id=_own_tenant_id(current_user))
     if not ok:
         raise HTTPException(status_code=404, detail="App not found")
     return {"message": "App revoked successfully"}
@@ -111,10 +103,10 @@ def revoke_app(
 def rotate_key(
     app_id: int,
     db: Session = Depends(get_db),
-    current_user: UserInfo = Depends(require_permission(Permission.TENANT_EDIT)),
+    current_user: UserInfo = Depends(require_permission(Permission.API_KEY_MANAGE)),
 ):
     service = ApiKeyService(db)
-    result = service.rotate_key(app_id)
+    result = service.rotate_key(app_id, tenant_id=_own_tenant_id(current_user))
     if not result:
         raise HTTPException(status_code=404, detail="App not found")
     return result
@@ -125,10 +117,10 @@ def update_app_permissions(
     app_id: int,
     body: UpdatePermissionsRequest,
     db: Session = Depends(get_db),
-    current_user: UserInfo = Depends(require_permission(Permission.TENANT_EDIT)),
+    current_user: UserInfo = Depends(require_permission(Permission.API_KEY_MANAGE)),
 ):
     service = ApiKeyService(db)
-    result = service.update_permissions(app_id, body.permission_codes)
+    result = service.update_permissions(app_id, body.permission_codes, tenant_id=_own_tenant_id(current_user))
     if not result:
         raise HTTPException(status_code=404, detail="App not found")
     return result
