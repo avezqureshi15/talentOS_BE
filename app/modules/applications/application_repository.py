@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.logger import get_logger
 from app.modules.applications import application_repository_mutations as _mut
 from app.modules.applications.application_repository_queries import (
+    count_candidates_by_stage as _count_candidates_by_stage,
     get_candidates_by_job_paginated as _get_candidates_by_job_paginated,
     get_finalized_candidates as _get_finalized_candidates,
     build_disqualified_by_map as _build_disqualified_by_map,
@@ -60,6 +61,9 @@ class ApplicationRepository:
 
     def get_candidates_by_job_paginated(self, **kwargs) -> tuple[list[Candidate], int]:
         return _get_candidates_by_job_paginated(self.db, **kwargs)
+
+    def count_candidates_by_stage(self, **kwargs) -> dict[str, int]:
+        return _count_candidates_by_stage(self.db, **kwargs)
 
     def get_finalized_candidates(self, **kwargs) -> tuple[list[Candidate], int]:
         return _get_finalized_candidates(self.db, **kwargs)

@@ -1,4 +1,4 @@
-from sqlalchemy import Text, cast, or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.modules.applications.application_response import extract_disqualified_by
@@ -8,8 +8,21 @@ from app.modules.rounds.round_model import Round
 
 RESUME_SHORTLISTING_ROUND_TYPE = "RESUME_SHORTLISTING"
 
+# Mirrors the FE pipeline stage tabs (STAGE_FILTER_MAP in detail.constants.ts).
+# key -> (stage values, status values); "waiting-evaluation" uses OR semantics.
+STAGE_QUERY_MAP: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
+    "resume-shortlisting": (("RESUME_SHORTLISTING", "RESUME_SHORTLISTED"), ()),
+    "screening": (("SCREENING", "AI_SCREENING"), ()),
+    "interview": (
+        ("INTERVIEW", "AI_INTERVIEW"),
+        ("INTERVIEW_SCHEDULED", "INTERVIEW_RESCHEDULED", "INTERVIEW_CANCELLED"),
+    ),
+    "waiting-evaluation": (("WAITING_FOR_EVALUATION",), ("WAITING_FOR_REVIEW",)),
+    "evaluated": (("INTERVIEW", "AI_INTERVIEW"), ("UNDER_EVALUATION",)),
+}
 
-def get_candidates_by_job_paginated(
+
+def _apply_candidate_filters(
     db: Session,
     job_id: str | None = None,
     status: str | None = None,
@@ -19,12 +32,11 @@ def get_candidates_by_job_paginated(
     max_score: int | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
-    limit: int = 20,
-    offset: int = 0,
     exclude_finalized: bool = False,
     search: str | None = None,
     reject_reason: str | None = None,
-) -> tuple[list[Candidate], int]:
+    stage: str | None = None,
+):
     query = db.query(Candidate)
 
     if job_id:
@@ -60,17 +72,71 @@ def get_candidates_by_job_paginated(
         )
 
     if reject_reason:
-        _KEY_MAP = {"BUDGET": "CTC"}
         raw_reasons = [r.strip().upper() for r in reject_reason.split(",")]
-        mapped_reasons = [_KEY_MAP.get(r, r) for r in raw_reasons]
-        quoted_reasons = [f'"{r}"' for r in raw_reasons]
         query = query.filter(Candidate.reviews.isnot(None))
         query = query.filter(
             or_(
-                *[Candidate.reviews[r].astext.isnot(None) for r in mapped_reasons],
-                *[cast(Candidate.reviews["rejection_details"], Text).contains(q) for q in quoted_reasons],
+                *[
+                    Candidate.reviews["rejection_details"].contains([{r: {}}])
+                    for r in raw_reasons
+                ]
             )
         )
+
+    if stage:
+        stage_key = stage.strip().lower().replace(" ", "-")
+        if stage_key == "waiting-evaluation":
+            query = query.filter(
+                or_(
+                    Candidate.stage.in_(("WAITING_FOR_EVALUATION",)),
+                    Candidate.status.in_(("WAITING_FOR_REVIEW",)),
+                )
+            )
+        else:
+            stage_values, status_values = STAGE_QUERY_MAP.get(stage_key, ((), ()))
+            if stage_values and status_values:
+                query = query.filter(
+                    Candidate.stage.in_(stage_values),
+                    Candidate.status.in_(status_values),
+                )
+            elif stage_values:
+                query = query.filter(Candidate.stage.in_(stage_values))
+
+    return query
+
+
+def get_candidates_by_job_paginated(
+    db: Session,
+    job_id: str | None = None,
+    status: str | None = None,
+    schedule: str | None = None,
+    round_verdict: str | None = None,
+    min_score: int | None = None,
+    max_score: int | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    limit: int = 20,
+    offset: int = 0,
+    exclude_finalized: bool = False,
+    search: str | None = None,
+    reject_reason: str | None = None,
+    stage: str | None = None,
+) -> tuple[list[Candidate], int]:
+    query = _apply_candidate_filters(
+        db,
+        job_id=job_id,
+        status=status,
+        schedule=schedule,
+        round_verdict=round_verdict,
+        min_score=min_score,
+        max_score=max_score,
+        date_from=date_from,
+        date_to=date_to,
+        exclude_finalized=exclude_finalized,
+        search=search,
+        reject_reason=reject_reason,
+        stage=stage,
+    )
 
     total = query.count()
     items = (
@@ -81,6 +147,80 @@ def get_candidates_by_job_paginated(
     )
 
     return items, total
+
+
+def count_candidates_by_stage(
+    db: Session,
+    job_id: str | None = None,
+    status: str | None = None,
+    schedule: str | None = None,
+    round_verdict: str | None = None,
+    min_score: int | None = None,
+    max_score: int | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    exclude_finalized: bool = False,
+    search: str | None = None,
+    reject_reason: str | None = None,
+    stage: str | None = None,
+) -> dict[str, int]:
+    """Per-stage counts for the pipeline tabs, using the same filters as the list query.
+    The disqualified-by (reject_reason) filter only applies to the resume-shortlisting
+    tab, so it is excluded from the base counts and applied to that stage separately."""
+    query = _apply_candidate_filters(
+        db,
+        job_id=job_id,
+        status=status,
+        schedule=schedule,
+        round_verdict=round_verdict,
+        min_score=min_score,
+        max_score=max_score,
+        date_from=date_from,
+        date_to=date_to,
+        exclude_finalized=exclude_finalized,
+        search=search,
+    )
+
+    rows = (
+        query.with_entities(Candidate.stage, Candidate.status, func.count(Candidate.id))
+        .group_by(Candidate.stage, Candidate.status)
+        .all()
+    )
+
+    counts: dict[str, int] = {key: 0 for key in STAGE_QUERY_MAP}
+    for stage_value, status_value, cnt in rows:
+        matched = False
+        for key, (stage_values, status_values) in STAGE_QUERY_MAP.items():
+            stage_match = stage_value in stage_values
+            status_match = not status_values or status_value in status_values
+            if stage_match and status_match:
+                counts[key] += cnt
+                matched = True
+                break
+        if not matched and (
+            stage_value == "WAITING_FOR_EVALUATION" or status_value == "WAITING_FOR_REVIEW"
+        ):
+            counts["waiting-evaluation"] += cnt
+
+    if reject_reason:
+        filtered_query = _apply_candidate_filters(
+            db,
+            job_id=job_id,
+            status=status,
+            schedule=schedule,
+            round_verdict=round_verdict,
+            min_score=min_score,
+            max_score=max_score,
+            date_from=date_from,
+            date_to=date_to,
+            exclude_finalized=exclude_finalized,
+            search=search,
+            reject_reason=reject_reason,
+            stage="resume-shortlisting",
+        )
+        counts["resume-shortlisting"] = filtered_query.count()
+
+    return counts
 
 
 def build_review_map(db: Session, candidates: list[Candidate]) -> dict[str, Review]:

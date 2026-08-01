@@ -195,3 +195,49 @@ class AiRecruitmentClient:
                 return resp.json()
         except Exception:
             return None
+
+    async def get_job_questions(self, job_id: str, external_job_id: str | None = None) -> dict | None:
+        if not self.base_url:
+            return None
+        params = {"external_job_id": external_job_id} if external_job_id else None
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(
+                    f"{self.base_url}/internal/talentos/jobs/{job_id}/questions",
+                    params=params,
+                    headers=self._headers(),
+                )
+                if resp.is_error:
+                    return None
+                return resp.json()
+        except Exception:
+            return None
+
+    async def update_job_questions(
+        self,
+        job_id: str,
+        screening_questions: list | None = None,
+        interview_questions: list | None = None,
+        external_job_id: str | None = None,
+    ) -> dict | None:
+        if not self.base_url:
+            return None
+        payload: dict = {}
+        if screening_questions is not None:
+            payload["screening_questions"] = screening_questions
+        if interview_questions is not None:
+            payload["interview_questions"] = interview_questions
+        params = {"external_job_id": external_job_id} if external_job_id else None
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.put(
+                    f"{self.base_url}/internal/talentos/jobs/{job_id}/questions",
+                    params=params,
+                    json=payload,
+                    headers=self._headers(),
+                )
+                if resp.is_error:
+                    return None
+                return resp.json()
+        except Exception:
+            return None

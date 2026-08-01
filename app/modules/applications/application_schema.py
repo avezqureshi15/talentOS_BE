@@ -109,3 +109,4 @@ class PaginatedEvaluatedCandidatesResponse(BaseModel):
     total: int
     limit: int
     offset: int
+    stage_counts: dict[str, int] | None = None

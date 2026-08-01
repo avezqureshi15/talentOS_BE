@@ -59,6 +59,7 @@ class ApplicationService:
         ai: bool = False,
         search: str | None = None,
         reject_reason: str | None = None,
+        stage: str | None = None,
     ) -> dict:
         if not self.repo:
             logger.warning("No DB session")
@@ -97,10 +98,28 @@ class ApplicationService:
             exclude_finalized=exclude_finalized,
             search=search,
             reject_reason=reject_reason,
+            stage=stage,
         )
         events_map = self.repo.build_events_map(items, ai=ai) if ai else {}
         disqualified_map = self.repo.build_disqualified_by_map(items)
         self.repo.attach_interview_data(items)
+
+        stage_counts = None
+        if resolved_job_id:
+            stage_counts = self.repo.count_candidates_by_stage(
+                job_id=resolved_job_id,
+                status=status_upper,
+                schedule=parsed_schedule,
+                round_verdict=round_verdict,
+                min_score=min_score,
+                max_score=max_score,
+                date_from=date_from,
+                date_to=date_to,
+                exclude_finalized=exclude_finalized,
+                search=search,
+                reject_reason=reject_reason,
+            )
+
         return {
             "data": [
                 self.repo.to_candidate_dict(
@@ -114,6 +133,7 @@ class ApplicationService:
             "total": total,
             "limit": limit,
             "offset": offset,
+            "stage_counts": stage_counts,
         }
     def get_finalized_candidates_paginated(
         self,

@@ -32,6 +32,7 @@ from app.modules.hiring_requests import router as hiring_requests_router
 from app.modules.hiring_requests.hiring_request_internal_router import router as hiring_requests_internal_router
 from app.modules.hiring_requests.hiring_request_export_router import router as hiring_requests_export_router
 from app.modules.hiring_requests.ai_integration_router import router as ai_integration_router
+from app.modules.interview_designs.interview_design_router import router as interview_designs_router
 from app.core.internal_router import router as internal_router
 from app.modules.interviews import router as interviews_router
 from app.modules.interviews.meetmind_webhook_router import router as meetmind_webhook_router
@@ -144,6 +145,7 @@ app.include_router(role_router)
 
 app.include_router(hiring_requests_internal_router, prefix="/internal")
 app.include_router(ai_integration_router)
+app.include_router(interview_designs_router)
 app.include_router(internal_router)
 
 
