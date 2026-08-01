@@ -3,9 +3,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.core.authorization import require_permission
 from app.core.config import settings
-from app.core.permissions import Permission
+from app.core.job_access import JobAccessContext, require_job_access
 from app.db.session import get_db
 from app.modules.job_teams.job_team_schema import (
     AddTeamMemberRequest,
@@ -24,7 +23,7 @@ router = APIRouter(
 def list_team_members(
     hiring_request_id: UUID,
     db: Session = Depends(get_db),
-    _=Depends(require_permission(Permission.APPLICATION_VIEW)),
+    _: object = Depends(require_job_access()),
 ):
     return JobTeamService(db).list_members(hiring_request_id)
 
@@ -34,9 +33,9 @@ def add_team_member(
     hiring_request_id: UUID,
     body: AddTeamMemberRequest,
     db: Session = Depends(get_db),
-    _=Depends(require_permission(Permission.JOB_TEAM_MANAGE)),
+    ctx: JobAccessContext = Depends(require_job_access(min_role="job_owner")),
 ):
-    return JobTeamService(db).add_member(hiring_request_id, body)
+    return JobTeamService(db).add_member(hiring_request_id, body, ctx.user)
 
 
 @router.patch("/{user_id}", response_model=JobTeamResponse)
@@ -45,9 +44,9 @@ def update_team_member(
     user_id: int,
     body: UpdateTeamMemberRequest,
     db: Session = Depends(get_db),
-    _=Depends(require_permission(Permission.JOB_TEAM_MANAGE)),
+    ctx: JobAccessContext = Depends(require_job_access(min_role="job_owner")),
 ):
-    return JobTeamService(db).update_member(hiring_request_id, user_id, body)
+    return JobTeamService(db).update_member(hiring_request_id, user_id, body, ctx.user)
 
 
 @router.delete("/{user_id}", response_model=JobTeamResponse)
@@ -55,6 +54,6 @@ def remove_team_member(
     hiring_request_id: UUID,
     user_id: int,
     db: Session = Depends(get_db),
-    _=Depends(require_permission(Permission.JOB_TEAM_MANAGE)),
+    _: object = Depends(require_job_access(min_role="job_owner")),
 ):
     return JobTeamService(db).remove_member(hiring_request_id, user_id)

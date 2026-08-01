@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
@@ -91,3 +92,21 @@ class PaginatedAdminUserResponse(BaseModel):
     page: int
     per_page: int
     has_more: bool
+
+
+class UserJobAssignment(BaseModel):
+    hiring_request_id: UUID
+    job_title: str
+    role: str
+    is_owner: bool
+    created_at: datetime
+
+
+class UserJobAssignmentsResponse(BaseModel):
+    user_id: int
+    name: str
+    email: str
+    role: str
+    is_active: bool
+    total: int
+    data: list[UserJobAssignment]

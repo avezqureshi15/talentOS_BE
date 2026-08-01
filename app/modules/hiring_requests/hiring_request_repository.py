@@ -4,6 +4,8 @@ from uuid import UUID
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
+from app.core.job_access import scope_job_query
+from app.modules.auth.auth_schema import UserInfo
 from app.modules.hiring_requests.hiring_request_model import HiringRequest
 
 
@@ -37,8 +39,15 @@ class HiringRequestRepository:
         created_to: datetime | None = None,
         page: int = 1,
         per_page: int = 10,
+        tenant_id: int | None = None,
+        user: UserInfo | None = None,
     ) -> tuple[list[HiringRequest], int]:
         query = self.db.query(HiringRequest).filter(HiringRequest.deleted_at.is_(None))
+
+        if user is not None:
+            query = scope_job_query(query, user)
+        if tenant_id is not None:
+            query = query.filter(HiringRequest.tenant_id == tenant_id)
 
         if search and search.strip():
             term = f"%{search.strip()}%"
@@ -85,35 +94,23 @@ class HiringRequestRepository:
     def count_active(self) -> int:
         return self.db.query(HiringRequest).filter(HiringRequest.deleted_at.is_(None)).count()
 
-    def get_distinct_types(self) -> list[str]:
-        results = (
-            self.db.query(HiringRequest.type)
-            .filter(HiringRequest.deleted_at.is_(None))
-            .distinct()
-            .order_by(HiringRequest.type.asc())
-            .all()
-        )
-        return [r[0] for r in results]
+    def get_distinct_types(self, user: UserInfo | None = None) -> list[str]:
+        query = self.db.query(HiringRequest.type).filter(HiringRequest.deleted_at.is_(None))
+        if user is not None:
+            query = scope_job_query(query, user)
+        return [r[0] for r in query.distinct().order_by(HiringRequest.type.asc()).all()]
 
-    def get_distinct_locations(self) -> list[str]:
-        results = (
-            self.db.query(HiringRequest.location)
-            .filter(HiringRequest.deleted_at.is_(None))
-            .distinct()
-            .order_by(HiringRequest.location.asc())
-            .all()
-        )
-        return [r[0] for r in results]
+    def get_distinct_locations(self, user: UserInfo | None = None) -> list[str]:
+        query = self.db.query(HiringRequest.location).filter(HiringRequest.deleted_at.is_(None))
+        if user is not None:
+            query = scope_job_query(query, user)
+        return [r[0] for r in query.distinct().order_by(HiringRequest.location.asc()).all()]
 
-    def get_distinct_departments(self) -> list[str]:
-        results = (
-            self.db.query(HiringRequest.department)
-            .filter(HiringRequest.deleted_at.is_(None))
-            .distinct()
-            .order_by(HiringRequest.department.asc())
-            .all()
-        )
-        return [r[0] for r in results]
+    def get_distinct_departments(self, user: UserInfo | None = None) -> list[str]:
+        query = self.db.query(HiringRequest.department).filter(HiringRequest.deleted_at.is_(None))
+        if user is not None:
+            query = scope_job_query(query, user)
+        return [r[0] for r in query.distinct().order_by(HiringRequest.department.asc()).all()]
 
     def soft_delete(self, record: HiringRequest) -> HiringRequest:
         record.is_active = False

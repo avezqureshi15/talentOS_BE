@@ -15,6 +15,8 @@ from app.core.permissions import Permission
 from app.modules.auth.auth_schema import UserInfo
 from app.modules.auth.invite_model import TenantInvite
 from app.modules.auth.invite_schema import CreateInviteRequest, InviteResponse, PaginatedInviteResponse, ResendInviteRequest
+from app.modules.hiring_requests.hiring_request_model import HiringRequest
+from app.modules.job_teams.job_team_model import JobTeamMember
 from app.modules.roles.role_service import RoleService
 from app.modules.users.user_model import User
 from app.modules.users.user_schema import (
@@ -22,6 +24,8 @@ from app.modules.users.user_schema import (
     CreateUserRequest,
     PaginatedAdminUserResponse,
     UpdateUserRequest,
+    UserJobAssignment,
+    UserJobAssignmentsResponse,
 )
 
 logger = get_logger(__name__)
@@ -212,6 +216,53 @@ def deactivate_user(
     db.commit()
     logger.info("Admin deactivated user: id=%d", user_id)
     return {"message": "User deactivated successfully"}
+
+
+@router.get("/{user_id}/job-assignments", response_model=UserJobAssignmentsResponse)
+def list_user_job_assignments(
+    user_id: int,
+    tenant_id: int | None = Query(None, description="Required for superadmin — scopes to tenant"),
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(require_permission(Permission.USER_MANAGE)),
+):
+    if current_user.role == "superadmin":
+        raise HTTPException(status_code=403, detail="Only account admins can view user job assignments")
+    tid = _resolve_tenant(current_user, tenant_id)
+    user = db.query(User).filter(User.id == user_id, User.tenant_id == tid).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    rows = (
+        db.query(JobTeamMember, HiringRequest)
+        .join(HiringRequest, HiringRequest.id == JobTeamMember.hiring_request_id)
+        .filter(
+            JobTeamMember.user_id == user_id,
+            HiringRequest.tenant_id == tid,
+            HiringRequest.deleted_at.is_(None),
+        )
+        .order_by(JobTeamMember.created_at.desc())
+        .all()
+    )
+    data = [
+        UserJobAssignment(
+            hiring_request_id=hr.id,
+            job_title=hr.title,
+            role=member.role,
+            is_owner=member.is_owner,
+            created_at=member.created_at,
+        )
+        for member, hr in rows
+    ]
+    logger.info("Admin listed job assignments: user_id=%d tenant_id=%s total=%d", user_id, tid, len(data))
+    return UserJobAssignmentsResponse(
+        user_id=user_id,
+        name=user.name,
+        email=user.email,
+        role=user.role,
+        is_active=user.is_active,
+        total=len(data),
+        data=data,
+    )
 
 
 # ── Invites ──────────────────────────────────────────────────────────

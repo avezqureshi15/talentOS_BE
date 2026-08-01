@@ -16,6 +16,7 @@ class HiringRequestCreate(BaseModel):
     custom_evaluation_criteria: str | None = Field(None)
     external_job_id: str | None = Field(None)
     rh_external_job_id: str | None = Field(None)
+    tenant_id: int | None = Field(None, description="Superadmin-only override; otherwise derived from the caller's tenant")
 
 
 class HiringRequestUpdate(BaseModel):
@@ -32,6 +33,7 @@ class HiringRequestUpdate(BaseModel):
 
 class HiringRequestResponse(BaseModel):
     id: UUID
+    tenant_id: int | None
     title: str
     department: str
     location: str

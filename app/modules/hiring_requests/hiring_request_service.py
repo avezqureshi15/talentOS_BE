@@ -2,7 +2,7 @@ import asyncio
 from datetime import datetime
 from uuid import UUID
 
-from fastapi import BackgroundTasks
+from fastapi import BackgroundTasks, HTTPException
 from sqlalchemy import exc as sa_exc
 from sqlalchemy.orm import Session
 
@@ -12,8 +12,10 @@ from app.common.exceptions.hiring_request_exception import (
     HiringRequestNotFoundException,
     HiringRequestNotUpdatedException,
 )
+from app.core.job_access import can_create_job
 from app.core.logger import get_logger
 from app.db.session import SessionLocal
+from app.modules.auth.auth_schema import UserInfo
 from app.modules.hiring_requests.hiring_request_model import HiringRequest
 from app.modules.hiring_requests.hiring_request_repository import HiringRequestRepository
 from app.modules.hiring_requests.hiring_request_schema import (
@@ -23,6 +25,7 @@ from app.modules.hiring_requests.hiring_request_schema import (
 )
 from app.modules.jobs.job_schema import JobCreate, JobUpdate
 from app.modules.jobs.job_service import JobService
+from app.modules.job_teams.job_team_repository import JobTeamRepository
 
 logger = get_logger(__name__)
 
@@ -70,18 +73,34 @@ class HiringRequestService:
         total = self.repository.count_active()
         return total + 1
 
-    def create_hiring_request(self, data: HiringRequestCreate, background_tasks: BackgroundTasks | None = None) -> dict:
+    def create_hiring_request(
+        self,
+        data: HiringRequestCreate,
+        background_tasks: BackgroundTasks | None = None,
+        current_user: UserInfo | None = None,
+    ) -> dict:
+        tenant_id = data.tenant_id
+        if current_user is not None:
+            if current_user.role == "superadmin":
+                if tenant_id is None:
+                    raise HTTPException(status_code=400, detail="tenant_id is required when creating as superadmin")
+            else:
+                tenant_id = current_user.tenant_id
+                if tenant_id is None:
+                    raise HTTPException(status_code=400, detail="tenant_id is required to create a hiring request")
+
         serial = self._next_serial()
         prefixed = f"#{serial} {data.title}"
-        logger.info("Creating hiring request: title=%s", prefixed)
+        logger.info("Creating hiring request: title=%s tenant_id=%s", prefixed, tenant_id)
         data.title = prefixed
-        job_payload = JobCreate(**data.model_dump(exclude={"custom_evaluation_criteria"}))
+        job_payload = JobCreate(**data.model_dump(exclude={"custom_evaluation_criteria", "tenant_id"}))
         job_response = self.job_service.create_job(job_payload)
         external_job_id = job_response.get("data", {}).get("id")
 
         try:
             payload = data.model_dump()
             payload["external_job_id"] = external_job_id
+            payload["tenant_id"] = tenant_id
             local_record = self.repository.create(payload)
         except sa_exc.SQLAlchemyError as exc:
             logger.exception(
@@ -91,6 +110,19 @@ class HiringRequestService:
             raise HiringRequestNotCreatedException(
                 "Job listing created in Supabase but failed to save locally"
             ) from exc
+
+        if current_user is not None:
+            JobTeamRepository(self.repository.db).add_member(
+                local_record.id,
+                current_user.id,
+                is_owner=True,
+                role="job_owner",
+            )
+            logger.info(
+                "Creator added as job owner: hiring_request_id=%s user_id=%d",
+                local_record.id,
+                current_user.id,
+            )
 
         if background_tasks is not None:
             background_tasks.add_task(_sync_rh_job, str(local_record.id))
@@ -117,6 +149,8 @@ class HiringRequestService:
         created_to: datetime | None = None,
         page: int = 1,
         per_page: int = 10,
+        tenant_id: int | None = None,
+        current_user: UserInfo | None = None,
     ) -> dict:
         logger.info("Fetching hiring requests from local DB search=%s", search)
         records, total = self.repository.get_all(
@@ -129,6 +163,8 @@ class HiringRequestService:
             created_to=created_to,
             page=page,
             per_page=per_page,
+            tenant_id=tenant_id,
+            user=current_user,
         )
         items = [HiringRequestResponse.model_validate(r).model_dump() for r in records]
         total_pages = max(1, (total + per_page - 1) // per_page)
@@ -140,6 +176,7 @@ class HiringRequestService:
             "total_pages": total_pages,
             "total": total,
             "has_more": page < total_pages,
+            "can_create": can_create_job(self.repository.db, current_user) if current_user is not None else False,
         }
 
     def update_hiring_request(self, hiring_request_id: UUID, data: HiringRequestUpdate) -> dict:
@@ -182,16 +219,16 @@ class HiringRequestService:
         response = HiringRequestResponse.model_validate(updated).model_dump()
         return {"data": response}
 
-    def get_types(self) -> dict:
-        types = self.repository.get_distinct_types()
+    def get_types(self, current_user: UserInfo | None = None) -> dict:
+        types = self.repository.get_distinct_types(user=current_user)
         return {"data": types}
 
-    def get_locations(self) -> dict:
-        locations = self.repository.get_distinct_locations()
+    def get_locations(self, current_user: UserInfo | None = None) -> dict:
+        locations = self.repository.get_distinct_locations(user=current_user)
         return {"data": locations}
 
-    def get_departments(self) -> dict:
-        departments = self.repository.get_distinct_departments()
+    def get_departments(self, current_user: UserInfo | None = None) -> dict:
+        departments = self.repository.get_distinct_departments(user=current_user)
         return {"data": departments}
 
     def delete_hiring_request(self, hiring_request_id: UUID) -> dict:

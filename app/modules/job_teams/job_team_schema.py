@@ -1,6 +1,6 @@
 import uuid
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class JobTeamMemberResponse(BaseModel):
@@ -8,6 +8,7 @@ class JobTeamMemberResponse(BaseModel):
     name: str
     email: str
     is_owner: bool
+    role: str
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -21,7 +22,9 @@ class JobTeamResponse(BaseModel):
 class AddTeamMemberRequest(BaseModel):
     user_id: int
     is_owner: bool = False
+    role: str | None = Field(None, description="job_owner | recruiter | reviewer; defaults to recruiter")
 
 
 class UpdateTeamMemberRequest(BaseModel):
-    is_owner: bool
+    is_owner: bool | None = None
+    role: str | None = Field(None, description="job_owner | recruiter | reviewer")
