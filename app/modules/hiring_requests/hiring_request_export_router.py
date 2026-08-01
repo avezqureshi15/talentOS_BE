@@ -13,7 +13,7 @@ from app.modules.hiring_requests.excel import HiringRequestExportService
 router = APIRouter(
     prefix=f"{settings.API_V1_PREFIX}/hiring-requests",
     tags=["hiring-requests"],
-    dependencies=[Depends(require_permission(Permission.HIRING_REQUEST_VIEW))],
+    dependencies=[Depends(require_permission(Permission.REPORT_EXPORT))],
 )
 
 

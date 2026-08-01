@@ -138,7 +138,7 @@ class AuthService:
             password_hash=hash_password(password),
             auth_provider="email",
             tenant_id=tenant.id,
-            role="admin",
+            role="account_admin",
             status="active",
             user_type="employee",
             designation="Unassigned",
@@ -262,7 +262,7 @@ class AuthService:
 
     # ── JWT token management ──────────────────────────────────────────────
 
-    def _create_access_token(self, user_id: int, user_role: str = "hr", user_tenant_id: int | None = None, auth_provider: str = "google", permissions: list[str] | None = None) -> tuple[str, int]:
+    def _create_access_token(self, user_id: int, user_role: str = "recruiter", user_tenant_id: int | None = None, auth_provider: str = "google", permissions: list[str] | None = None) -> tuple[str, int]:
         expires_in = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
         expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
         payload = {
@@ -305,10 +305,10 @@ class AuthService:
             raise AuthError("Invalid or expired refresh token")
         user = self.repo.get_user_by_id(record.user_id)
         perm_service = PermissionService(self.db)
-        permissions = perm_service.get_permissions_for_role(user.role if user else "hr")
+        permissions = perm_service.get_permissions_for_role(user.role if user else "recruiter")
         access_token, expires_in = self._create_access_token(
             record.user_id,
-            user_role=user.role if user else "hr",
+            user_role=user.role if user else "recruiter",
             user_tenant_id=user.tenant_id if user else None,
             auth_provider=user.auth_provider if user else "google",
             permissions=permissions,

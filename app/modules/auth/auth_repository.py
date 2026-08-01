@@ -41,7 +41,7 @@ class AuthRepository:
             "user_type": "employee",
             "designation": "Unassigned",
             "department": "Unassigned",
-            "role": "user",
+            "role": "recruiter",
             "work_mode": "remote",
             "delivery_status": "active",
             "work_location_type": "remote",

@@ -97,7 +97,7 @@ def update_final_verdict(
     return service.set_final_verdict(candidate_id, data.verdict)
 
 
-@router.patch("/{candidate_id}/round-status")
+@router.patch("/{candidate_id}/round-status", dependencies=[Depends(require_permission(Permission.APPLICATION_WORKFLOW))])
 def update_candidate_round_status(
     candidate_id: int,
     data: RoundStatusUpdate,
@@ -113,7 +113,7 @@ def create_application(data: ApplicationCreate):
     return service.create_application(data)
 
 
-@router.post("/candidates/{candidate_id}/move-to-next-round", response_model=EvaluationResponse)
+@router.post("/candidates/{candidate_id}/move-to-next-round", response_model=EvaluationResponse, dependencies=[Depends(require_permission(Permission.APPLICATION_WORKFLOW))])
 def move_candidate_to_next_round(candidate_id: int, db: Session = Depends(get_db)):
     service = ApplicationService(db)
     return service.move_to_next_round(candidate_id)

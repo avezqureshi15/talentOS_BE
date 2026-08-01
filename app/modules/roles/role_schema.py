@@ -36,3 +36,8 @@ class PermissionsListResponse(BaseModel):
 
 class UpdateRolePermissionsRequest(BaseModel):
     permission_codes: list[str]
+
+
+class CreateRoleRequest(BaseModel):
+    role_name: str
+    description: str = ""

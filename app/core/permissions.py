@@ -23,14 +23,19 @@ class Permission(str, Enum):
     REVIEW_SUBMIT = "review.submit"
     REVIEW_VIEW_ALL = "review.view_all"
     CHAT = "chat"
+    REPORT_EXPORT = "report.export"
+    APPLICATION_WORKFLOW = "application.workflow"
+    INTERVIEW_PLAN_EDIT = "interview.plan_edit"
+    JOB_TEAM_MANAGE = "job.team_manage"
 
 
 DEFAULT_ROLE_PERMISSIONS: dict[str, set[Permission]] = {
     "superadmin": set(Permission),
-    "admin": {
+    "account_admin": {
         Permission.APPLICATION_VIEW,
         Permission.APPLICATION_EVALUATE,
         Permission.APPLICATION_REJECT,
+        Permission.APPLICATION_WORKFLOW,
         Permission.HIRING_REQUEST_CREATE,
         Permission.HIRING_REQUEST_EDIT,
         Permission.HIRING_REQUEST_VIEW,
@@ -43,24 +48,46 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, set[Permission]] = {
         Permission.SLOT_VIEW_ALL,
         Permission.REVIEW_SUBMIT,
         Permission.REVIEW_VIEW_ALL,
+        Permission.REPORT_EXPORT,
+        Permission.INTERVIEW_PLAN_EDIT,
+        Permission.JOB_TEAM_MANAGE,
         Permission.CHAT,
     },
-    "hr": {
+    "job_owner": {
         Permission.APPLICATION_VIEW,
         Permission.APPLICATION_EVALUATE,
         Permission.APPLICATION_REJECT,
+        Permission.APPLICATION_WORKFLOW,
         Permission.HIRING_REQUEST_CREATE,
         Permission.HIRING_REQUEST_EDIT,
         Permission.HIRING_REQUEST_VIEW,
-        Permission.USER_INVITE,
         Permission.SLOT_VIEW_ALL,
         Permission.REVIEW_SUBMIT,
         Permission.REVIEW_VIEW_ALL,
+        Permission.REPORT_EXPORT,
+        Permission.INTERVIEW_PLAN_EDIT,
+        Permission.JOB_TEAM_MANAGE,
         Permission.CHAT,
     },
-    "viewer": {
+    "recruiter": {
         Permission.APPLICATION_VIEW,
+        Permission.APPLICATION_EVALUATE,
+        Permission.APPLICATION_REJECT,
+        Permission.APPLICATION_WORKFLOW,
+        Permission.HIRING_REQUEST_EDIT,
         Permission.HIRING_REQUEST_VIEW,
+        Permission.SLOT_VIEW_ALL,
+        Permission.REVIEW_SUBMIT,
+        Permission.REVIEW_VIEW_ALL,
+        Permission.REPORT_EXPORT,
+        Permission.CHAT,
+    },
+    "reviewer": {
+        Permission.APPLICATION_VIEW,
+        Permission.APPLICATION_EVALUATE,
+        Permission.APPLICATION_REJECT,
+        Permission.HIRING_REQUEST_VIEW,
+        Permission.REPORT_EXPORT,
         Permission.CHAT,
     },
 }
@@ -85,6 +112,10 @@ PERMISSION_ENDPOINTS: dict[str, str] = {
     Permission.REVIEW_SUBMIT.value: "POST /api/v1/reviews",
     Permission.REVIEW_VIEW_ALL.value: "GET /api/v1/reviews/round/{round_id}",
     Permission.CHAT.value: "GET /api/v1/chat/chats",
+    Permission.REPORT_EXPORT.value: "GET /api/v1/hiring-requests/{id}/export",
+    Permission.APPLICATION_WORKFLOW.value: "PATCH /api/v1/applications/{candidate_id}/final-verdict, PATCH /api/v1/applications/{candidate_id}/round-status, POST /api/v1/applications/candidates/{candidate_id}/move-to-next-round, POST /api/v1/rounds/{round_id}/shortlist, POST /api/v1/rounds/{round_id}/reject",
+    Permission.INTERVIEW_PLAN_EDIT.value: "PUT /api/v1/hiring-requests/{id}/ai/questions",
+    Permission.JOB_TEAM_MANAGE.value: "POST /api/v1/hiring-requests/{id}/team, PATCH /api/v1/hiring-requests/{id}/team/{user_id}, DELETE /api/v1/hiring-requests/{id}/team/{user_id}",
 }
 
 PERMISSION_META: dict[str, dict[str, str]] = {

@@ -67,7 +67,7 @@ class TenantService:
         invite = self.repo.create_invite(
             tenant_id=tenant.id,
             email=admin_email,
-            role="admin",
+            role="account_admin",
             invited_by_user_id=invited_by_user_id,
         )
 

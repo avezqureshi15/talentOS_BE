@@ -27,7 +27,7 @@ def get_current_user(
             id=-api_key.id,
             email=api_key.name,
             name=api_key.name,
-            role="admin" if is_tenant_scoped else "superadmin",
+            role="account_admin" if is_tenant_scoped else "superadmin",
             tenant_id=api_key.tenant_id,
             auth_provider="api_key",
             is_active=True,
@@ -51,24 +51,10 @@ def require_roles(*roles: str):
     return checker
 
 
-def _require_hr(current_user: UserInfo = Depends(get_current_user)) -> UserInfo:
-    if current_user.role not in ("hr", "admin", "superadmin"):
-        raise HTTPException(status_code=403, detail="Insufficient permissions")
-    return current_user
-
-
-def _require_admin(current_user: UserInfo = Depends(get_current_user)) -> UserInfo:
-    if current_user.role not in ("admin", "superadmin"):
-        raise HTTPException(status_code=403, detail="Insufficient permissions")
-    return current_user
-
-
 def _require_superadmin(current_user: UserInfo = Depends(get_current_user)) -> UserInfo:
     if current_user.role != "superadmin":
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     return current_user
 
 
-RequireHr = _require_hr
-RequireAdmin = _require_admin
 RequireSuperAdmin = _require_superadmin

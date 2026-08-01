@@ -24,3 +24,23 @@ def require_permission(*permissions: Permission):
                 )
         return current_user
     return checker
+
+
+def require_any_permission(*permissions: Permission):
+    """FastAPI dependency that checks the current user has AT LEAST ONE listed permission.
+
+    Usage:
+        @router.get("/reports")
+        def get_reports(
+            _=Depends(require_any_permission(Permission.REPORT_EXPORT)),
+            ...
+        ):
+    """
+    def checker(current_user: UserInfo = Depends(get_current_user)):
+        if not any(p.value in current_user.permissions for p in permissions):
+            raise HTTPException(
+                status_code=403,
+                detail="Missing required permission",
+            )
+        return current_user
+    return checker

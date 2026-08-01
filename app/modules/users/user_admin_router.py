@@ -15,6 +15,7 @@ from app.core.permissions import Permission
 from app.modules.auth.auth_schema import UserInfo
 from app.modules.auth.invite_model import TenantInvite
 from app.modules.auth.invite_schema import CreateInviteRequest, InviteResponse, PaginatedInviteResponse, ResendInviteRequest
+from app.modules.roles.role_service import RoleService
 from app.modules.users.user_model import User
 from app.modules.users.user_schema import (
     AdminUserResponse,
@@ -82,6 +83,15 @@ def _resolve_tenant(current_user: UserInfo, tenant_id_override: int | None = Non
     return current_user.tenant_id
 
 
+def _validate_role(db: Session, role_name: str | None) -> None:
+    if role_name is None:
+        return
+    try:
+        RoleService(db).validate_role_name(role_name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
 def _user_to_admin_response(u: User) -> AdminUserResponse:
     return AdminUserResponse(
         id=u.id,
@@ -124,6 +134,7 @@ def create_user(
     current_user: UserInfo = Depends(require_permission(Permission.USER_MANAGE)),
 ):
     tid = _resolve_tenant(current_user, body.tenant_id)
+    _validate_role(db, body.role)
 
     existing = db.query(User).filter(User.email == body.email).first()
     if existing:
@@ -165,6 +176,7 @@ def update_user(
     current_user: UserInfo = Depends(require_permission(Permission.USER_MANAGE)),
 ):
     tid = _resolve_tenant(current_user, body.tenant_id)
+    _validate_role(db, body.role)
     user = db.query(User).filter(User.id == user_id, User.tenant_id == tid).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -212,6 +224,7 @@ def create_invite(
     current_user: UserInfo = Depends(require_permission(Permission.USER_MANAGE)),
 ):
     tid = _resolve_tenant(current_user, body.tenant_id)
+    _validate_role(db, body.role)
 
     existing_invite = db.query(TenantInvite).filter(
         TenantInvite.tenant_id == tid,

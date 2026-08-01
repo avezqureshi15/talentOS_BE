@@ -31,7 +31,7 @@ async def get_questions(
 @router.put(
     "/questions",
     response_model=InterviewDesignResponse,
-    dependencies=[Depends(require_permission(Permission.HIRING_REQUEST_EDIT))],
+    dependencies=[Depends(require_permission(Permission.INTERVIEW_PLAN_EDIT))],
 )
 async def update_questions(
     hiring_request_id: str,

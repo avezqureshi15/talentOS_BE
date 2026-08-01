@@ -3,9 +3,6 @@ from datetime import date, datetime
 from pydantic import BaseModel, ConfigDict, field_validator
 
 
-VALID_ROLES = {"superadmin", "admin", "hr", "viewer"}
-
-
 class UserResponse(BaseModel):
     id: int
     emp_id: str
@@ -54,7 +51,7 @@ class CreateUserRequest(BaseModel):
     name: str
     email: str
     password: str
-    role: str = "hr"
+    role: str = "recruiter"
     tenant_id: int | None = None
 
     @field_validator("password")
@@ -64,13 +61,6 @@ class CreateUserRequest(BaseModel):
             raise ValueError("Password must be at least 8 characters")
         return v
 
-    @field_validator("role")
-    @classmethod
-    def validate_role(cls, v: str) -> str:
-        if v not in VALID_ROLES:
-            raise ValueError(f"Invalid role. Must be one of: {', '.join(sorted(VALID_ROLES))}")
-        return v
-
 
 class UpdateUserRequest(BaseModel):
     name: str | None = None
@@ -78,13 +68,6 @@ class UpdateUserRequest(BaseModel):
     is_active: bool | None = None
     password: str | None = None
     tenant_id: int | None = None
-
-    @field_validator("role")
-    @classmethod
-    def validate_role(cls, v: str | None) -> str | None:
-        if v is not None and v not in VALID_ROLES:
-            raise ValueError(f"Invalid role. Must be one of: {', '.join(sorted(VALID_ROLES))}")
-        return v
 
     @field_validator("password")
     @classmethod
