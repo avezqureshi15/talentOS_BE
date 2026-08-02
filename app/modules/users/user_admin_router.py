@@ -247,8 +247,6 @@ def list_user_job_assignments(
         UserJobAssignment(
             hiring_request_id=hr.id,
             job_title=hr.title,
-            role=member.role,
-            is_owner=member.is_owner,
             created_at=member.created_at,
         )
         for member, hr in rows

@@ -97,8 +97,6 @@ class PaginatedAdminUserResponse(BaseModel):
 class UserJobAssignment(BaseModel):
     hiring_request_id: UUID
     job_title: str
-    role: str
-    is_owner: bool
     created_at: datetime
 
 

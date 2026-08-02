@@ -12,7 +12,7 @@ from app.modules.events.event_service import EventService
 from app.modules.reviews.review_schema import ReviewCreate, ReviewResponse, ReviewUpdateByRound
 from app.modules.reviews.review_service import ReviewService
 
-router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/reviews", tags=["reviews"], dependencies=[Depends(require_permission(Permission.REVIEW_VIEW_ALL))])
+router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/reviews", tags=["reviews"])
 
 
 @router.post("", response_model=ReviewResponse, status_code=status.HTTP_201_CREATED)
@@ -21,7 +21,7 @@ def create_review(data: ReviewCreate, db: Session = Depends(get_db)):
     return service.create_review(data)
 
 
-@router.get("/round/{round_id}", response_model=list[ReviewResponse])
+@router.get("/round/{round_id}", response_model=list[ReviewResponse], dependencies=[Depends(require_permission(Permission.REVIEW_VIEW_ALL))])
 def get_reviews_by_round(round_id: str, db: Session = Depends(get_db)):
     service = ReviewService(db)
     return service.get_reviews_by_round(round_id)

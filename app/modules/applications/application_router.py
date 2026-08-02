@@ -52,6 +52,7 @@ def get_all_applications(
     q: str | None = Query(default=None, description="Search candidates by name or email"),
     reject_reason: str | None = Query(default=None, description="Comma-separated rejection reasons (yoe,location,budget,notice_period)"),
     stage: str | None = Query(default=None, description="Filter by pipeline stage (resume-shortlisting, screening, interview, waiting-evaluation, evaluated)"),
+    candidate_type: str | None = Query(default=None, description="Filter by candidate type (REGULAR, REFERRAL, ...)"),
     db: Session = Depends(get_db),
 ):
     service = ApplicationService(db)
@@ -71,6 +72,7 @@ def get_all_applications(
         search=q,
         reject_reason=reject_reason,
         stage=stage,
+        candidate_type=candidate_type,
     )
 
 

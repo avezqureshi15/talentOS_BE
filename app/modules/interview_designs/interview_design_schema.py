@@ -13,6 +13,7 @@ class InterviewDesignQuestion(BaseModel):
     question: str
     score: int = Field(ge=1, le=10)
     timeAllocationMinutes: int = Field(ge=1, le=60)
+    expected_points: list[str] = Field(default_factory=list)
 
 
 class ScreeningDesignQuestion(InterviewDesignQuestion):
@@ -40,6 +41,11 @@ class ScreeningDesignSection(BaseModel):
 class InterviewDesignUpdate(BaseModel):
     screening_sections: list[ScreeningDesignSection] | None = None
     interview_sections: list[InterviewDesignSection] | None = None
+
+
+class InterviewDesignGenerate(BaseModel):
+    kind: Literal["screening", "interview"]
+    count: int = Field(default=8, ge=1, le=15)
 
 
 class InterviewDesignResponse(BaseModel):

@@ -34,17 +34,11 @@ class JobTeamRepository:
         hiring_request_id: uuid.UUID,
         user_id: int,
         is_owner: bool = False,
-        role: str = "recruiter",
     ) -> JobTeamMember:
-        if role == "job_owner":
-            is_owner = True
-        elif is_owner:
-            role = "job_owner"
         member = JobTeamMember(
             hiring_request_id=hiring_request_id,
             user_id=user_id,
             is_owner=is_owner,
-            role=role,
         )
         self.db.add(member)
         self.db.commit()
@@ -55,24 +49,14 @@ class JobTeamRepository:
         self,
         hiring_request_id: uuid.UUID,
         user_id: int,
-        role: str | None = None,
         is_owner: bool | None = None,
     ) -> JobTeamMember | None:
         member = self.get_member(hiring_request_id, user_id)
         if member is None:
             return None
 
-        if role is not None:
-            member.role = role
-        if is_owner is True:
-            member.role = "job_owner"
-        elif is_owner is False and role is None and member.role == "job_owner":
-            member.role = "recruiter"
-
-        if member.role == "job_owner":
-            member.is_owner = True
-        else:
-            member.is_owner = False
+        if is_owner is not None:
+            member.is_owner = is_owner
 
         self.db.commit()
         self.db.refresh(member)

@@ -58,6 +58,7 @@ class EvaluatedCandidate(BaseModel):
     name: str | None = None
     email: str | None = None
     phone: str | None = None
+    candidate_type: str | None = None
     cover_letter: str | None = None
     resume_url: str | None = None
     current_ctc: str | None = None

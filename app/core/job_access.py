@@ -1,56 +1,42 @@
-"""Job-level access control: tenant scoping + job-team role hierarchy.
+"""Job-level access control: tenant scoping + membership visibility.
 
-Extensible by design:
-- ``JOB_ROLE_RANK`` / ``JOB_ROLE_PERMISSIONS`` are the single configuration
-  points. Adding a new job-level role requires only extending these maps; no
-  endpoint changes.
+Roles are global-only. A user's effective permissions come from their org
+role (``User.permissions`` in the JWT). Job team membership is a plain
+"who is on this job" list whose only access effect is visibility: non-admin
+roles see only the jobs they are assigned to.
+
 - ``resolve_job_access`` is the single source of truth for "can this user act
   on this job". ``require_job_access`` (FastAPI dependency) and
   ``scope_job_query`` (list filtering) build on it, so future modules
   (applications, reviews, slots, evaluations, AI) can reuse identical access
   semantics.
-
-Hierarchy (config-driven, higher ranks inherit lower ones):
-    org access (superadmin / account_admin) > job_owner > recruiter > reviewer
-
-Effective permissions for a job = caller's JWT org permissions
-UNION the permissions of their team role on that job.
+- ``min_role`` floors in ``require_job_access`` are checked against the
+  caller's global role rank (superadmin > account_admin > job_owner >
+  recruiter > reviewer).
 """
 from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from typing import Any
 
 from fastapi import Depends, HTTPException, Path
 from sqlalchemy import select
 from sqlalchemy.orm import Query, Session
 
-from app.core.permissions import DEFAULT_ROLE_PERMISSIONS, Permission
+from app.core.permissions import Permission
 from app.db.session import get_db
 from app.modules.auth.auth_dependencies import get_current_user
 from app.modules.auth.auth_schema import UserInfo
 from app.modules.hiring_requests.hiring_request_model import HiringRequest
 from app.modules.job_teams.job_team_model import JobTeamMember
 
-JOB_ROLE_RANK: dict[str, int] = {
-    "job_owner": 3,
-    "recruiter": 2,
-    "reviewer": 1,
+GLOBAL_ROLE_RANK: dict[str, int] = {
+    "superadmin": 4,
+    "account_admin": 3,
+    "job_owner": 2,
+    "recruiter": 1,
+    "reviewer": 0,
 }
-
-JOB_ROLE_PERMISSIONS: dict[str, set[Permission]] = {
-    role: set(DEFAULT_ROLE_PERMISSIONS[role]) for role in JOB_ROLE_RANK
-}
-
-ORG_ACCESS_RANK = max(JOB_ROLE_RANK.values()) + 1
-
-
-def validate_job_role(role: str) -> str:
-    """Validate a job-level role string; raises 400 for unknown roles."""
-    if role not in JOB_ROLE_RANK:
-        raise HTTPException(status_code=400, detail=f"Invalid job role: {role}. Allowed: {', '.join(JOB_ROLE_RANK)}")
-    return role
 
 
 @dataclass
@@ -59,7 +45,8 @@ class JobAccessContext:
 
     ``member`` is None for org-level access (superadmin / account_admin on
     their tenant's jobs); otherwise it is the caller's JobTeamMember row,
-    whose ``role`` drives the team-role permission set.
+    which only grants visibility — permissions always come from the user's
+    global role.
     """
 
     user: UserInfo
@@ -71,21 +58,11 @@ class JobAccessContext:
         return self.member is None
 
     @property
-    def team_role(self) -> str | None:
-        return self.member.role if self.member else None
-
-    @property
     def role_rank(self) -> int:
-        if self.member is None:
-            return ORG_ACCESS_RANK
-        return JOB_ROLE_RANK.get(self.member.role, 0)
+        return GLOBAL_ROLE_RANK.get(self.user.role, 0)
 
     def has_permission(self, permission: Permission) -> bool:
-        if permission.value in self.user.permissions:
-            return True
-        if self.member is not None:
-            return permission in JOB_ROLE_PERMISSIONS.get(self.member.role, set())
-        return False
+        return permission.value in self.user.permissions
 
     def ensure_permission(self, permission: Permission) -> None:
         if not self.has_permission(permission):
@@ -94,10 +71,14 @@ class JobAccessContext:
     def ensure_min_role(self, min_role: str | None = None) -> None:
         if min_role is None:
             return
-        validate_job_role(min_role)
-        if self.role_rank >= JOB_ROLE_RANK[min_role]:
+        if min_role not in GLOBAL_ROLE_RANK:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid role: {min_role}. Allowed: {', '.join(GLOBAL_ROLE_RANK)}",
+            )
+        if self.role_rank >= GLOBAL_ROLE_RANK[min_role]:
             return
-        raise HTTPException(status_code=403, detail=f"Requires job role at least {min_role} on this hiring request")
+        raise HTTPException(status_code=403, detail=f"Requires role at least {min_role}")
 
 
 def resolve_job_access(db: Session, user: UserInfo, hiring_request_id: uuid.UUID) -> JobAccessContext:
@@ -185,36 +166,8 @@ def can_create_job(db: Session, user: UserInfo) -> bool:
     """Whether the caller may create hiring requests.
 
     superadmin/account_admin always; otherwise anyone whose org role carries
-    hiring_request.create (org-level job_owner) or who is a job_owner on any
-    team (team-role elevation).
+    hiring_request.create.
     """
     if user.role in ("superadmin", "account_admin"):
         return True
-    if Permission.HIRING_REQUEST_CREATE.value in user.permissions:
-        return True
-    return (
-        db.scalar(
-            select(JobTeamMember.id)
-            .join(HiringRequest, HiringRequest.id == JobTeamMember.hiring_request_id)
-            .where(
-                JobTeamMember.user_id == user.id,
-                JobTeamMember.role == "job_owner",
-                HiringRequest.deleted_at.is_(None),
-            )
-            .limit(1)
-        )
-        is not None
-    )
-
-
-def resolve_effective_job_permissions(db: Session, user: UserInfo, hiring_request_id: uuid.UUID) -> set[str]:
-    """Permissions a user effectively holds on a job (JWT perms ∪ team-role perms).
-
-    Utility for consumers that need the permission set itself (e.g. FE meta)
-    rather than endpoint gating.
-    """
-    context = resolve_job_access(db, user, hiring_request_id)
-    effective = set(context.user.permissions)
-    if context.member is not None:
-        effective |= {p.value for p in JOB_ROLE_PERMISSIONS.get(context.member.role, set())}
-    return effective
+    return Permission.HIRING_REQUEST_CREATE.value in user.permissions

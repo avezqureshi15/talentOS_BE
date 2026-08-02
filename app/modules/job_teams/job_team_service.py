@@ -8,7 +8,6 @@ from app.common.exceptions.job_team_exception import (
     JobTeamAlreadyMemberException,
     JobTeamMemberNotFoundException,
 )
-from app.core.job_access import validate_job_role
 from app.core.logger import get_logger
 from app.modules.auth.auth_schema import UserInfo
 from app.modules.hiring_requests.hiring_request_model import HiringRequest
@@ -36,12 +35,6 @@ class JobTeamService:
             raise HiringRequestNotFoundException(hiring_request_id)
         return hr
 
-    def _resolve_role(self, hr: HiringRequest, is_owner: bool, role: str | None) -> str:
-        if role is not None:
-            validate_job_role(role)
-            return "job_owner" if role == "job_owner" or is_owner else role
-        return "job_owner" if is_owner else "recruiter"
-
     def _assert_same_tenant(self, hr: HiringRequest, user: User) -> None:
         if hr.tenant_id is not None and user.tenant_id != hr.tenant_id:
             raise HTTPException(
@@ -53,7 +46,7 @@ class JobTeamService:
         if current_user.role not in ("superadmin", "account_admin"):
             raise HTTPException(
                 status_code=403,
-                detail="Only account admins can assign the Job Owner role",
+                detail="Only account admins can mark a user as Job Owner",
             )
 
     def list_members(self, hiring_request_id: uuid.UUID) -> JobTeamResponse:
@@ -65,7 +58,7 @@ class JobTeamService:
                 name=user.name,
                 email=user.email,
                 is_owner=member.is_owner,
-                role=member.role,
+                role=user.role,
             )
             for member, user in rows
         ]
@@ -92,14 +85,13 @@ class JobTeamService:
             raise UserNotFoundException(body.user_id)
 
         self._assert_same_tenant(hr, user)
-        if body.is_owner or body.role == "job_owner":
+        if body.is_owner:
             self._assert_owner_assignment_allowed(current_user)
-        role = self._resolve_role(hr, body.is_owner, body.role)
 
-        self.repo.add_member(hiring_request_id, body.user_id, is_owner=role == "job_owner", role=role)
+        self.repo.add_member(hiring_request_id, body.user_id, is_owner=body.is_owner)
         logger.info(
-            "Job team member added: hiring_request_id=%s user_id=%d role=%s",
-            hiring_request_id, body.user_id, role,
+            "Job team member added: hiring_request_id=%s user_id=%d is_owner=%s",
+            hiring_request_id, body.user_id, body.is_owner,
         )
         return self.list_members(hiring_request_id)
 
@@ -115,21 +107,17 @@ class JobTeamService:
         if not member:
             raise JobTeamMemberNotFoundException(user_id)
 
-        if body.role is not None:
-            validate_job_role(body.role)
-
-        if body.role == "job_owner" or body.is_owner is not None:
+        if body.is_owner is not None:
             self._assert_owner_assignment_allowed(current_user)
 
         self.repo.update_member(
             hiring_request_id,
             user_id,
-            role=body.role,
             is_owner=body.is_owner,
         )
         logger.info(
-            "Job team member updated: hiring_request_id=%s user_id=%d role=%s is_owner=%s",
-            hiring_request_id, user_id, body.role, body.is_owner,
+            "Job team member updated: hiring_request_id=%s user_id=%d is_owner=%s",
+            hiring_request_id, user_id, body.is_owner,
         )
         return self.list_members(hiring_request_id)
 

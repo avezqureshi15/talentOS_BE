@@ -36,6 +36,7 @@ def _apply_candidate_filters(
     search: str | None = None,
     reject_reason: str | None = None,
     stage: str | None = None,
+    candidate_type: str | None = None,
 ):
     query = db.query(Candidate)
 
@@ -46,6 +47,8 @@ def _apply_candidate_filters(
         query = query.filter(
             Candidate.candidate_name.ilike(like) | Candidate.candidate_email.ilike(like)
         )
+    if candidate_type:
+        query = query.filter(Candidate.candidate_type.ilike(candidate_type.strip()))
     if status:
         query = query.filter(Candidate.status == status)
     if schedule == "scheduled":
@@ -121,6 +124,7 @@ def get_candidates_by_job_paginated(
     search: str | None = None,
     reject_reason: str | None = None,
     stage: str | None = None,
+    candidate_type: str | None = None,
 ) -> tuple[list[Candidate], int]:
     query = _apply_candidate_filters(
         db,
@@ -136,6 +140,7 @@ def get_candidates_by_job_paginated(
         search=search,
         reject_reason=reject_reason,
         stage=stage,
+        candidate_type=candidate_type,
     )
 
     total = query.count()

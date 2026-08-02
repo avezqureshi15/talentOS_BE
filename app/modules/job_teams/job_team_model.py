@@ -26,7 +26,6 @@ class JobTeamMember(Base):
         index=True,
     )
     is_owner: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    role: Mapped[str] = mapped_column(String(20), default="recruiter", nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

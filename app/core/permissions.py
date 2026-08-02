@@ -67,6 +67,7 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, set[Permission]] = {
         Permission.REPORT_EXPORT,
         Permission.INTERVIEW_PLAN_EDIT,
         Permission.JOB_TEAM_MANAGE,
+        Permission.SETTINGS_VIEW,
         Permission.CHAT,
     },
     "recruiter": {
@@ -80,6 +81,7 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, set[Permission]] = {
         Permission.REVIEW_SUBMIT,
         Permission.REVIEW_VIEW_ALL,
         Permission.REPORT_EXPORT,
+        Permission.SETTINGS_VIEW,
         Permission.CHAT,
     },
     "reviewer": {
@@ -88,6 +90,7 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, set[Permission]] = {
         Permission.APPLICATION_REJECT,
         Permission.HIRING_REQUEST_VIEW,
         Permission.REPORT_EXPORT,
+        Permission.SETTINGS_VIEW,
         Permission.CHAT,
     },
 }

@@ -60,6 +60,7 @@ class ApplicationService:
         search: str | None = None,
         reject_reason: str | None = None,
         stage: str | None = None,
+        candidate_type: str | None = None,
     ) -> dict:
         if not self.repo:
             logger.warning("No DB session")
@@ -99,6 +100,7 @@ class ApplicationService:
             search=search,
             reject_reason=reject_reason,
             stage=stage,
+            candidate_type=candidate_type,
         )
         events_map = self.repo.build_events_map(items, ai=ai) if ai else {}
         disqualified_map = self.repo.build_disqualified_by_map(items)

@@ -6,6 +6,7 @@ from app.common.clients.base_client import BaseClient, ClientError
 from app.core.config import settings
 from app.core.logger import get_logger
 from app.common.schemas.evaluation import AIEvaluationRequest, AIEvaluationResponse
+from app.common.schemas.generate import AIGenerateRequest, AIGenerateResponse
 from app.common.schemas.review_questions import (
     GenerateReviewQuestionsRequest,
     GenerateReviewQuestionsResponse,
@@ -25,6 +26,7 @@ class AIClient(BaseClient):
     ---------
     - ``POST /api/v1/evaluation/evaluate-resume`` — resume scoring
     - ``POST /api/v1/evaluation/generate-review-questions`` — post-interview rating questions
+    - ``POST /api/v1/generate`` — generic prompt + input data + JSON Schema structured output
     - ``POST /api/v1/chat/stream`` — streaming chat (async)
     """
 
@@ -67,6 +69,25 @@ class AIClient(BaseClient):
             json_data=request.model_dump(exclude_none=True),
         )
         return GenerateReviewQuestionsResponse.model_validate(response.json())
+
+    # ── generic structured generation (sync) ────────────────────
+
+    def generate(
+        self,
+        prompt: str,
+        input_data: dict,
+        response_schema: dict,
+        use_evaluation_model: bool = False,
+    ) -> AIGenerateResponse:
+        """Run a prompt with input data and get JSON matching the caller's JSON Schema."""
+        request = AIGenerateRequest(
+            prompt=prompt,
+            input_data=input_data,
+            response_schema=response_schema,
+            use_evaluation_model=use_evaluation_model,
+        )
+        response = self._post("api/v1/generate", json_data=request.model_dump())
+        return AIGenerateResponse.model_validate(response.json())
 
     # ── streaming chat (async) ───────────────────────────────────
 
@@ -114,6 +135,11 @@ class AIClient(BaseClient):
 def _try_extract_body(response: httpx.Response) -> str:
     try:
         data = response.json()
-        return data.get("error", data.get("message", str(data)))
     except Exception:
         return response.text[:200]
+    if isinstance(data, dict):
+        detail = data.get("detail")
+        if isinstance(detail, str) and detail:
+            return detail
+        return data.get("error", data.get("message", str(data)))
+    return str(data)

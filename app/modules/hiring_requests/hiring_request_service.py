@@ -116,7 +116,6 @@ class HiringRequestService:
                 local_record.id,
                 current_user.id,
                 is_owner=True,
-                role="job_owner",
             )
             logger.info(
                 "Creator added as job owner: hiring_request_id=%s user_id=%d",
