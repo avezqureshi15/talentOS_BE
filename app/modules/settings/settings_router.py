@@ -6,7 +6,12 @@ from app.db.session import get_db
 from app.core.authorization import require_permission
 from app.core.permissions import Permission
 from app.modules.auth.auth_schema import UserInfo
-from app.modules.settings.settings_schema import SettingsResponse, UpdateSettingsRequest
+from app.modules.settings.settings_schema import (
+    ApiKeysResponse,
+    SettingsResponse,
+    UpdateApiKeysRequest,
+    UpdateSettingsRequest,
+)
 from app.modules.settings.settings_service import SettingsService
 
 router = APIRouter(
@@ -24,6 +29,11 @@ def _resolve_tenant(current_user: UserInfo, tenant_id_override: int | None = Non
     if current_user.tenant_id is None:
         raise HTTPException(status_code=400, detail="Admin user has no tenant")
     return current_user.tenant_id
+
+
+def _require_superadmin(current_user: UserInfo) -> None:
+    if current_user.role != "superadmin":
+        raise HTTPException(status_code=403, detail="Superadmin access required")
 
 
 @router.get("", response_model=SettingsResponse)
@@ -46,3 +56,31 @@ def update_settings(
     tid = _resolve_tenant(current_user, body.tenant_id)
     service = SettingsService(db)
     return service.update_settings(tid, body.settings)
+
+
+# ── API keys (superadmin only) ────────────────────────────────────────────
+
+
+@router.get("/api-keys", response_model=ApiKeysResponse)
+def get_api_keys(
+    tenant_id: int | None = Query(None, description="Required for superadmin"),
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(require_permission(Permission.SETTINGS_VIEW)),
+):
+    _require_superadmin(current_user)
+    tid = _resolve_tenant(current_user, tenant_id)
+    return SettingsService(db).get_api_keys(tid)
+
+
+@router.patch("/api-keys", response_model=ApiKeysResponse)
+def update_api_keys(
+    body: UpdateApiKeysRequest,
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(require_permission(Permission.SETTINGS_EDIT)),
+):
+    _require_superadmin(current_user)
+    tid = _resolve_tenant(current_user, body.tenant_id)
+    try:
+        return SettingsService(db).update_api_keys(tid, body.keys)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))

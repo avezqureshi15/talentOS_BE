@@ -80,6 +80,10 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
+    # Data-encryption key for tenant-managed API secrets (Fernet).
+    # Falls back to JWT_SECRET when unset.
+    SECRETS_ENCRYPTION_KEY: str = ""
+
     # SMTP / Email
     SMTP_HOST: str = "smtp.gmail.com"
     SMTP_PORT: int = 587

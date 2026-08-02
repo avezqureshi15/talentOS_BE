@@ -10,6 +10,7 @@ from app.common.clients.base_client import BaseClient, ClientError
 from app.core.config import settings
 from app.core.constants import ErrorCode
 from app.core.logger import get_logger
+from app.core.secrets import get_secret
 
 logger = get_logger(__name__)
 
@@ -42,8 +43,12 @@ class MeetMindClient(BaseClient):
 
         Does not raise to callers for booking-path best-effort use — logs and returns False.
         """
-        if not settings.MEETMIND_BASE_URL or not settings.MEETMIND_API_TOKEN:
-            logger.warning("MeetMind schedule skipped | MEETMIND_BASE_URL or MEETMIND_API_TOKEN unset")
+        if not settings.MEETMIND_BASE_URL:
+            logger.warning("MeetMind schedule skipped | MEETMIND_BASE_URL unset")
+            return False
+        api_token = get_secret("MEETMIND_API_TOKEN")
+        if not api_token:
+            logger.warning("MeetMind schedule skipped | MEETMIND_API_TOKEN unset")
             return False
         if not meet_url:
             logger.warning("MeetMind schedule skipped | empty meet_url")
@@ -56,7 +61,7 @@ class MeetMindClient(BaseClient):
             "participantEmails": participant_emails,
             "external": settings.MEETMIND_EXTERNAL,
         }
-        headers = {"X-API-Key": settings.MEETMIND_API_TOKEN}
+        headers = {"X-API-Key": api_token}
         try:
             self._post("api/integrations/schedule", json_data=body, headers=headers)
             logger.info("MeetMind schedule succeeded | meet_url=%s title=%s", meet_url, title)

@@ -3,6 +3,7 @@ import uuid
 import httpx
 
 from app.core.config import settings
+from app.core.secrets import get_secret
 from app.core.service_token import create_service_token
 
 
@@ -11,8 +12,9 @@ class AiRecruitmentClient:
         self.base_url = settings.RH_SERVICE_URL
 
     def _headers(self) -> dict[str, str]:
-        if settings.RH_API_KEY:
-            return {"Authorization": f"Bearer {settings.RH_API_KEY}"}
+        rh_api_key = get_secret("RH_API_KEY")
+        if rh_api_key:
+            return {"Authorization": f"Bearer {rh_api_key}"}
         return {"Authorization": f"Bearer {create_service_token()}"}
 
     async def create_job(self, title: str, description: str, required_skills: list[str] | None = None, location: str | None = None, department: str | None = None, employment_type: str | None = None, external_job_id: str | None = None) -> dict | None:

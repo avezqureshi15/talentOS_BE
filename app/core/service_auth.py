@@ -1,8 +1,11 @@
+import hmac
+
 import jwt
 import httpx
 from fastapi import Header, HTTPException
 
 from app.core.config import settings
+from app.core.secrets import get_secret
 
 key_cache: dict[str, str] = {}
 
@@ -47,6 +50,7 @@ def verify_service_api_key(authorization: str | None = Header(None)):
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="No service token provided")
     token = authorization.split(" ")[1]
-    if token != settings.SERVICE_API_KEY:
+    expected = get_secret("SERVICE_API_KEY")
+    if not hmac.compare_digest(token, expected):
         raise HTTPException(status_code=401, detail="Invalid service API key")
     return token

@@ -4,8 +4,8 @@ import httpx
 from pypdf import PdfReader
 
 from app.common.clients.base_client import BaseClient, ClientError
-from app.core.config import settings
 from app.core.logger import get_logger
+from app.core.secrets import get_secret
 
 logger = get_logger(__name__)
 
@@ -31,8 +31,9 @@ class ResumeClient(BaseClient):
     def download_bytes(self, resume_url: str) -> bytes:
         """Download raw PDF bytes from *resume_url*."""
         headers = {}
-        if settings.SUPABASE_SERVICE_ROLE_KEY:
-            headers["Authorization"] = f"Bearer {settings.SUPABASE_SERVICE_ROLE_KEY}"
+        service_role_key = get_secret("SUPABASE_SERVICE_ROLE_KEY")
+        if service_role_key:
+            headers["Authorization"] = f"Bearer {service_role_key}"
 
         try:
             response = self.sync.get(resume_url, headers=headers)
