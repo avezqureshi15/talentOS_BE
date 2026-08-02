@@ -215,6 +215,55 @@ class AiRecruitmentClient:
         except Exception:
             return None
 
+    async def get_call_window(self, job_id: str, external_job_id: str | None = None) -> dict | None:
+        if not self.base_url:
+            return None
+        params = {"external_job_id": external_job_id} if external_job_id else None
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(
+                    f"{self.base_url}/internal/talentos/jobs/{job_id}/call-window",
+                    params=params,
+                    headers=self._headers(),
+                )
+                if resp.is_error:
+                    return None
+                return resp.json()
+        except Exception:
+            return None
+
+    async def update_call_window(
+        self,
+        job_id: str,
+        screening_call_from: str | None = None,
+        screening_call_to: str | None = None,
+        screening_timezone: str | None = None,
+        external_job_id: str | None = None,
+    ) -> dict | None:
+        if not self.base_url:
+            return None
+        payload: dict = {}
+        if screening_call_from is not None:
+            payload["screening_call_from"] = screening_call_from
+        if screening_call_to is not None:
+            payload["screening_call_to"] = screening_call_to
+        if screening_timezone is not None:
+            payload["screening_timezone"] = screening_timezone
+        params = {"external_job_id": external_job_id} if external_job_id else None
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.put(
+                    f"{self.base_url}/internal/talentos/jobs/{job_id}/call-window",
+                    params=params,
+                    json=payload,
+                    headers=self._headers(),
+                )
+                if resp.is_error:
+                    return None
+                return resp.json()
+        except Exception:
+            return None
+
     async def update_job_questions(
         self,
         job_id: str,

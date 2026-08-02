@@ -70,6 +70,7 @@ class Settings(BaseSettings):
 
     # Auth
     ALLOWED_EMAIL_DOMAIN: str = ""
+    ALLOW_SIGNUP: bool = False
 
     # CORS
     CORS_ALLOW_ORIGINS: str = "http://localhost:5173,http://localhost:4173,http://localhost:5175,http://localhost:5174"

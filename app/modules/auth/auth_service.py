@@ -107,6 +107,12 @@ class AuthService:
     # ── Signup (create tenant + admin user) ────────────────────────────────
 
     def signup(self, email: str, password: str, full_name: str, org_name: str) -> tuple[object, str, str, int]:
+        if not settings.ALLOW_SIGNUP:
+            raise AuthError(
+                "Registration is invite-only. Please contact your administrator to get invited.",
+                status_code=403,
+            )
+
         domain = email.split("@")[1].lower() if "@" in email else ""
         allowed = settings.ALLOWED_EMAIL_DOMAIN.lower().strip()
         if allowed and allowed != "all" and domain != allowed:
