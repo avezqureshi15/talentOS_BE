@@ -33,6 +33,7 @@ from app.modules.hiring_requests.hiring_request_internal_router import router as
 from app.modules.hiring_requests.hiring_request_export_router import router as hiring_requests_export_router
 from app.modules.hiring_requests.hiring_request_import_router import router as hiring_requests_import_router
 from app.modules.hiring_requests.ai_integration_router import router as ai_integration_router
+from app.modules.talentos_integration.talentos_webhook_router import router as talentos_webhook_router
 from app.modules.ai.ai_generate_router import router as ai_generate_router
 from app.modules.interview_designs.interview_design_router import router as interview_designs_router
 from app.modules.call_windows.call_window_router import router as call_windows_router
@@ -156,6 +157,7 @@ app.include_router(ai_generate_router)
 app.include_router(interview_designs_router)
 app.include_router(call_windows_router)
 app.include_router(internal_router)
+app.include_router(talentos_webhook_router)
 
 
 @app.get("/health", tags=["health"])

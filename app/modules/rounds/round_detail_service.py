@@ -88,7 +88,7 @@ class RoundDetailService:
             interview_type=round_obj.name,
             occurred_on=self._format_datetime(round_obj.created_at),
             slot=self._format_slot_time(slot),
-            status=self._resolve_status(slot, bool(reviews)),
+            status=self._resolve_status(slot, reviews),
             candidate=candidate.candidate_name if candidate else None,
             role=jd.title if jd else None,
             jd_label=jd.description if jd else None,
@@ -122,7 +122,35 @@ class RoundDetailService:
         return f"{slot.start_at.strftime(fmt)} – {slot.end_at.strftime(fmt)}".replace(" 0", " ")
 
     @staticmethod
-    def _resolve_status(slot: Slot | None, has_reviews: bool) -> str:
+    def _resolve_status(slot: Slot | None, reviews) -> str:
         if slot:
             return slot.status.capitalize()
-        return "Completed" if has_reviews else "Pending"
+
+        # AI screening/interview rounds: derive status from the reviews JSONB
+        # (no rounds.status column exists; the webhook/pull persist writes
+        # status / call_status into the ai_* review payloads).
+        if reviews:
+            for r in reviews:
+                rv: dict = r.reviews or {}
+                entity = (r.entity_type or "").lower()
+                if entity == "ai_screening":
+                    call_status = (rv.get("call_status") or rv.get("status") or "").lower()
+                    if call_status in ("queued", "pending", "initiated", "in_progress"):
+                        return "In Progress"
+                    if call_status == "completed":
+                        return "Completed"
+                    if call_status == "failed":
+                        return "Failed"
+                elif entity == "ai_interview":
+                    status = (rv.get("status") or "").lower()
+                    if status in ("pending", "in_progress"):
+                        return "In Progress"
+                    if status in ("completed", "assessed"):
+                        return "Completed"
+                    if status == "assessment_failed":
+                        return "Failed"
+                    if status == "expired":
+                        return "Expired"
+            return "Completed"
+
+        return "Pending"

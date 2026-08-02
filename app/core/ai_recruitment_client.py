@@ -117,6 +117,22 @@ class AiRecruitmentClient:
         except Exception:
             return None
 
+    async def get_interview_recording_url(self, job_id: str, candidate_id: str, interview_id: str) -> str | None:
+        if not self.base_url:
+            return None
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(
+                    f"{self.base_url}/internal/talentos/jobs/{job_id}/candidates/{candidate_id}/interviews/{interview_id}/recording-url",
+                    headers=self._headers(),
+                )
+                if resp.is_error:
+                    return None
+                data = resp.json()
+                return data.get("recording_url")
+        except Exception:
+            return None
+
     async def create_candidate_with_screening(
         self,
         external_job_id: str,
