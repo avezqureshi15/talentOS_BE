@@ -187,12 +187,26 @@ def update_user(
 
     if body.name is not None:
         user.name = body.name
+    role_changed = body.role is not None and body.role != user.role
     if body.role is not None:
         user.role = body.role
     if body.is_active is not None:
         user.is_active = body.is_active
     if body.password is not None:
         user.password_hash = hash_password(body.password)
+
+    if role_changed:
+        from app.modules.notifications.notification_model import NotificationType
+        from app.modules.notifications.notification_service import NotificationService
+
+        NotificationService(db).notify(
+            employee_id=user.id,
+            notification_type=NotificationType.ROLE_ASSIGNED.value,
+            title="Role updated",
+            body=f"Your role was updated to {user.role}.",
+            action_url="/admin/users",
+            action_label="View profile",
+        )
 
     db.commit()
     db.refresh(user)

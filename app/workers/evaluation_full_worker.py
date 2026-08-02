@@ -36,6 +36,8 @@ from app.modules.applications.application_repository import ApplicationRepositor
 from app.modules.evaluations.evaluation_schema import AsyncEvaluationMessage
 from app.modules.events.event_schema import EventCreate
 from app.modules.events.event_service import EventService
+from app.modules.notifications.notification_model import NotificationType
+from app.modules.notifications.notification_service import NotificationService
 from app.modules.reviews.review_schema import ReviewCreate
 from app.modules.reviews.review_service import ReviewService
 from app.modules.rounds.round_model import Round
@@ -43,6 +45,22 @@ from app.modules.rounds.round_schema import RoundCreate
 from app.modules.rounds.round_service import RoundService
 
 logger = get_logger(__name__)
+
+
+def _notify_evaluation_failed(db, job_id: str, candidate_id: int, reason: str) -> None:
+    repo = ApplicationRepository(db)
+    jd_uuid = repo.resolve_hiring_request_id(job_id)
+    if jd_uuid:
+        NotificationService(db).notify_job_team(
+            jd_uuid,
+            notification_type=NotificationType.EVALUATION_FAILED.value,
+            title="Resume evaluation failed",
+            body=f"A candidate's resume could not be evaluated ({reason}).",
+            action_url=f"/hiring-requests/{jd_uuid}/candidates/{candidate_id}",
+            action_label="View candidate",
+            candidate_id=candidate_id,
+        )
+
 
 # ── Error classification ─────────────────────────────────────────────────
 
@@ -127,6 +145,7 @@ def _evaluate_full(message: AsyncEvaluationMessage) -> None:
                 remark="No resume_url provided",
                 event_metadata={"error_reason": "No resume_url provided"},
             ))
+            _notify_evaluation_failed(db, job_id, candidate.id, "No resume URL provided")
             repo.mark_result(candidate, EvaluationStatus.INVALID, error_reason="No resume_url provided")
             return
 
@@ -142,6 +161,7 @@ def _evaluate_full(message: AsyncEvaluationMessage) -> None:
                 remark="Resume is not text-extractable (image/scanned PDF)",
                 event_metadata={"error_reason": "Resume is not text-extractable"},
             ))
+            _notify_evaluation_failed(db, job_id, candidate.id, "Resume is not text-extractable")
             repo.mark_result(candidate, EvaluationStatus.INVALID, error_reason="Resume is not text-extractable (image/scanned PDF)")
             return
 
@@ -201,6 +221,18 @@ def _evaluate_full(message: AsyncEvaluationMessage) -> None:
             candidate_id=candidate.id,
             event_metadata={"fit_score": ai_result.overall_score_percentage, "threshold_used": threshold},
         ))
+
+        jd_uuid = repo.resolve_hiring_request_id(job_id)
+        if jd_uuid:
+            NotificationService(db).notify_job_team(
+                jd_uuid,
+                notification_type=NotificationType.EVALUATION_COMPLETED.value,
+                title="Resume evaluation completed",
+                body=f"{candidate.candidate_name} was {'shortlisted' if verdict == 'shortlisted' else 'not shortlisted'} by AI (score {ai_result.overall_score_percentage:.0f}%).",
+                action_url=f"/hiring-requests/{jd_uuid}/candidates/{candidate.id}",
+                action_label="View candidate",
+                candidate_id=candidate.id,
+            )
 
         _create_initial_review(db, ai_result, candidate, job_id, verdict)
 

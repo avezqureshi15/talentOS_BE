@@ -70,6 +70,22 @@ class ApplicationStateService:
                 candidate_id=candidate_id,
                 event_metadata={"final_verdict": t.set_final_verdict},
             ))
+            if candidate.external_job_id:
+                jd_uuid = self.repo.resolve_hiring_request_id(candidate.external_job_id)
+                if jd_uuid:
+                    from app.modules.notifications.notification_model import NotificationType
+                    from app.modules.notifications.notification_service import NotificationService
+
+                    NotificationService(self.db).notify_job_team(
+                        jd_uuid,
+                        notification_type=NotificationType.FINAL_VERDICT.value,
+                        title=f"Candidate {t.set_final_verdict.title()}",
+                        body=f"{candidate.candidate_name or f'Candidate #{candidate_id}'} was {t.set_final_verdict.lower()}.",
+                        action_url=f"/hiring-requests/{jd_uuid}/candidates/{candidate_id}",
+                        action_label="View candidate",
+                        candidate_id=candidate_id,
+                        dedupe_key=f"FINAL_VERDICT-{candidate_id}",
+                    )
             self._cancel_active_interviews(candidate_id)
         return EvaluationResponse.model_validate(candidate)
 

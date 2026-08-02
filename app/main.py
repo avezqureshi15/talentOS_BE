@@ -17,7 +17,7 @@ from app.cron.hourly_jobs import setup_form_jobs
 from app.middleware import RequestLoggingMiddleware, TenantContextMiddleware
 from app.scheduler import init_scheduler, shutdown_scheduler
 from app.modules.applications import router as applications_router
-from app.modules.alerts import router as alerts_router
+from app.modules.notifications import router as notifications_router
 from app.modules.auth.auth_router import router as auth_router
 from app.modules.chat.chat_router import router as chat_router
 from app.modules.designation import router as designation_router
@@ -133,7 +133,7 @@ app.include_router(rounds_router)
 app.include_router(slots_router)
 app.include_router(ask_router)
 app.include_router(form_router)
-app.include_router(alerts_router)
+app.include_router(notifications_router)
 app.include_router(employees_router)
 app.include_router(users_router)
 app.include_router(evaluation_webhook_router)

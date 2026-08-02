@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.common.utils.list_utils import unique_preserve_order
 from app.core.logger import get_logger
-from app.modules.alerts.alert_model import AlertType
+from app.modules.notifications.notification_model import NotificationType
 from app.modules.events.event_schema import EventCreate
 from app.modules.events.event_service import EventService
 from app.modules.forms.form_mail import (
@@ -43,12 +43,12 @@ _last_notified: dict[tuple[int, str, str | None], datetime] = {}
 
 class FormService:
     def __init__(self, db: Session):
-        from app.modules.alerts.alert_service import AlertService
+        from app.modules.notifications.notification_service import NotificationService
 
         self.db = db
         self.repository = FormRepository(db)
         self.user_repository = UserRepository(db)
-        self.alert_service = AlertService(db)
+        self.notification_service = NotificationService(db)
 
     def _resolve_ask_action(self, emp_id: str, form_type: str) -> tuple[Form, str]:
         user = self.user_repository.get_by_emp_id(emp_id)
@@ -200,8 +200,8 @@ class FormService:
                 try:
                     self.repository.mark_expired(form)
                     self.db.commit()
-                    self.alert_service.mark_emp_alerts_read(
-                        form.employee.id, alert_type=form.type
+                    self.notification_service.mark_all_read(
+                        form.employee.id, notification_type=form.type
                     )
                 except sa_exc.SQLAlchemyError:
                     self.db.rollback()
@@ -270,6 +270,54 @@ class FormService:
 
         _last_notified[key] = now
 
+        alert_type = self._get_alert_type(form.type)
+        action_url = (
+            f"/rate-candidate/{form.id}"
+            if form.type == FormType.REVIEW.value
+            else f"/book-slot/{form.id}"
+        )
+
+        candidate_name = None
+        job_title = None
+        round_name = None
+        hr = None
+        if form.candidate_id or form.round_id:
+            from app.modules.evaluations.evaluation_model import Candidate
+            from app.modules.hiring_requests.hiring_request_model import HiringRequest
+            from app.modules.rounds.round_model import Round
+
+            if form.candidate_id:
+                candidate = self.db.query(Candidate).filter(Candidate.id == form.candidate_id).first()
+                candidate_name = candidate.candidate_name if candidate else None
+            if form.round_id:
+                round_obj = self.db.query(Round).filter(Round.id == form.round_id).first()
+                if round_obj:
+                    round_name = round_obj.name
+                    if round_obj.jd_id:
+                        hr = self.db.query(HiringRequest).filter(HiringRequest.id == round_obj.jd_id).first()
+                        job_title = hr.title if hr else None
+
+        if form.type == FormType.REVIEW.value:
+            context_title = f"Review required for {candidate_name}" if candidate_name else "Review pending"
+            context_parts = [part for part in (job_title, f"Round: {round_name}" if round_name else None) if part]
+            context_body = " · ".join(context_parts) or "A form is waiting for your action."
+        else:
+            context_title = "Slot availability request"
+            context_body = f"Your availability is needed to schedule interviews for {job_title}." if job_title else "A form is waiting for your action."
+
+        self.notification_service.notify(
+            employee_id=user_id,
+            notification_type=alert_type,
+            title=context_title,
+            body=context_body,
+            action_url=action_url,
+            action_label="Book slots" if alert_type == NotificationType.SLOTS.value else "Submit review",
+            form_id=form.id,
+            candidate_id=form.candidate_id,
+            job_id=hr.id if hr else None,
+            dedupe_key=f"{form.type}-{form.id}",
+        )
+
         if form.type == FormType.REVIEW.value and form.candidate_id:
             EventService(self.db).create_event(EventCreate(
                 entity_type="CANDIDATE",
@@ -301,7 +349,7 @@ class FormService:
             raise
         user = self.user_repository.get_by_emp_id(emp_id)
         if user:
-            self.alert_service.mark_emp_alerts_read(employee_id=user.id, alert_type=AlertType.SLOTS.value)
+            self.notification_service.mark_all_read(employee_id=user.id, notification_type=NotificationType.SLOTS.value)
 
     def submit_form(self, form_id: UUID) -> FormSubmitResponse:
         form = self.repository.get_by_id(form_id)
@@ -315,9 +363,9 @@ class FormService:
         except sa_exc.SQLAlchemyError:
             self.db.rollback()
             raise
-        alert_type = AlertType.REVIEW.value if form.type == FormType.REVIEW.value else AlertType.SLOTS.value
-        self.alert_service.mark_emp_alerts_read(
-            employee_id=form.employee.id, alert_type=alert_type,
+        alert_type = NotificationType.REVIEW.value if form.type == FormType.REVIEW.value else NotificationType.SLOTS.value
+        self.notification_service.mark_all_read(
+            employee_id=form.employee.id, notification_type=alert_type,
         )
         if form.type == FormType.REVIEW.value and form.candidate_id:
             EventService(self.db).create_event(EventCreate(
@@ -336,7 +384,7 @@ class FormService:
         return FormSubmitResponse(message="Form submitted successfully")
 
     def _get_alert_type(self, form_type: str) -> str:
-        return AlertType.REVIEW.value if form_type == FormType.REVIEW.value else AlertType.SLOTS.value
+        return NotificationType.REVIEW.value if form_type == FormType.REVIEW.value else NotificationType.SLOTS.value
 
     def _send_form_mail(self, form: Form, is_reminder: bool = False) -> None:
         if form.type == FormType.REVIEW.value:
@@ -375,9 +423,40 @@ class FormService:
         created = 0
         for form in forms:
             alert_type = self._get_alert_type(form.type)
-            if self.alert_service.create_alert_if_missing(
-                employee_id=form.employee.id, alert_type=alert_type, form_id=form.id,
-            ):
+            from app.modules.rounds.round_model import Round
+
+            round_obj = (
+                self.db.query(Round).filter(Round.id == form.round_id).first()
+                if form.round_id
+                else None
+            )
+            jd_id = round_obj.jd_id if round_obj else None
+            action_url = (
+                f"/rate-candidate/{form.id}"
+                if alert_type == NotificationType.REVIEW.value
+                else f"/book-slot/{form.id}"
+            )
+            title = (
+                "Review pending"
+                if alert_type == NotificationType.REVIEW.value
+                else "Slot availability request"
+            )
+            payload = dict(
+                notification_type=alert_type,
+                title=title,
+                body="A form is waiting for your action.",
+                action_url=action_url,
+                action_label="Submit review" if alert_type == NotificationType.REVIEW.value else "Book slots",
+                form_id=form.id,
+                job_id=jd_id,
+                dedupe_key=f"{form.type}-{form.id}",
+            )
+            created_notification = self.notification_service.notify(
+                employee_id=form.employee.id, **payload,
+            )
+            if jd_id:
+                self.notification_service.notify_job_team(jd_id, **payload)
+            if created_notification:
                 created += 1
                 if form.type == FormType.REVIEW.value and form.candidate_id:
                     EventService(self.db).create_event(EventCreate(
@@ -402,8 +481,8 @@ class FormService:
             try:
                 self.repository.mark_expired(form)
                 alert_type = self._get_alert_type(form.type)
-                self.alert_service.mark_emp_alerts_read(
-                    form.employee.id, alert_type=alert_type,
+                self.notification_service.mark_all_read(
+                    form.employee.id, notification_type=alert_type,
                 )
                 updated += 1
             except sa_exc.SQLAlchemyError:

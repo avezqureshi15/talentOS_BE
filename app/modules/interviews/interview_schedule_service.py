@@ -103,6 +103,20 @@ class InterviewScheduleService:
                         "interviewers": attendees,
                     },
                 ))
+            if round_obj.jd_id:
+                from app.modules.notifications.notification_model import NotificationType
+                from app.modules.notifications.notification_service import NotificationService
+
+                NotificationService(self.db).notify_job_team(
+                    round_obj.jd_id,
+                    notification_type=NotificationType.INTERVIEW_SCHEDULED.value,
+                    title="Interview scheduled",
+                    body=f"An interview for round \"{round_obj.name or round_id}\" is scheduled.",
+                    action_url=result.meet_link,
+                    action_label="Join meeting",
+                    candidate_id=round_obj.candidate_id,
+                    dedupe_key=f"INTERVIEW_SCHEDULED-{round_id}",
+                )
         self.repository.update_slot_status(slot_id, SlotStatus.BOOKED.value)
         if commit:
             self.db.commit()

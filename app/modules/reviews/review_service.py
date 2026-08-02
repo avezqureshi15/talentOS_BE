@@ -132,6 +132,20 @@ class ReviewService:
                     candidate_id=round_obj.candidate_id,
                     event_metadata={"round_id": str(round_id), "verdict": data.verdict},
                 ))
+                if round_obj.jd_id:
+                    from app.modules.notifications.notification_model import NotificationType
+                    from app.modules.notifications.notification_service import NotificationService
+
+                    NotificationService(self.db).notify_job_team(
+                        round_obj.jd_id,
+                        notification_type=NotificationType.REVIEW_SUBMITTED.value,
+                        title="Interviewer review submitted",
+                        body=f"A review was submitted for round \"{round_obj.name or round_id}\" with verdict \"{data.verdict}\".",
+                        action_url=f"/hiring-requests/{round_obj.jd_id}/candidates/{round_obj.candidate_id}",
+                        action_label="View candidate",
+                        candidate_id=round_obj.candidate_id,
+                        dedupe_key=f"REVIEW_SUBMITTED-{round_id}",
+                    )
                 self.db.query(Candidate).filter(Candidate.id == round_obj.candidate_id).update(
                     {"status": EvaluationStatus.UNDER_EVALUATION.value}
                 )

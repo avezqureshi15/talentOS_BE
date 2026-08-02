@@ -89,11 +89,32 @@ class JobTeamService:
             self._assert_owner_assignment_allowed(current_user)
 
         self.repo.add_member(hiring_request_id, body.user_id, is_owner=body.is_owner)
+        self._notify_job_assignment(
+            body.user_id, hiring_request_id, hr.title, "job_owner" if body.is_owner else "recruiter"
+        )
         logger.info(
             "Job team member added: hiring_request_id=%s user_id=%d is_owner=%s",
             hiring_request_id, body.user_id, body.is_owner,
         )
         return self.list_members(hiring_request_id)
+
+    def _notify_job_assignment(
+        self, user_id: int, hiring_request_id: uuid.UUID, job_title: str, role: str,
+    ) -> None:
+        from app.modules.notifications.notification_model import NotificationType
+        from app.modules.notifications.notification_service import NotificationService
+
+        NotificationService(self.db).notify(
+            employee_id=user_id,
+            notification_type=NotificationType.JOB_ASSIGNED.value,
+            title=f"Assigned to {job_title or 'a job'}",
+            body=f"You were added to the team as {role}.",
+            action_url=f"/hiring-requests/{hiring_request_id}",
+            action_label="View job",
+            job_id=hiring_request_id,
+            dedupe_key=f"JOB_ASSIGNED-{hiring_request_id}",
+        )
+        self.db.commit()
 
     def update_member(
         self,
@@ -115,6 +136,12 @@ class JobTeamService:
             user_id,
             is_owner=body.is_owner,
         )
+        if body.role is not None or body.is_owner is not None:
+            hr = self._get_hiring_request_or_raise(hiring_request_id)
+            final_role = body.role
+            if body.is_owner is True or body.role == "job_owner":
+                final_role = "job_owner"
+            self._notify_job_assignment(user_id, hiring_request_id, hr.title, final_role or member.role)
         logger.info(
             "Job team member updated: hiring_request_id=%s user_id=%d is_owner=%s",
             hiring_request_id, user_id, body.is_owner,
