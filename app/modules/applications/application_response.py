@@ -60,6 +60,7 @@ def build_candidate_response(
         "how_did_you_hear": candidate.how_did_you_hear,
         "linkedin_url": candidate.linkedin_url,
         "willing_to_relocate": candidate.willing_to_relocate if candidate.willing_to_relocate is not None else False,
+        "archived": bool(candidate.archived) if candidate.archived is not None else False,
         "candidate_type": candidate.candidate_type,
         "status": candidate.status,
         "stage": candidate.stage,

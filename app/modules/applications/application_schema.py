@@ -69,6 +69,7 @@ class EvaluatedCandidate(BaseModel):
     how_did_you_hear: str | None = None
     linkedin_url: str | None = None
     willing_to_relocate: bool = False
+    archived: bool = False
     status: str | None = None
     stage: str | None = None
     fit_score: int | None = None
@@ -103,6 +104,10 @@ class RoundStatusUpdate(BaseModel):
     status: str
     current_round_id: str
     scheduled_at: str | None = None
+
+
+class ArchiveUpdate(BaseModel):
+    archived: bool = True
 
 
 class PaginatedEvaluatedCandidatesResponse(BaseModel):

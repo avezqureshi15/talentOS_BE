@@ -115,3 +115,14 @@ def apply_transition(db: Session, candidate_id: int, final_verdict: str | None =
     db.refresh(candidate)
     logger.info("Applied transition: candidate_id=%s | final_verdict=%s | status=%s", candidate_id, final_verdict, status)
     return candidate
+
+
+def set_archived(db: Session, candidate_id: int, archived: bool = False) -> Candidate | None:
+    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not candidate:
+        return None
+    candidate.archived = archived
+    db.commit()
+    db.refresh(candidate)
+    logger.info("Set archived: candidate_id=%s | archived=%s", candidate_id, archived)
+    return candidate

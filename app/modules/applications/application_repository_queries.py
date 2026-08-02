@@ -37,11 +37,14 @@ def _apply_candidate_filters(
     reject_reason: str | None = None,
     stage: str | None = None,
     candidate_type: str | None = None,
+    archived: bool | None = None,
 ):
     query = db.query(Candidate)
 
     if job_id:
         query = query.filter(Candidate.external_job_id == job_id)
+    if archived is not None:
+        query = query.filter(Candidate.archived == archived)
     if search:
         like = f"%{search}%"
         query = query.filter(
@@ -125,6 +128,7 @@ def get_candidates_by_job_paginated(
     reject_reason: str | None = None,
     stage: str | None = None,
     candidate_type: str | None = None,
+    archived: bool | None = None,
 ) -> tuple[list[Candidate], int]:
     query = _apply_candidate_filters(
         db,
@@ -141,6 +145,7 @@ def get_candidates_by_job_paginated(
         reject_reason=reject_reason,
         stage=stage,
         candidate_type=candidate_type,
+        archived=archived,
     )
 
     total = query.count()
@@ -184,6 +189,7 @@ def count_candidates_by_stage(
         date_to=date_to,
         exclude_finalized=exclude_finalized,
         search=search,
+        archived=False,
     )
 
     rows = (
@@ -222,6 +228,7 @@ def count_candidates_by_stage(
             search=search,
             reject_reason=reject_reason,
             stage="resume-shortlisting",
+            archived=False,
         )
         counts["resume-shortlisting"] = filtered_query.count()
 
@@ -295,12 +302,15 @@ def get_finalized_candidates(
     job_id: str | None = None,
     limit: int = 20,
     offset: int = 0,
+    archived: bool = False,
 ) -> tuple[list[Candidate], int]:
     query = db.query(Candidate).filter(Candidate.final_verdict.isnot(None))
     if verdict:
         query = query.filter(Candidate.final_verdict == verdict)
     if job_id:
         query = query.filter(Candidate.external_job_id == job_id)
+    if archived is not None:
+        query = query.filter(Candidate.archived == archived)
     total = query.count()
     items = query.order_by(Candidate.evaluated_at.desc().nullslast()).offset(offset).limit(limit).all()
     return items, total

@@ -61,6 +61,7 @@ class ApplicationService:
         reject_reason: str | None = None,
         stage: str | None = None,
         candidate_type: str | None = None,
+        archived: bool = False,
     ) -> dict:
         if not self.repo:
             logger.warning("No DB session")
@@ -101,6 +102,7 @@ class ApplicationService:
             reject_reason=reject_reason,
             stage=stage,
             candidate_type=candidate_type,
+            archived=archived,
         )
         events_map = self.repo.build_events_map(items, ai=ai) if ai else {}
         disqualified_map = self.repo.build_disqualified_by_map(items)
@@ -143,6 +145,7 @@ class ApplicationService:
         job_id: str | None = None,
         limit: int = 20,
         offset: int = 0,
+        archived: bool = False,
     ) -> dict:
         if not self.repo:
             return {"data": [], "total": 0, "limit": limit, "offset": offset}
@@ -152,6 +155,7 @@ class ApplicationService:
             job_id=resolved_job_id,
             limit=limit,
             offset=offset,
+            archived=archived,
         )
         self.repo.attach_interview_data(items)
         return {
@@ -199,6 +203,15 @@ class ApplicationService:
         self.db.commit()
 
         return {"success": True}
+
+    def set_candidate_archived(self, candidate_id: int, archived: bool) -> dict:
+        from app.modules.evaluations.evaluation_model import Candidate
+        candidate = self.db.query(Candidate).filter(Candidate.id == candidate_id).first()
+        if not candidate:
+            raise HTTPException(status_code=404, detail="Candidate not found")
+        candidate.archived = archived
+        self.db.commit()
+        return {"success": True, "archived": bool(candidate.archived)}
 
     def update_candidate_status(self, candidate_id: int, new_status: str) -> EvaluationResponse:
         if not self.state_svc: raise ValueError("State service not available")

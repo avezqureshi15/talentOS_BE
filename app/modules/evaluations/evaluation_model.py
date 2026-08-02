@@ -33,6 +33,7 @@ class Candidate(Base):
     linkedin_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     scheduled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     willing_to_relocate: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false", index=True)
 
     candidate_type: Mapped[str] = mapped_column(
         String(20), nullable=False, default="REGULAR"

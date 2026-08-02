@@ -53,10 +53,12 @@ class ApplicationRepository:
             .first()
         )
 
-    def get_candidates_by_job(self, job_id: str, status: str | None = None) -> list[Candidate]:
+    def get_candidates_by_job(self, job_id: str, status: str | None = None, archived: bool = False) -> list[Candidate]:
         query = self.db.query(Candidate).filter(Candidate.external_job_id == job_id)
         if status:
             query = query.filter(Candidate.status == status)
+        if archived is not None:
+            query = query.filter(Candidate.archived == archived)
         return query.order_by(Candidate.fit_score.desc().nullslast()).all()
 
     def get_candidates_by_job_paginated(self, **kwargs) -> tuple[list[Candidate], int]:
@@ -193,3 +195,6 @@ class ApplicationRepository:
 
     def apply_transition(self, candidate_id: int, final_verdict: str | None = None, status: str | None = None) -> Candidate | None:
         return _mut.apply_transition(self.db, candidate_id, final_verdict, status)
+
+    def set_archived(self, candidate_id: int, archived: bool = False) -> Candidate | None:
+        return _mut.set_archived(self.db, candidate_id, archived)

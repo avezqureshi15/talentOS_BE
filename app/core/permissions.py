@@ -116,7 +116,7 @@ PERMISSION_ENDPOINTS: dict[str, str] = {
     Permission.REVIEW_VIEW_ALL.value: "GET /api/v1/reviews/round/{round_id}",
     Permission.CHAT.value: "GET /api/v1/chat/chats",
     Permission.REPORT_EXPORT.value: "GET /api/v1/hiring-requests/{id}/export",
-    Permission.APPLICATION_WORKFLOW.value: "PATCH /api/v1/applications/{candidate_id}/final-verdict, PATCH /api/v1/applications/{candidate_id}/round-status, POST /api/v1/applications/candidates/{candidate_id}/move-to-next-round, POST /api/v1/rounds/{round_id}/shortlist, POST /api/v1/rounds/{round_id}/reject",
+    Permission.APPLICATION_WORKFLOW.value: "PATCH /api/v1/applications/{candidate_id}/final-verdict, PATCH /api/v1/applications/{candidate_id}/round-status, PATCH /api/v1/applications/{candidate_id}/archive, POST /api/v1/applications/candidates/{candidate_id}/move-to-next-round, POST /api/v1/rounds/{round_id}/shortlist, POST /api/v1/rounds/{round_id}/reject",
     Permission.INTERVIEW_PLAN_EDIT.value: "PUT /api/v1/hiring-requests/{id}/ai/questions",
     Permission.JOB_TEAM_MANAGE.value: "POST /api/v1/hiring-requests/{id}/team, PATCH /api/v1/hiring-requests/{id}/team/{user_id}, DELETE /api/v1/hiring-requests/{id}/team/{user_id}",
 }

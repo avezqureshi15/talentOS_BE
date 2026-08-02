@@ -7,6 +7,7 @@ from app.core.authorization import require_permission
 from app.core.permissions import Permission
 from app.modules.applications.application_schema import (
     ApplicationCreate,
+    ArchiveUpdate,
     EvaluatedCandidate,
     FinalVerdictUpdate,
     PaginatedEvaluatedCandidatesResponse,
@@ -22,6 +23,7 @@ router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/applications", tags=["appli
 def get_finalized_candidates(
     job_id: str | None = Query(default=None, description="Filter by job ID"),
     candidate_status: str | None = Query(default=None, description="Filter by final verdict (selected, rejected)"),
+    archived: bool = Query(default=False, description="Filter by archived status (default excludes archived)"),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
@@ -32,6 +34,7 @@ def get_finalized_candidates(
         job_id=job_id,
         limit=limit,
         offset=offset,
+        archived=archived,
     )
 
 
@@ -53,6 +56,7 @@ def get_all_applications(
     reject_reason: str | None = Query(default=None, description="Comma-separated rejection reasons (yoe,location,budget,notice_period)"),
     stage: str | None = Query(default=None, description="Filter by pipeline stage (resume-shortlisting, screening, interview, waiting-evaluation, evaluated)"),
     candidate_type: str | None = Query(default=None, description="Filter by candidate type (REGULAR, REFERRAL, ...)"),
+    archived: bool = Query(default=False, description="Filter by archived status (default excludes archived)"),
     db: Session = Depends(get_db),
 ):
     service = ApplicationService(db)
@@ -73,6 +77,7 @@ def get_all_applications(
         reject_reason=reject_reason,
         stage=stage,
         candidate_type=candidate_type,
+        archived=archived,
     )
 
 
@@ -107,6 +112,16 @@ def update_candidate_round_status(
 ):
     service = ApplicationService(db)
     return service.set_candidate_round_status(candidate_id, data)
+
+
+@router.patch("/{candidate_id}/archive", dependencies=[Depends(require_permission(Permission.APPLICATION_WORKFLOW))])
+def update_candidate_archive(
+    candidate_id: int,
+    data: ArchiveUpdate,
+    db: Session = Depends(get_db),
+):
+    service = ApplicationService(db)
+    return service.set_candidate_archived(candidate_id, data.archived)
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
