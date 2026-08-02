@@ -19,16 +19,16 @@ from app.modules.reviews.review_schema import ReviewUpdateByRound
 from app.modules.reviews.review_service import ReviewService
 from app.modules.evaluations.evaluation_model import Candidate
 
-router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/rounds", tags=["rounds"], dependencies=[Depends(require_permission(Permission.APPLICATION_VIEW))])
+router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/rounds", tags=["rounds"])
 
 
-@router.post("", response_model=RoundResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=RoundResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(require_permission(Permission.APPLICATION_VIEW))])
 def create_round(data: RoundCreate, db: Session = Depends(get_db)):
     service = RoundService(db)
     return service.create_round(data)
 
 
-@router.get("", response_model=PaginatedRoundResponse)
+@router.get("", response_model=PaginatedRoundResponse, dependencies=[Depends(require_permission(Permission.APPLICATION_VIEW))])
 def list_rounds(
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
@@ -49,7 +49,7 @@ def get_round_by_id(round_id: UUID, db: Session = Depends(get_db)):
     return result
 
 
-@router.get("/candidate/{candidate_id}", response_model=list[RoundResponse])
+@router.get("/candidate/{candidate_id}", response_model=list[RoundResponse], dependencies=[Depends(require_permission(Permission.APPLICATION_VIEW))])
 def get_rounds_by_candidate(candidate_id: int, db: Session = Depends(get_db)):
     service = RoundService(db)
     return service.get_rounds_by_candidate(candidate_id)
@@ -64,7 +64,7 @@ def _guard_candidate_finalized(candidate_id: int, db: Session) -> None:
         )
 
 
-@router.post("/{round_id}/shortlist")
+@router.post("/{round_id}/shortlist", dependencies=[Depends(require_permission(Permission.APPLICATION_VIEW))])
 def shortlist_round(round_id: UUID, data: RoundVerdictRequest, db: Session = Depends(get_db)):
     from app.modules.rounds.round_model import Round as _Round
     round_obj = db.query(_Round).filter(_Round.id == round_id).first()
@@ -104,6 +104,6 @@ def shortlist_round(round_id: UUID, data: RoundVerdictRequest, db: Session = Dep
     )
 
 
-@router.post("/{round_id}/reject")
+@router.post("/{round_id}/reject", dependencies=[Depends(require_permission(Permission.APPLICATION_VIEW))])
 def reject_round(round_id: UUID, data: RoundVerdictRequest, db: Session = Depends(get_db)):
     return shortlist_round(round_id, RoundVerdictRequest(verdict="rejected", remark=data.remark), db)

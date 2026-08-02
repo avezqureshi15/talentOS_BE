@@ -14,10 +14,10 @@ from app.modules.slots.slot_schema import (
 )
 from app.modules.slots.slot_service import SlotService
 
-router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/slots", tags=["slots"], dependencies=[Depends(require_permission(Permission.SLOT_VIEW_ALL))])
+router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/slots", tags=["slots"])
 
 
-@router.get("/by-employee/{employee_id}", response_model=list[SlotListItemResponse])
+@router.get("/by-employee/{employee_id}", response_model=list[SlotListItemResponse], dependencies=[Depends(require_permission(Permission.SLOT_VIEW_ALL))])
 def get_slots_for_employee(
     employee_id: int,
     db: Session = Depends(get_db),
@@ -34,7 +34,7 @@ def create_slots(data: SlotsCreateRequest, db: Session = Depends(get_db)):
     return result
 
 
-@router.get("/employee", response_model=BatchEmployeeSlotsResponse)
+@router.get("/employee", response_model=BatchEmployeeSlotsResponse, dependencies=[Depends(require_permission(Permission.SLOT_VIEW_ALL))])
 def get_slots_for_employees(
     emp_ids: list[str] = Query(..., min_length=1),
     db: Session = Depends(get_db),
