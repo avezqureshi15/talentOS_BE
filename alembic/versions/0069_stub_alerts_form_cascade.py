@@ -15,7 +15,7 @@ therefore needs nothing from this migration.
 
 from typing import ClassVar
 
-revision: str = "0069"
+revision: str = "0069b"
 down_revision: str | None = "0068"
 branch_labels: ClassVar[list[str] | None] = None
 depends_on: ClassVar[list[str] | None] = None

@@ -1,7 +1,7 @@
 """add archived to candidates
 
 Revision ID: 0071
-Revises: 0070
+Revises: 0070b
 Create Date: 2026-08-02
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "0071"
-down_revision: str | None = "0070"
+down_revision: str | None = "0070b"
 branch_labels: ClassVar[list[str] | None] = None
 depends_on: ClassVar[list[str] | None] = None
 

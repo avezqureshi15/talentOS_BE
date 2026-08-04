@@ -12,8 +12,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects.postgresql import UUID
 
-revision: str = "0070"
-down_revision: str | None = "0069"
+revision: str = "0070b"
+down_revision: str | None = "0069b"
 branch_labels: ClassVar[list[str] | None] = None
 depends_on: ClassVar[list[str] | None] = None
 
