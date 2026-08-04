@@ -7,6 +7,7 @@ class PermissionInfo(BaseModel):
     group: str
     assigned: bool = False
     endpoint: str = ""
+    enforced: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -1,4 +1,4 @@
-from app.core.permissions import DEFAULT_ROLE_PERMISSIONS, PERMISSION_META
+from app.core.permissions import DEFAULT_ROLE_PERMISSIONS, PERMISSION_META, enforced_permission_codes
 from app.modules.roles.role_repository import RoleRepository
 from app.modules.roles.role_schema import PermissionInfo, RoleListItem, RoleResponse
 from app.modules.users.permission_model import PermissionModel
@@ -40,6 +40,7 @@ class RoleService:
                 for code, meta in PERMISSION_META.items()
             ]
 
+        enforced = enforced_permission_codes()
         permissions = [
             PermissionInfo(
                 code=p.code,
@@ -47,6 +48,7 @@ class RoleService:
                 group=p.group,
                 assigned=p.code in assigned_set,
                 endpoint=getattr(p, "endpoint", "") or "",
+                enforced=p.code in enforced,
             )
             for p in all_permissions
         ]
@@ -57,15 +59,27 @@ class RoleService:
         rows = self.db.query(PermissionModel).order_by(
             PermissionModel.group, PermissionModel.code
         ).all()
+        enforced = enforced_permission_codes()
 
         if not rows:
             return [
-                PermissionInfo(code=code, name=meta["name"], group=meta["group"])
+                PermissionInfo(
+                    code=code,
+                    name=meta["name"],
+                    group=meta["group"],
+                    enforced=code in enforced,
+                )
                 for code, meta in PERMISSION_META.items()
             ]
 
         return [
-            PermissionInfo(code=r.code, name=r.name, group=r.group, endpoint=getattr(r, "endpoint", "") or "")
+            PermissionInfo(
+                code=r.code,
+                name=r.name,
+                group=r.group,
+                endpoint=getattr(r, "endpoint", "") or "",
+                enforced=r.code in enforced,
+            )
             for r in rows
         ]
 

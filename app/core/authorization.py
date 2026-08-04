@@ -1,6 +1,6 @@
 from fastapi import Depends, HTTPException
 
-from app.core.permissions import Permission
+from app.core.permissions import Permission, mark_enforced
 from app.modules.auth.auth_dependencies import get_current_user
 from app.modules.auth.auth_schema import UserInfo
 
@@ -23,6 +23,8 @@ def require_permission(*permissions: Permission):
                     detail=f"Missing required permission: {p.value}",
                 )
         return current_user
+
+    mark_enforced(*permissions)
     return checker
 
 
@@ -43,4 +45,6 @@ def require_any_permission(*permissions: Permission):
                 detail="Missing required permission",
             )
         return current_user
+
+    mark_enforced(*permissions)
     return checker

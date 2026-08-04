@@ -129,3 +129,21 @@ PERMISSION_META: dict[str, dict[str, str]] = {
     }
     for permission in Permission
 }
+
+
+# ── Enforcement registry ────────────────────────────────────────────────
+# Populated at route-definition time by every gate that actually checks a
+# permission (see authorization.require_permission / require_any_permission
+# and job_access). "Enforced" is derived from real route wiring, so a
+# permission is marked enforced only when something really gates on it.
+_ENFORCED_PERMISSIONS: set[str] = set()
+
+
+def mark_enforced(*permissions: Permission) -> None:
+    """Record that a permission is enforced somewhere in the route wiring."""
+    for permission in permissions:
+        _ENFORCED_PERMISSIONS.add(permission.value)
+
+
+def enforced_permission_codes() -> set[str]:
+    return set(_ENFORCED_PERMISSIONS)

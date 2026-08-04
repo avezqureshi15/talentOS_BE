@@ -103,6 +103,40 @@ class NotificationService:
         kwargs.setdefault("job_id", hiring_request_id)
         return self.notify_many(member_ids, **kwargs)
 
+    def notify_tenant_users(
+        self,
+        tenant_id: int,
+        roles: list[str] | None = None,
+        **kwargs,
+    ) -> int:
+        """Fan out to every active user under a tenant, optionally restricted
+        to a set of roles. Falls back to ``job_id``-style defaults passed in.
+        """
+        from app.modules.users.user_model import User
+
+        if not self.db or tenant_id is None:
+            return 0
+        query = self.db.query(User.id).filter(
+            User.tenant_id == tenant_id,
+            User.is_active.is_(True),
+        )
+        if roles:
+            query = query.filter(User.role.in_(roles))
+        user_ids = [row[0] for row in query.all()]
+        return self.notify_many(user_ids, **kwargs)
+
+    def notify_tenant_admins(
+        self,
+        tenant_id: int,
+        **kwargs,
+    ) -> int:
+        """Fan out to the tenant's admins (account_admin / superadmin)."""
+        return self.notify_tenant_users(
+            tenant_id,
+            roles=["account_admin", "superadmin"],
+            **kwargs,
+        )
+
     def list_mine(
         self,
         employee_id: int,

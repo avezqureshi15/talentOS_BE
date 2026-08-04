@@ -17,6 +17,8 @@ from app.modules.forms.form_mail import (
     MSG_REVIEW_MAIL_SENT,
     MSG_SMTP_NOT_CONFIGURED,
     build_ask_summary_message,
+    build_review_link,
+    build_slot_link,
     detail_to_message,
     is_form_expired,
     is_smtp_configured,
@@ -271,11 +273,6 @@ class FormService:
         _last_notified[key] = now
 
         alert_type = self._get_alert_type(form.type)
-        action_url = (
-            f"/rate-candidate/{form.id}"
-            if form.type == FormType.REVIEW.value
-            else f"/book-slot/{form.id}"
-        )
 
         candidate_name = None
         job_title = None
@@ -297,21 +294,20 @@ class FormService:
                         hr = self.db.query(HiringRequest).filter(HiringRequest.id == round_obj.jd_id).first()
                         job_title = hr.title if hr else None
 
-        if form.type == FormType.REVIEW.value:
-            context_title = f"Review required for {candidate_name}" if candidate_name else "Review pending"
-            context_parts = [part for part in (job_title, f"Round: {round_name}" if round_name else None) if part]
-            context_body = " · ".join(context_parts) or "A form is waiting for your action."
-        else:
-            context_title = "Slot availability request"
-            context_body = f"Your availability is needed to schedule interviews for {job_title}." if job_title else "A form is waiting for your action."
+        content = self._build_notification_content(
+            form,
+            candidate_name=candidate_name,
+            job_title=job_title,
+            round_name=round_name,
+        )
 
         self.notification_service.notify(
             employee_id=user_id,
             notification_type=alert_type,
-            title=context_title,
-            body=context_body,
-            action_url=action_url,
-            action_label="Book slots" if alert_type == NotificationType.SLOTS.value else "Submit review",
+            title=content["title"],
+            body=content["body"],
+            action_url=content["action_url"],
+            action_label=content["action_label"],
             form_id=form.id,
             candidate_id=form.candidate_id,
             job_id=hr.id if hr else None,
@@ -386,6 +382,62 @@ class FormService:
     def _get_alert_type(self, form_type: str) -> str:
         return NotificationType.REVIEW.value if form_type == FormType.REVIEW.value else NotificationType.SLOTS.value
 
+    def _build_notification_content(
+        self,
+        form: Form,
+        candidate_name: str | None = None,
+        job_title: str | None = None,
+        round_name: str | None = None,
+    ) -> dict:
+        is_review = form.type == FormType.REVIEW.value
+        reviewer = form.employee.name or form.employee.emp_id or str(form.employee_id)
+        sent_at = form.last_sent_at.strftime("%d %b %Y, %H:%M") if form.last_sent_at else "—"
+        action_url = f"/rate-candidate/{form.id}" if is_review else f"/book-slot/{form.id}"
+        form_link = build_review_link(form.id) if is_review else build_slot_link(form.id)
+
+        parts = [f"Assigned to: {reviewer}", f"Sent: {sent_at}"]
+        if round_name:
+            parts.append(f"Interview: {round_name}")
+        if job_title:
+            parts.append(f"Job: {job_title}")
+        if candidate_name:
+            parts.append(f"Candidate: {candidate_name}")
+        parts.append(f"Form: {form_link}")
+        body = " · ".join(parts)
+
+        return {
+            "title": "Review pending" if is_review else "Slot availability request",
+            "body": body,
+            "action_url": action_url,
+            "action_label": "Send reminder",
+        }
+
+    def remind_by_form(self, form_id: UUID) -> tuple[Form, str]:
+        form = self.repository.get_by_id(form_id)
+        if not form:
+            raise ValueError(f"Form not found: form_id={form_id}")
+        return self.notify_form(user_id=form.employee_id, form_type=form.type, is_reminder=True)
+
+    def _resolve_job_id_for_candidate(self, candidate_id: int):
+        from app.modules.evaluations.evaluation_model import Candidate
+        from app.modules.hiring_requests.hiring_request_model import HiringRequest
+
+        candidate = self.db.query(Candidate).filter(Candidate.id == candidate_id).first()
+        if not candidate or not candidate.external_job_id:
+            return None
+        try:
+            external = UUID(str(candidate.external_job_id))
+        except ValueError:
+            return None
+        hiring_request = (
+            self.db.query(HiringRequest)
+            .filter(
+                (HiringRequest.id == external) | (HiringRequest.external_job_id == external)
+            )
+            .first()
+        )
+        return hiring_request.id if hiring_request else None
+
     def _send_form_mail(self, form: Form, is_reminder: bool = False) -> None:
         if form.type == FormType.REVIEW.value:
             send_review_mail_task(form.employee_id, form.id, None, None, None, is_reminder=is_reminder)
@@ -393,6 +445,11 @@ class FormService:
             send_slot_mail_task(form.employee_id, form.id, is_reminder=is_reminder)
 
     def run_reminder_job(self) -> int:
+        if not is_smtp_configured():
+            logger.warning(
+                "Reminder run skipped: SMTP not configured — deferring to next run and keeping reminded_at untouched"
+            )
+            return 0
         forms = self.repository.list_due_for_reminder()
         now = datetime.now(timezone.utc)
         sent = 0
@@ -419,6 +476,8 @@ class FormService:
         return sent
 
     def run_escalation_job(self) -> int:
+        from app.modules.hiring_requests.hiring_request_model import HiringRequest
+
         forms = self.repository.list_due_for_escalation()
         created = 0
         for form in forms:
@@ -431,22 +490,38 @@ class FormService:
                 else None
             )
             jd_id = round_obj.jd_id if round_obj else None
-            action_url = (
-                f"/rate-candidate/{form.id}"
-                if alert_type == NotificationType.REVIEW.value
-                else f"/book-slot/{form.id}"
+            if not jd_id and form.type == FormType.REVIEW.value and form.candidate_id:
+                jd_id = self._resolve_job_id_for_candidate(form.candidate_id)
+            hiring_request = None
+            if jd_id:
+                hiring_request = (
+                    self.db.query(HiringRequest).filter(HiringRequest.id == jd_id).first()
+                )
+            tenant_id = (
+                form.employee.tenant_id
+                if form.employee and form.employee.tenant_id is not None
+                else (hiring_request.tenant_id if hiring_request else None)
             )
-            title = (
-                "Review pending"
-                if alert_type == NotificationType.REVIEW.value
-                else "Slot availability request"
+            candidate_name = None
+            if form.candidate_id:
+                from app.modules.evaluations.evaluation_model import Candidate
+
+                candidate = (
+                    self.db.query(Candidate).filter(Candidate.id == form.candidate_id).first()
+                )
+                candidate_name = candidate.candidate_name if candidate else None
+            content = self._build_notification_content(
+                form,
+                candidate_name=candidate_name,
+                job_title=hiring_request.title if hiring_request else None,
+                round_name=round_obj.name if round_obj else None,
             )
             payload = dict(
                 notification_type=alert_type,
-                title=title,
-                body="A form is waiting for your action.",
-                action_url=action_url,
-                action_label="Submit review" if alert_type == NotificationType.REVIEW.value else "Book slots",
+                title=content["title"],
+                body=content["body"],
+                action_url=content["action_url"],
+                action_label=content["action_label"],
                 form_id=form.id,
                 job_id=jd_id,
                 dedupe_key=f"{form.type}-{form.id}",
@@ -454,8 +529,14 @@ class FormService:
             created_notification = self.notification_service.notify(
                 employee_id=form.employee.id, **payload,
             )
-            if jd_id:
-                self.notification_service.notify_job_team(jd_id, **payload)
+            if alert_type == NotificationType.REVIEW.value:
+                if jd_id:
+                    self.notification_service.notify_job_team(jd_id, **payload)
+                if tenant_id is not None:
+                    self.notification_service.notify_tenant_admins(tenant_id, **payload)
+            else:
+                if tenant_id is not None:
+                    self.notification_service.notify_tenant_users(tenant_id, **payload)
             if created_notification:
                 created += 1
                 if form.type == FormType.REVIEW.value and form.candidate_id:

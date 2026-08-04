@@ -68,6 +68,41 @@ def notify_form(
     )
 
 
+@router.post("/{form_id}/remind", response_model=NotifyFormResponse)
+def remind_form(
+    form_id: UUID,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    service = FormService(db)
+    try:
+        form, detail = service.remind_by_form(form_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+    try:
+        if form.type == FormType.REVIEW.value:
+            background_tasks.add_task(
+                send_review_mail_task, form.employee_id, form.id,
+                None, None, None, is_reminder=True,
+            )
+        else:
+            background_tasks.add_task(
+                send_slot_mail_task, form.employee_id, form.id,
+                is_reminder=True,
+            )
+        db.commit()
+    except sa_exc.SQLAlchemyError:
+        db.rollback()
+        raise
+
+    return NotifyFormResponse(
+        message=detail_to_message(detail),
+        detail=detail,
+        form_id=form.id,
+    )
+
+
 @router.post("/{form_id}/submit", response_model=FormSubmitResponse)
 def submit_form(form_id: UUID, db: Session = Depends(get_db)):
     service = FormService(db)

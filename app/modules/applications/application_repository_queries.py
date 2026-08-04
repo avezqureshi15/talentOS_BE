@@ -150,7 +150,7 @@ def get_candidates_by_job_paginated(
 
     total = query.count()
     items = (
-        query.order_by(Candidate.fit_score.desc().nullslast())
+        query.order_by(Candidate.updated_at.desc().nullslast())
         .offset(offset)
         .limit(limit)
         .all()
@@ -312,5 +312,5 @@ def get_finalized_candidates(
     if archived is not None:
         query = query.filter(Candidate.archived == archived)
     total = query.count()
-    items = query.order_by(Candidate.evaluated_at.desc().nullslast()).offset(offset).limit(limit).all()
+    items = query.order_by(Candidate.updated_at.desc().nullslast()).offset(offset).limit(limit).all()
     return items, total

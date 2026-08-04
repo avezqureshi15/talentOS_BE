@@ -23,7 +23,7 @@ from fastapi import Depends, HTTPException, Path
 from sqlalchemy import select
 from sqlalchemy.orm import Query, Session
 
-from app.core.permissions import Permission
+from app.core.permissions import Permission, mark_enforced
 from app.db.session import get_db
 from app.modules.auth.auth_dependencies import get_current_user
 from app.modules.auth.auth_schema import UserInfo
@@ -65,6 +65,7 @@ class JobAccessContext:
         return permission.value in self.user.permissions
 
     def ensure_permission(self, permission: Permission) -> None:
+        mark_enforced(permission)
         if not self.has_permission(permission):
             raise HTTPException(status_code=403, detail=f"Missing required permission: {permission.value}")
 
@@ -137,6 +138,8 @@ def require_job_access(min_role: str | None = None, permission: Permission | Non
             context.ensure_permission(permission)
         return context
 
+    if permission is not None:
+        mark_enforced(permission)
     return checker
 
 

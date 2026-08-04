@@ -25,24 +25,6 @@ router = APIRouter(
 )
 
 
-def _parse_date(val: str | None) -> date | None:
-    if not val:
-        return None
-    try:
-        return datetime.strptime(val, "%Y-%m-%d").date()
-    except ValueError:
-        return None
-
-
-def _parse_time(val: str | None) -> time | None:
-    if not val:
-        return None
-    try:
-        return datetime.strptime(val, "%H:%M").time()
-    except ValueError:
-        return None
-
-
 async def _get_or_create_rh_job(hiring_request_id: str, db: Session) -> str:
     hr = db.query(HiringRequest).filter(HiringRequest.id == hiring_request_id).first()
     if not hr:
@@ -149,10 +131,6 @@ class MoveToAiScreeningRequest(BaseModel):
     force: bool = False
     round_name: str | None = None
     round_type: str | None = None
-    scheduled_date: str | None = None
-    scheduled_time: str | None = None
-    scheduled_end_date: str | None = None
-    scheduled_end_time: str | None = None
 
 
 @router.post("/candidates/{candidate_id}/move-to-screening", status_code=status.HTTP_202_ACCEPTED)
@@ -189,10 +167,6 @@ async def move_to_ai_screening(
             jd_id=hr.id,
             name=body.round_name or "AI Screening Round",
             round_type=body.round_type or "AI_SCREENING_ROUND",
-            scheduled_date=_parse_date(body.scheduled_date),
-            scheduled_time=_parse_time(body.scheduled_time),
-            scheduled_end_date=_parse_date(body.scheduled_end_date),
-            scheduled_end_time=_parse_time(body.scheduled_end_time),
         )
         db.add(round_obj)
         db.flush()
@@ -224,10 +198,6 @@ class MoveToAiInterviewRequest(BaseModel):
     interview_type: str | None = "AI_INTERVIEW"
     round_name: str | None = None
     round_type: str | None = None
-    scheduled_date: str | None = None
-    scheduled_time: str | None = None
-    scheduled_end_date: str | None = None
-    scheduled_end_time: str | None = None
 
 
 @router.post("/candidates/{candidate_id}/move-to-interview", status_code=status.HTTP_201_CREATED)
@@ -272,10 +242,6 @@ async def move_to_ai_interview(
             rh_external_session_id=interview.get("id"),
             rh_interview_url=interview_url,
             rh_unique_token=unique_token,
-            scheduled_date=_parse_date(body.scheduled_date),
-            scheduled_time=_parse_time(body.scheduled_time),
-            scheduled_end_date=_parse_date(body.scheduled_end_date),
-            scheduled_end_time=_parse_time(body.scheduled_end_time),
         )
         db.add(round_obj)
         db.flush()
