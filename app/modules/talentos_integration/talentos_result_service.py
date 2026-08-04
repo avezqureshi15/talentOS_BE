@@ -15,7 +15,10 @@ import uuid
 
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
+from app.core.kafka import publish
 from app.core.logger import get_logger
+from app.modules.ai.interview_report_schema import InterviewReportMessage
 from app.modules.evaluations.evaluation_model import Candidate
 from app.modules.events.event_schema import EventCreate
 from app.modules.events.event_service import EventService
@@ -82,7 +85,7 @@ def persist_screening_result(db: Session, round_id: uuid.UUID, result: dict) -> 
 
 def persist_interview_result(db: Session, round_obj: Round, result: dict) -> None:
     keys = [
-        "status", "transcript", "summary", "transcript_summary",
+        "status", "transcript", "transcript_segments", "summary", "transcript_summary",
         "overall_score", "technical_fit_score", "communication_score",
         "problem_solving_score", "experience_score", "role_alignment_score",
         "strengths", "weaknesses", "jd_fit", "final_recommendation",
@@ -96,6 +99,25 @@ def persist_interview_result(db: Session, round_obj: Round, result: dict) -> Non
         round_obj.id,
         ReviewUpdateByRound(entity_type="ai_interview", reviews=payload, verdict=verdict),
     )
+    _enqueue_interview_report(round_obj.id)
+
+
+def _enqueue_interview_report(round_id: uuid.UUID) -> None:
+    """Queue the async rich-report transform for a persisted interview result.
+
+    Best-effort: a Kafka outage must never fail the webhook/pull/retry path.
+    The worker re-reads the review row from the DB and is idempotent
+    (already-transformed rows are skipped).
+    """
+    try:
+        publish(
+            topic=settings.KAFKA_TOPIC_INTERVIEW_REPORT_ASYNC,
+            key=str(round_id),
+            value=InterviewReportMessage(round_id=round_id).model_dump_json(),
+        )
+        logger.info("Enqueued AI interview report transform for round_id=%s", round_id)
+    except Exception as exc:
+        logger.error("Failed to enqueue AI interview report for round_id=%s: %s", round_id, exc)
 
 
 def resolve_screening_round(db: Session, body: dict) -> tuple[Candidate | None, uuid.UUID | None]:

@@ -85,6 +85,8 @@ async def lifespan(app: FastAPI):
     ensure_topics([
         (settings.KAFKA_TOPIC_EVALUATION_ASYNC, settings.KAFKA_EVALUATION_PARTITIONS),
         (settings.KAFKA_TOPIC_EVALUATION_ASYNC_DLQ, 1),
+        (settings.KAFKA_TOPIC_INTERVIEW_REPORT_ASYNC, settings.KAFKA_INTERVIEW_REPORT_PARTITIONS),
+        (settings.KAFKA_TOPIC_INTERVIEW_REPORT_ASYNC_DLQ, 1),
     ])
     scheduler = init_scheduler()
     setup_form_jobs(scheduler)

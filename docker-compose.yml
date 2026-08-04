@@ -97,3 +97,26 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     command: python3 -m app.workers.evaluation_full_worker
+
+  worker-interview-report:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      app:
+        condition: service_started
+    env_file:
+      - .env
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:29092
+      KAFKA_TOPIC_INTERVIEW_REPORT_ASYNC: ${KAFKA_TOPIC_INTERVIEW_REPORT_ASYNC:-ai.interview.report.async}
+      KAFKA_TOPIC_INTERVIEW_REPORT_ASYNC_DLQ: ${KAFKA_TOPIC_INTERVIEW_REPORT_ASYNC_DLQ:-ai.interview.report.async.dlq}
+      KAFKA_INTERVIEW_REPORT_PARTITIONS: ${KAFKA_INTERVIEW_REPORT_PARTITIONS:-6}
+      AI_SERVICE_BASE_URL: ${AI_SERVICE_BASE_URL:-http://host.docker.internal:8003}
+      AI_SERVICE_TIMEOUT: ${AI_SERVICE_TIMEOUT:-60}
+      INTERVIEW_REPORT_MAX_TRANSCRIPT_CHARS: ${INTERVIEW_REPORT_MAX_TRANSCRIPT_CHARS:-150000}
+      INTERVIEW_REPORT_MAX_ATTEMPTS: ${INTERVIEW_REPORT_MAX_ATTEMPTS:-3}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: python3 -m app.workers.ai_interview_report_worker

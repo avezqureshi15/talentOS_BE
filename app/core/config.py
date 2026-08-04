@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     KAFKA_TOPIC_EVALUATION_ASYNC: str = "resume.evaluation.async"
     KAFKA_TOPIC_EVALUATION_ASYNC_DLQ: str = "resume.evaluation.async.dlq"
     KAFKA_EVALUATION_PARTITIONS: int = 6
+    KAFKA_TOPIC_INTERVIEW_REPORT_ASYNC: str = "ai.interview.report.async"
+    KAFKA_TOPIC_INTERVIEW_REPORT_ASYNC_DLQ: str = "ai.interview.report.async.dlq"
+    KAFKA_INTERVIEW_REPORT_PARTITIONS: int = 6
 
     # talentOS_AI resume evaluation service
     AI_SERVICE_BASE_URL: str = ""
@@ -58,6 +61,10 @@ class Settings(BaseSettings):
     ATS_THRESHOLD_DEFAULT: int = 70
     EVALUATION_MAX_ATTEMPTS: int = 3
     EVALUATION_MIN_RESUME_CHARS: int = 100
+
+    # AI interview report transform
+    INTERVIEW_REPORT_MAX_TRANSCRIPT_CHARS: int = 150_000
+    INTERVIEW_REPORT_MAX_ATTEMPTS: int = 3
 
     # Google OAuth
     GOOGLE_CLIENT_ID: str = ""
