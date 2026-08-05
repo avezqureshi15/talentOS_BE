@@ -2,6 +2,8 @@ from sqlalchemy.orm import Session
 
 from app.core.logger import get_logger
 from app.core.constants import DEFAULT_PAGE_SIZE
+from app.modules.employees.employee_directory_repository import EmployeeDirectoryRepository
+from app.modules.employees.employee_directory_schema import EmployeeResponse
 from app.modules.users.user_repository import UserRepository
 from app.modules.users.user_schema import PaginatedUserResponse, UserResponse
 
@@ -10,12 +12,16 @@ logger = get_logger(__name__)
 
 class UserService:
     def __init__(self, db: Session):
+        self.db = db
         self.repository = UserRepository(db)
 
-    def get_benched_candidates(self, designation: str) -> dict:
-        logger.info("Fetching benched candidates: designation=%s", designation)
-        users = self.repository.get_benched_by_designation(designation)
-        data = [UserResponse.model_validate(u) for u in users]
+    def get_benched_candidates(self, designation: str, tenant_id: int | None = None) -> dict:
+        """Benched people — pure directory query, sourced from employees only."""
+        logger.info("Fetching benched candidates: designation=%s tenant_id=%s", designation, tenant_id)
+        employees = EmployeeDirectoryRepository(self.db).get_benched_by_designation(
+            designation, tenant_id=tenant_id
+        )
+        data = [EmployeeResponse.model_validate(e) for e in employees]
         logger.debug("Found %d benched candidates for designation=%s", len(data), designation)
         return {"data": data, "count": len(data)}
 

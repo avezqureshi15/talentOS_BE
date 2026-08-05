@@ -35,7 +35,7 @@ def render_talentos_email(
           </tr>
         </table>"""
 
-    footer = footer_note or "webHyre.ai — AI-powered recruitment intelligence."
+    footer = footer_note or "TalentOS — AI-powered recruitment intelligence."
 
     return f"""<!DOCTYPE html>
 <html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
@@ -95,9 +95,8 @@ def render_talentos_email(
                 <tr>
                   <td style="font-size:22px;font-weight:800;letter-spacing:-0.02em;color:rgba(255,255,255,0.92);">
                     <span style="color:#6366F1;">✦</span>
-                    <span style="color:#FFFFFF;">web</span>
-                    <span style="color:#B0B5C0;">Hyre</span>
-                    <span style="color:#B0B5C0;">.ai</span>
+                    <span style="color:#FFFFFF;">Talent</span>
+                    <span style="color:#B0B5C0;">OS</span>
                   </td>
                 </tr>
               </table>
@@ -145,7 +144,7 @@ def render_talentos_email(
                   <td style="font-size:12px;line-height:1.5;color:rgba(255,255,255,0.35);">
                     {footer}
                     <br>
-                    <span style="color:rgba(255,255,255,0.2);">© 2026 webHyre AI. All rights reserved.</span>
+                    <span style="color:rgba(255,255,255,0.2);">© 2026 TalentOS. All rights reserved.</span>
                   </td>
                 </tr>
               </table>
@@ -158,8 +157,8 @@ def render_talentos_email(
         <table border="0" cellpadding="0" cellspacing="0" role="presentation" width="600" style="max-width:600px;width:100%;">
           <tr>
             <td align="center" style="padding:24px 16px 0;font-size:12px;color:rgba(255,255,255,0.25);">
-              You are receiving this email because you are either part of Webknot
-              Technologies or have applied to a position at Webknot Technologies.
+              You are receiving this email because you are part of the TalentOS
+              hiring workflow.
             </td>
           </tr>
         </table>

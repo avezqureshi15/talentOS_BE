@@ -5,7 +5,7 @@ _SUBJECT = "Submit your interview feedback"
 _REMINDER_SUBJECT = "Reminder: Submit your interview feedback"
 _PREHEADER = "Open the form to share your review for the candidate"
 _CTA_TEXT = "Submit Review"
-_FOOTER_NOTE = "webHyre.ai"
+_FOOTER_NOTE = "TalentOS"
 
 _BODY_INTRO = (
     "Please submit your feedback for the candidate you recently interviewed. "
@@ -40,7 +40,7 @@ def render_review_form_email(*, recipient_name: str, candidate_name: str, form_u
         f"{prefix}Please submit your feedback for {candidate_name}.\n\n"
         f"{form_url}\n\n"
         f"{_EXPIRY_NOTE}\n\n"
-        "Regards,\nwebHyre.ai"
+        "Regards,\nTalentOS"
     )
 
     return subject, plain, html

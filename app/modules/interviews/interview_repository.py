@@ -7,6 +7,7 @@ from app.core.constants import get_pipeline_stage
 from app.core.logger import get_logger
 from app.modules.evaluations.evaluation_model import Candidate
 from app.modules.hiring_requests.hiring_request_model import HiringRequest
+from sqlalchemy import and_
 from app.modules.interviews.models.interview import Interview
 from app.modules.interviews.models.round_interviewer import RoundInterviewer
 from app.modules.rounds.round_model import Round
@@ -120,9 +121,18 @@ class InterviewRepository:
         return self.db.query(HiringRequest).filter(HiringRequest.id == hr_id).first()
 
     def get_interviewer_emails_for_round(self, round_id: uuid.UUID) -> list[str]:
-        emails = [u.email for u in
-                  self.db.query(User).join(RoundInterviewer, RoundInterviewer.employee_id == User.id)
-                  .filter(RoundInterviewer.round_id == round_id).all() if u.email]
+        join_on = and_(
+            User.employee_id == RoundInterviewer.employee_id,
+            User.employee_id.isnot(None),
+        )
+        emails = [
+            u.email
+            for u in self.db.query(User)
+            .join(RoundInterviewer, join_on)
+            .filter(RoundInterviewer.round_id == round_id)
+            .all()
+            if u.email
+        ]
         logger.info("Found %d interviewer(s) for round_id=%s", len(emails), round_id)
         return emails
 
@@ -138,6 +148,8 @@ class InterviewRepository:
         return r
 
     def create_round_interviewer(self, round_id: uuid.UUID, employee_id: int) -> RoundInterviewer:
+        # ``employee_id`` is a real employees.id post-Phase-3 (the FE picker
+        # sources it from /employees/). Stored directly, no translation.
         ri = RoundInterviewer(round_id=round_id, employee_id=employee_id)
         self.db.add(ri)
         self.db.flush()

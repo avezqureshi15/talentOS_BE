@@ -23,7 +23,7 @@ class Form(Base):
     __tablename__ = "forms"
 
     id: Mapped[uuid.UUID] = mapped_column(SA_Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    employee_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    employee_id: Mapped[int] = mapped_column(Integer, ForeignKey("employees.id"), nullable=False, index=True)
     type: Mapped[str] = mapped_column(String(10), nullable=False, default=FormType.SLOTS.value)
     round_id: Mapped[uuid.UUID | None] = mapped_column(SA_Uuid(as_uuid=True), ForeignKey("rounds.id", ondelete="CASCADE"), nullable=True)
     candidate_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("candidates.id", ondelete="CASCADE"), nullable=True)
@@ -44,4 +44,15 @@ class Form(Base):
         nullable=False,
     )
 
-    employee: Mapped["User"] = relationship("User", lazy="joined")
+    # Directory-side view — Employee is the HR truth for this form's owner.
+    employee = relationship("Employee", lazy="joined")
+
+    # Auth-scoped view — resolves through users.employee_id back-pointer for
+    # callers that need a users.id (mail tasks, notifications).
+    user = relationship(
+        "User",
+        primaryjoin="foreign(User.employee_id) == Form.employee_id",
+        viewonly=True,
+        uselist=False,
+        lazy="joined",
+    )

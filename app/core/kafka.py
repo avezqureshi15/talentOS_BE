@@ -58,6 +58,7 @@ def get_producer() -> Producer:
                 "linger.ms": 50,
                 "client.id": "talentos-be-producer",
                 "socket.connection.setup.timeout.ms": 5000,
+                "message.timeout.ms": 15000,
                 "log_level": 0,
             }
         )
@@ -67,18 +68,30 @@ def get_producer() -> Producer:
 
 def publish(topic: str, key: str, value: str) -> None:
     """Synchronously publish a single message and wait for broker ack."""
+    publish_many(topic, [(key, value)])
+
+
+def publish_many(topic: str, messages: list[tuple[str, str]]) -> None:
+    """Synchronously publish multiple messages and wait for broker acks.
+
+    Produces every message and flushes once so a batch costs a single
+    flush round-trip instead of one flush per message.
+    """
     producer = get_producer()
-    delivery: dict[str, Exception | None] = {"error": None}
+    delivery: dict[str, Exception | None] = {}
 
-    def _on_delivery(err, _msg) -> None:
+    def _on_delivery(key: str, err) -> None:
         if err is not None:
-            delivery["error"] = err
+            delivery[key] = err
 
-    producer.produce(topic=topic, key=key, value=value, callback=_on_delivery)
-    producer.flush(timeout=10)
+    for key, value in messages:
+        producer.produce(topic=topic, key=key, value=value, callback=lambda err, _msg, k=key: _on_delivery(k, err))
+    producer.flush(timeout=5)
 
-    if delivery["error"] is not None:
-        raise RuntimeError(f"Kafka delivery failed: {delivery['error']}")
+    errors = {k: err for k, err in delivery.items() if err is not None}
+    if errors:
+        keys = ", ".join(errors)
+        raise RuntimeError(f"Kafka delivery failed for key(s) {keys}: {next(iter(errors.values()))}")
 
 
 # ── Consumer ────────────────────────────────────────────────────────────────

@@ -19,7 +19,9 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.drop_column("job_team_members", "role")
+    # Idempotent — some environments never had this column
+    # (schema drift between dev-cloned Supabase and the migration chain).
+    op.execute("ALTER TABLE job_team_members DROP COLUMN IF EXISTS role")
 
 
 def downgrade() -> None:

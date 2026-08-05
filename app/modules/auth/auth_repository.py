@@ -35,19 +35,9 @@ class AuthRepository:
         commit: bool = True,
         **extra: dict,
     ) -> User:
-        now = datetime.now(timezone.utc)
         defaults = {
             "status": "active",
-            "user_type": "employee",
-            "designation": "Unassigned",
-            "department": "Unassigned",
             "role": "recruiter",
-            "work_mode": "remote",
-            "delivery_status": "active",
-            "work_location_type": "remote",
-            "doj": now.date(),
-            "date_of_birth": now.date(),
-            "band": "L1",
             "auth_provider": "google",
         }
         defaults.update(extra)

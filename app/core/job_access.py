@@ -29,6 +29,7 @@ from app.modules.auth.auth_dependencies import get_current_user
 from app.modules.auth.auth_schema import UserInfo
 from app.modules.hiring_requests.hiring_request_model import HiringRequest
 from app.modules.job_teams.job_team_model import JobTeamMember
+from app.modules.users.user_model import User
 
 GLOBAL_ROLE_RANK: dict[str, int] = {
     "superadmin": 4,
@@ -105,12 +106,22 @@ def resolve_job_access(db: Session, user: UserInfo, hiring_request_id: uuid.UUID
     member = db.scalar(
         select(JobTeamMember).where(
             JobTeamMember.hiring_request_id == job.id,
-            JobTeamMember.user_id == user.id,
+            _membership_predicate(db, user),
         )
     )
     if member is None:
         raise HTTPException(status_code=403, detail="No access to this hiring request")
     return JobAccessContext(user=user, job=job, member=member)
+
+
+def _membership_predicate(db: Session, user: UserInfo):
+    """Return the predicate that identifies ``user`` on ``job_team_members``
+    via the employees linkage."""
+    employee_id = db.scalar(select(User.employee_id).where(User.id == user.id))
+    if employee_id is None:
+        # No linked employee → no membership.
+        return JobTeamMember.id == uuid.UUID(int=0)
+    return JobTeamMember.employee_id == employee_id
 
 
 def require_job_access(min_role: str | None = None, permission: Permission | None = None):
@@ -154,11 +165,12 @@ def scope_job_query(query: Query, user: UserInfo) -> Query:
         return query
     if user.role == "account_admin":
         return query.filter(HiringRequest.tenant_id == user.tenant_id)
+    predicate = _membership_predicate(query.session, user)
     member_jobs = (
         select(JobTeamMember.hiring_request_id)
         .join(HiringRequest, HiringRequest.id == JobTeamMember.hiring_request_id)
         .where(
-            JobTeamMember.user_id == user.id,
+            predicate,
             HiringRequest.deleted_at.is_(None),
         )
     )

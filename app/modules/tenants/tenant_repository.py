@@ -114,3 +114,13 @@ class TenantRepository:
             .scalar()
             or 0
         )
+
+    def count_employees(self, tenant_id: int) -> int:
+        from app.modules.employees.employee_model import Employee
+
+        return (
+            self.db.query(func.count(Employee.id))
+            .filter(Employee.tenant_id == tenant_id)
+            .scalar()
+            or 0
+        )

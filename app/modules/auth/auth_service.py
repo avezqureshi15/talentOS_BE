@@ -15,6 +15,7 @@ from app.core.security import hash_password, verify_password
 from app.common.exceptions.base_exception import BaseAppException
 from app.modules.auth.auth_repository import AuthRepository
 from app.modules.auth.auth_schema import UserInfo
+from app.modules.employees.employee_lookup import ensure_employee_for_user
 from app.modules.tenants.tenant_model import Tenant
 from app.modules.users.permission_service import PermissionService
 
@@ -146,17 +147,9 @@ class AuthService:
             tenant_id=tenant.id,
             role="account_admin",
             status="active",
-            user_type="employee",
-            designation="Unassigned",
-            department="Unassigned",
-            work_mode="remote",
-            delivery_status="active",
-            work_location_type="remote",
-            doj=datetime.now(timezone.utc).date(),
-            date_of_birth=datetime.now(timezone.utc).date(),
-            band="L1",
         )
 
+        ensure_employee_for_user(self.db, user)
         self.db.commit()
         access_token, refresh_token, expires_in = self.create_tokens(user.id)
         return user, access_token, refresh_token, expires_in
@@ -224,18 +217,10 @@ class AuthService:
             tenant_id=invite.tenant_id,
             role=invite.role,
             status="active",
-            user_type="employee",
-            designation="Unassigned",
-            department="Unassigned",
-            work_mode="remote",
-            delivery_status="active",
-            work_location_type="remote",
-            doj=datetime.now(timezone.utc).date(),
-            date_of_birth=datetime.now(timezone.utc).date(),
-            band="L1",
         )
 
         invite.accepted_at = datetime.now(timezone.utc)
+        ensure_employee_for_user(self.db, user)
         self.db.commit()
 
         access_token, refresh_token, expires_in = self.create_tokens(user.id)

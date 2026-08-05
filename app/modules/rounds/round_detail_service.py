@@ -50,7 +50,13 @@ class RoundDetailService:
 
         interviewer: str | None = None
         if slot:
-            user = self.db.query(User).filter(User.id == slot.employee_id).first()
+            # slot.employee_id now points at employees.id; resolve to a User
+            # via the back-pointer to keep the auth-side name/label consistent.
+            user = (
+                self.db.query(User)
+                .filter(User.employee_id == slot.employee_id)
+                .first()
+            )
             interviewer = user.name if user else None
 
         entities: list[ReviewEntity] = []

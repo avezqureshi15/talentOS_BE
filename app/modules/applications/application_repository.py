@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import String, cast
+from sqlalchemy import String, and_, cast
 from sqlalchemy.orm import Session
 
 from app.core.logger import get_logger
@@ -98,11 +98,15 @@ class ApplicationRepository:
         if not round_ids:
             return
         logger.warning("attach_interview_data: round_ids_str=%s", round_ids)
+        _u_join = and_(
+            User.employee_id == RoundInterviewer.employee_id,
+            User.employee_id.isnot(None),
+        )
         rows = (
             self.db.query(Interview, Round, RoundInterviewer, User, Slot)
             .join(Round, Interview.round_id == Round.id)
             .join(RoundInterviewer, Round.id == RoundInterviewer.round_id)
-            .join(User, RoundInterviewer.employee_id == User.id)
+            .join(User, _u_join)
             .outerjoin(Slot, Round.slot_id == Slot.id)
             .filter(cast(Interview.round_id, String).in_(round_ids))
             .all()
@@ -123,7 +127,7 @@ class ApplicationRepository:
                         scheduled_end_at = f"{round_.scheduled_end_date.isoformat()}T{round_.scheduled_end_time.isoformat()}"
                 interview_by_round[rid] = {
                     "interview_id": str(interview.id),
-                    "interviewer_emp_id": str(ri.employee_id),
+                    "interviewer_emp_id": str(user.id),
                     "interviewer_name": user.name,
                     "round_name": round_.name or "",
                     "scheduled_at": scheduled_at,

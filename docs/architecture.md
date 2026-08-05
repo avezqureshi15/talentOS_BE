@@ -245,7 +245,7 @@ sequenceDiagram
 
 | Persona | Job the platform calls this |
 |---|---|
-| **Super Admin** | Platform administrator (webhyre ops) |
+| **Super Admin** | Platform administrator (TalentOS ops) |
 | **Account Admin** | Workspace owner |
 | **Job / Hirer** | "Job Owner" — the hiring manager (e.g., "interviewer") |
 | **Recruiter** | Talent acquisition / day-to-day pipeline operator |

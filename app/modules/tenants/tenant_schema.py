@@ -22,6 +22,7 @@ class TenantResponse(BaseModel):
     is_active: bool
     verification_status: str
     user_count: int = 0
+    employee_count: int = 0
     logo_url: str | None = None
     website: str | None = None
     phone: str | None = None

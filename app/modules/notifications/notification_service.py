@@ -91,13 +91,20 @@ class NotificationService:
         defaults to the hiring request id.
         """
         from app.modules.job_teams.job_team_model import JobTeamMember
+        from app.modules.users.user_model import User
 
         if not self.db:
             return 0
+        # Route via employees linkage; reverse to users.id since notifications
+        # are user-scoped. Members without a linked user are silently skipped.
         member_ids = [
             row[0]
-            for row in self.db.query(JobTeamMember.user_id)
-            .filter(JobTeamMember.hiring_request_id == hiring_request_id)
+            for row in self.db.query(User.id)
+            .join(JobTeamMember, JobTeamMember.employee_id == User.employee_id)
+            .filter(
+                JobTeamMember.hiring_request_id == hiring_request_id,
+                User.employee_id.isnot(None),
+            )
             .all()
         ]
         kwargs.setdefault("job_id", hiring_request_id)

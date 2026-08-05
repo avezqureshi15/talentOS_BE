@@ -39,6 +39,7 @@ class TenantService:
             is_active=tenant.is_active,
             verification_status=tenant.verification_status,
             user_count=self.repo.count_users(tenant.id),
+            employee_count=self.repo.count_employees(tenant.id),
             logo_url=tenant.logo_url,
             website=tenant.website,
             phone=tenant.phone,

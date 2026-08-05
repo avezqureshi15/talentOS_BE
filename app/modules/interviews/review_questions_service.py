@@ -22,6 +22,7 @@ from app.modules.interviews.review_questions_constants import (
 )
 from app.modules.rounds.round_model import Round
 from app.modules.users.user_model import User
+from sqlalchemy import and_
 
 logger = get_logger(__name__)
 
@@ -225,9 +226,13 @@ class ReviewQuestionsService:
         candidate_name = candidate.candidate_name if candidate else "Candidate"
         round_name = round_.name or "Interview"
 
+        _join = and_(
+            User.employee_id == RoundInterviewer.employee_id,
+            User.employee_id.isnot(None),
+        )
         interviewers = (
             self.db.query(User)
-            .join(RoundInterviewer, RoundInterviewer.employee_id == User.id)
+            .join(RoundInterviewer, _join)
             .filter(RoundInterviewer.round_id == round_.id)
             .all()
         )

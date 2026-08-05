@@ -18,8 +18,8 @@ def get_benched_candidates(
     db: Session = Depends(get_db),
     current_user: UserInfo = Depends(get_current_user),
 ):
-    service = UserService(db)
-    return service.get_benched_candidates(designation)
+    tenant_id = None if current_user.role == "superadmin" else current_user.tenant_id
+    return UserService(db).get_benched_candidates(designation, tenant_id=tenant_id)
 
 
 @router.get("/{emp_id}", response_model=UserResponse | None)

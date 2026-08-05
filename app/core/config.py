@@ -80,7 +80,10 @@ class Settings(BaseSettings):
     ALLOW_SIGNUP: bool = False
 
     # CORS
-    CORS_ALLOW_ORIGINS: str = "http://localhost:5173,http://localhost:4173,http://localhost:5175,http://localhost:5174"
+    CORS_ALLOW_ORIGINS: str = (
+        "http://localhost:5173,http://localhost:4173,http://localhost:5174,http://localhost:5175,"
+        "http://127.0.0.1:5173,http://127.0.0.1:4173,http://127.0.0.1:5174,http://127.0.0.1:5175"
+    )
 
     # JWT
     JWT_SECRET: str = ""
@@ -109,7 +112,7 @@ class Settings(BaseSettings):
     MEETMIND_BASE_URL: str = ""
     MEETMIND_API_TOKEN: str = ""
     MEETMIND_WEBHOOK_SECRET: str = ""
-    MEETMIND_EXTERNAL: str = "webhyre.ai"
+    MEETMIND_EXTERNAL: str = "talentos.ai"
     INTERVIEW_FALLBACK_SECONDS: int = 60
     AI_ROUND_EVALUATION_DELAY_MINUTES: int = 0
 

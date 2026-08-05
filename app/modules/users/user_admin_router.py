@@ -44,10 +44,10 @@ def _send_invite_email(email: str, token: str) -> None:
             use_tls=settings.SMTP_USE_TLS,
         )
         link = f"{settings.FRONTEND_BASE_URL}/auth/invite/{token}"
-        subject = "You're invited to join webHyre.ai"
+        subject = "You're invited to join TalentOS"
         body = f"""Hello,
 
-You have been invited to join webHyre.ai. Click the link below to set up your account:
+You have been invited to join TalentOS. Click the link below to set up your account:
 
 {link}
 
@@ -56,15 +56,15 @@ This invite expires in 7 days.
 If you did not expect this invitation, you can ignore this email.
 
 Best,
-The webHyre.ai Team"""
+The TalentOS Team"""
         html = f"""<p>Hello,</p>
-<p>You have been invited to join <strong>webHyre.ai</strong>. Click the button below to set up your account:</p>
+<p>You have been invited to join <strong>TalentOS</strong>. Click the button below to set up your account:</p>
 <p style="text-align:center;margin:24px 0">
   <a href="{link}" style="display:inline-block;padding:12px 24px;background:#ffffff;color:#000000;text-decoration:none;border-radius:8px;font-weight:600">Accept Invite</a>
 </p>
 <p>This invite expires in 7 days.</p>
 <p>If you did not expect this invitation, you can ignore this email.</p>
-<p>Best,<br>The webHyre.ai Team</p>"""
+<p>Best,<br>The TalentOS Team</p>"""
         service.send(to_email=email, subject=subject, body=body, html=html)
     except Exception as exc:
         logger.warning("Failed to send invite email to %s: %s", email, exc)
@@ -144,7 +144,6 @@ def create_user(
     if existing:
         raise HTTPException(status_code=409, detail="A user with this email already exists")
 
-    now = datetime.now(timezone.utc)
     user = User(
         emp_id=f"u{secrets.token_hex(8)}",
         email=body.email,
@@ -155,15 +154,6 @@ def create_user(
         role=body.role,
         is_active=True,
         status="active",
-        user_type="employee",
-        designation="Unassigned",
-        department="Unassigned",
-        work_mode="remote",
-        delivery_status="active",
-        work_location_type="remote",
-        doj=now.date(),
-        date_of_birth=now.date(),
-        band="L1",
     )
     db.add(user)
     db.commit()
@@ -246,17 +236,21 @@ def list_user_job_assignments(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    rows = (
-        db.query(JobTeamMember, HiringRequest)
-        .join(HiringRequest, HiringRequest.id == JobTeamMember.hiring_request_id)
-        .filter(
-            JobTeamMember.user_id == user_id,
-            HiringRequest.tenant_id == tid,
-            HiringRequest.deleted_at.is_(None),
+    # user_id → employees.id lookup (job_team_members is now keyed on employee)
+    if user.employee_id is None:
+        rows = []
+    else:
+        rows = (
+            db.query(JobTeamMember, HiringRequest)
+            .join(HiringRequest, HiringRequest.id == JobTeamMember.hiring_request_id)
+            .filter(
+                JobTeamMember.employee_id == user.employee_id,
+                HiringRequest.tenant_id == tid,
+                HiringRequest.deleted_at.is_(None),
+            )
+            .order_by(JobTeamMember.created_at.desc())
+            .all()
         )
-        .order_by(JobTeamMember.created_at.desc())
-        .all()
-    )
     data = [
         UserJobAssignment(
             hiring_request_id=hr.id,

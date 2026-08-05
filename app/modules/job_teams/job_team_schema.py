@@ -7,6 +7,7 @@ class JobTeamMemberResponse(BaseModel):
     user_id: int
     name: str
     email: str
+    designation: str | None = None
     is_owner: bool
     role: str = Field(..., description="The member's global org role (superadmin | account_admin | job_owner | recruiter | reviewer)")
 

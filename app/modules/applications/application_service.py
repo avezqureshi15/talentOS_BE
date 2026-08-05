@@ -109,6 +109,7 @@ class ApplicationService:
         self.repo.attach_interview_data(items)
 
         stage_counts = None
+        archived_stage_counts = None
         if resolved_job_id:
             stage_counts = self.repo.count_candidates_by_stage(
                 job_id=resolved_job_id,
@@ -122,6 +123,21 @@ class ApplicationService:
                 exclude_finalized=exclude_finalized,
                 search=search,
                 reject_reason=reject_reason,
+            )
+            archived_stage_counts = self.repo.count_candidates_by_stage(
+                job_id=resolved_job_id,
+                status=status_upper,
+                schedule=parsed_schedule,
+                round_verdict=round_verdict,
+                min_score=min_score,
+                max_score=max_score,
+                date_from=date_from,
+                date_to=date_to,
+                exclude_finalized=exclude_finalized,
+                search=search,
+                reject_reason=reject_reason,
+                archived=True,
+                apply_reject_reason_override=False,
             )
 
         return {
@@ -138,6 +154,7 @@ class ApplicationService:
             "limit": limit,
             "offset": offset,
             "stage_counts": stage_counts,
+            "archived_stage_counts": archived_stage_counts,
         }
     def get_finalized_candidates_paginated(
         self,

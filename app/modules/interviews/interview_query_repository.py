@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import or_
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.core.constants import InterviewStatus
@@ -13,6 +13,15 @@ from app.modules.interviews.models.round_interviewer import RoundInterviewer
 from app.modules.rounds.round_model import Round
 from app.modules.slots.slot_model import Slot
 from app.modules.users.user_model import User
+
+
+def _ri_to_user_join():
+    """ON clause joining ``users`` to ``round_interviewers`` through the
+    employees linkage. Requires ``users.employee_id`` to be populated."""
+    return and_(
+        User.employee_id == RoundInterviewer.employee_id,
+        User.employee_id.isnot(None),
+    )
 
 logger = get_logger(__name__)
 
@@ -58,7 +67,7 @@ class InterviewQueryRepository:
             )
             .join(Round, Interview.round_id == Round.id)
             .join(RoundInterviewer, RoundInterviewer.round_id == Round.id)
-            .join(User, RoundInterviewer.employee_id == User.id)
+            .join(User, _ri_to_user_join())
             .join(Slot, Interview.slot_id == Slot.id)
             .outerjoin(Candidate, Round.candidate_id == Candidate.id)
             .outerjoin(HiringRequest, Round.jd_id == HiringRequest.id)
@@ -119,7 +128,7 @@ class InterviewQueryRepository:
             )
             .join(Round, Interview.round_id == Round.id)
             .join(RoundInterviewer, RoundInterviewer.round_id == Round.id)
-            .join(User, RoundInterviewer.employee_id == User.id)
+            .join(User, _ri_to_user_join())
             .join(Slot, Interview.slot_id == Slot.id)
             .outerjoin(Candidate, Round.candidate_id == Candidate.id)
             .outerjoin(HiringRequest, Round.jd_id == HiringRequest.id)

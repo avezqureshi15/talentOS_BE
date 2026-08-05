@@ -22,7 +22,7 @@ class EmployeeRepository:
                 User.emp_id.label("emp_id"),
                 Form.id.label("form_id"),
             )
-            .join(User, User.id == Form.employee_id)
+            .join(User, User.employee_id == Form.employee_id)
             .filter(Form.type == form_type)
             .distinct(User.emp_id)
             .order_by(User.emp_id, Form.last_sent_at.desc())

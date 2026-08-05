@@ -1,8 +1,7 @@
-from datetime import date, datetime, timezone
-from typing import Optional
+from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
@@ -13,32 +12,25 @@ class User(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     emp_id: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
-    personal_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
 
     password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     auth_provider: Mapped[str] = mapped_column(String(20), default="google", nullable=False)
     tenant_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("tenants.id"), nullable=True)
+    employee_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("employees.id"), nullable=True, unique=True
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     status: Mapped[str] = mapped_column(String(50), nullable=False)
-    user_type: Mapped[str] = mapped_column(String(50), nullable=False)
-    designation: Mapped[str] = mapped_column(String(255), nullable=False)
-    department: Mapped[str] = mapped_column(String(255), nullable=False)
-    phone_number: Mapped[str | None] = mapped_column(String(20), nullable=True)
     role: Mapped[str] = mapped_column(String(100), nullable=False)
-    work_mode: Mapped[str] = mapped_column(String(50), nullable=False)
-    delivery_status: Mapped[str] = mapped_column(String(50), nullable=False)
-    work_location_type: Mapped[str] = mapped_column(String(50), nullable=False)
-    doj: Mapped[date] = mapped_column(Date, nullable=False)
-    doe: Mapped[date | None] = mapped_column(Date, nullable=True)
-    date_of_birth: Mapped[date] = mapped_column(Date, nullable=False)
-    internship_duration: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    band: Mapped[str] = mapped_column(String(50), nullable=False)
     unread_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
-    skills: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
+
+    # HR/directory fields (designation, department, doj, band, skills, etc.)
+    # live on the linked Employee row. Access via ``user.employee``.
+    employee = relationship("Employee", lazy="joined")

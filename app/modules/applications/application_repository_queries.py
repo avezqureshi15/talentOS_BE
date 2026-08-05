@@ -173,6 +173,8 @@ def count_candidates_by_stage(
     search: str | None = None,
     reject_reason: str | None = None,
     stage: str | None = None,
+    archived: bool | None = False,
+    apply_reject_reason_override: bool = True,
 ) -> dict[str, int]:
     """Per-stage counts for the pipeline tabs, using the same filters as the list query.
     The disqualified-by (reject_reason) filter only applies to the resume-shortlisting
@@ -189,7 +191,7 @@ def count_candidates_by_stage(
         date_to=date_to,
         exclude_finalized=exclude_finalized,
         search=search,
-        archived=False,
+        archived=archived,
     )
 
     rows = (
@@ -213,7 +215,7 @@ def count_candidates_by_stage(
         ):
             counts["waiting-evaluation"] += cnt
 
-    if reject_reason:
+    if reject_reason and apply_reject_reason_override:
         filtered_query = _apply_candidate_filters(
             db,
             job_id=job_id,
@@ -228,7 +230,7 @@ def count_candidates_by_stage(
             search=search,
             reject_reason=reject_reason,
             stage="resume-shortlisting",
-            archived=False,
+            archived=archived,
         )
         counts["resume-shortlisting"] = filtered_query.count()
 

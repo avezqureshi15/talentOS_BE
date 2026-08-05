@@ -6,8 +6,9 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.logger import get_logger
+from app.modules.employees.employee_lookup import user_id_to_employee_id
+from app.modules.employees.employee_model import Employee
 from app.modules.forms.form_model import Form, FormStatus, FormType
-from app.modules.users.user_model import User
 
 logger = get_logger(__name__)
 
@@ -16,14 +17,33 @@ class FormRepository:
     def __init__(self, db: Session):
         self.db = db
 
+    def _base_by_user(self, user_id: int):
+        """Return a Form query filtered to rows owned by ``user_id``.
+
+        ``user_id`` is translated to the linked ``employees.id`` because
+        ``forms.employee_id`` now points at ``employees``.
+        """
+        ref_id = user_id_to_employee_id(self.db, user_id)
+        if ref_id is None:
+            # Never-matching filter so caller gets ``None``.
+            return self.db.query(Form).filter(Form.id == None)  # noqa: E711
+        return self.db.query(Form).filter(Form.employee_id == ref_id)
+
+    def _base_by_emp_id(self, emp_id: str):
+        """Return a Form query filtered by the person's ``emp_id`` via employees."""
+        return (
+            self.db.query(Form)
+            .join(Employee, Employee.id == Form.employee_id)
+            .filter(Employee.emp_id == emp_id)
+        )
+
     def get_by_id(self, form_id: UUID) -> Form | None:
         return self.db.query(Form).filter(Form.id == form_id).first()
 
     def get_latest(self, emp_id: str, form_type: str = FormType.SLOTS.value) -> Form | None:
         return (
-            self.db.query(Form)
-            .join(User, User.id == Form.employee_id)
-            .filter(User.emp_id == emp_id, Form.type == form_type)
+            self._base_by_emp_id(emp_id)
+            .filter(Form.type == form_type)
             .order_by(Form.last_sent_at.desc())
             .first()
         )
@@ -31,10 +51,8 @@ class FormRepository:
     def get_active_sent(self, emp_id: str, form_type: str = FormType.SLOTS.value) -> Form | None:
         cutoff = datetime.now(timezone.utc) - timedelta(hours=settings.FORM_EXPIRY_HOURS)
         return (
-            self.db.query(Form)
-            .join(User, User.id == Form.employee_id)
+            self._base_by_emp_id(emp_id)
             .filter(
-                User.emp_id == emp_id,
                 Form.type == form_type,
                 Form.status == FormStatus.SENT.value,
                 Form.last_sent_at > cutoff,
@@ -45,8 +63,8 @@ class FormRepository:
 
     def get_latest_by_user(self, user_id: int, form_type: str = FormType.SLOTS.value) -> Form | None:
         return (
-            self.db.query(Form)
-            .filter(Form.employee_id == user_id, Form.type == form_type)
+            self._base_by_user(user_id)
+            .filter(Form.type == form_type)
             .order_by(Form.last_sent_at.desc())
             .first()
         )
@@ -54,9 +72,8 @@ class FormRepository:
     def get_active_sent_by_user(self, user_id: int, form_type: str = FormType.SLOTS.value) -> Form | None:
         cutoff = datetime.now(timezone.utc) - timedelta(hours=settings.FORM_EXPIRY_HOURS)
         return (
-            self.db.query(Form)
+            self._base_by_user(user_id)
             .filter(
-                Form.employee_id == user_id,
                 Form.type == form_type,
                 Form.status == FormStatus.SENT.value,
                 Form.last_sent_at > cutoff,
@@ -68,9 +85,8 @@ class FormRepository:
     def get_active_sent_by_user_and_round(self, user_id: int, round_id: UUID) -> Form | None:
         cutoff = datetime.now(timezone.utc) - timedelta(hours=settings.FORM_EXPIRY_HOURS)
         return (
-            self.db.query(Form)
+            self._base_by_user(user_id)
             .filter(
-                Form.employee_id == user_id,
                 Form.type == FormType.REVIEW.value,
                 Form.round_id == round_id,
                 Form.status == FormStatus.SENT.value,
@@ -83,10 +99,8 @@ class FormRepository:
     def get_active_sent_by_emp_and_round(self, emp_id: str, round_id: UUID) -> Form | None:
         cutoff = datetime.now(timezone.utc) - timedelta(hours=settings.FORM_EXPIRY_HOURS)
         return (
-            self.db.query(Form)
-            .join(User, User.id == Form.employee_id)
+            self._base_by_emp_id(emp_id)
             .filter(
-                User.emp_id == emp_id,
                 Form.type == FormType.REVIEW.value,
                 Form.round_id == round_id,
                 Form.status == FormStatus.SENT.value,
@@ -97,8 +111,14 @@ class FormRepository:
         )
 
     def create(self, employee_id: int, form_type: str, last_sent_at: datetime, round_id: UUID | None = None, candidate_id: int | None = None) -> Form:
+        # Historical parameter name; the value is a users.id. Translate.
+        ref_id = user_id_to_employee_id(self.db, employee_id)
+        if ref_id is None:
+            raise ValueError(
+                f"Cannot create form for user {employee_id}: no linked employee record"
+            )
         form = Form(
-            employee_id=employee_id,
+            employee_id=ref_id,
             type=form_type,
             status=FormStatus.SENT.value,
             last_sent_at=last_sent_at,
@@ -107,7 +127,7 @@ class FormRepository:
         )
         self.db.add(form)
         self.db.flush()
-        logger.info("Created form: id=%s | employee_id=%s | type=%s", form.id, employee_id, form_type)
+        logger.info("Created form: id=%s | user_id=%s employee_id=%s | type=%s", form.id, employee_id, ref_id, form_type)
         return form
 
     def touch_last_sent_at(self, form: Form, last_sent_at: datetime) -> Form:

@@ -34,7 +34,14 @@ class SlotRepository:
         self.db = db
 
     def create_slot(self, employee_id: int, start_at, end_at, status: str = SlotStatus.AVAILABLE.value) -> Slot:
-        slot = Slot(employee_id=employee_id, start_at=start_at, end_at=end_at, status=status)
+        # ``employee_id`` is a real employees.id. Callers resolve via the
+        # employees directory (see slot_service.create_slots).
+        slot = Slot(
+            employee_id=employee_id,
+            start_at=start_at,
+            end_at=end_at,
+            status=status,
+        )
         self.db.add(slot)
         self.db.flush()
         logger.info("Created slot: id=%s | employee_id=%s", slot.id, employee_id)
@@ -56,6 +63,7 @@ class SlotRepository:
         status: str | None = None,
         include_past: bool = False,
     ) -> list[Slot]:
+        # ``employee_id`` is a real employees.id — direct filter on the column.
         query = self.db.query(Slot).filter(Slot.employee_id == employee_id)
         if status is not None:
             query = query.filter(Slot.status == status)

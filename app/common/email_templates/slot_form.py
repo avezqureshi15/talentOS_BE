@@ -5,7 +5,7 @@ _SUBJECT = "Submit Your Availability"
 _REMINDER_SUBJECT = "Reminder: Submit Your Availability"
 _PREHEADER = "Open the form to share your available slots"
 _CTA_TEXT = "Submit Availability"
-_FOOTER_NOTE = "webHyre.ai"
+_FOOTER_NOTE = "TalentOS"
 
 _BODY_INTRO = (
     "Please share your availability using the button below to open the slot submission form."
@@ -39,7 +39,7 @@ def render_slot_form_email(*, recipient_name: str, form_url: str, is_reminder: b
         f"{prefix}{_BODY_INTRO}\n\n"
         f"{form_url}\n\n"
         f"{_EXPIRY_NOTE}\n\n"
-        "Regards,\nwebHyre.ai"
+        "Regards,\nTalentOS"
     )
 
     return subject, plain, html

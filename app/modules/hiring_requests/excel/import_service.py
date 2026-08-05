@@ -9,7 +9,7 @@ from openpyxl import Workbook, load_workbook
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.kafka import publish
+from app.core.kafka import publish_many
 from app.core.logger import get_logger
 from app.modules.applications.application_repository_mutations import create_queued_candidate
 from app.modules.evaluations.evaluation_schema import AsyncEvaluationMessage
@@ -142,6 +142,7 @@ class CandidateImportService:
         skipped_duplicates = 0
         failed: list[dict] = []
         seen_emails: set[str] = set()
+        pending_messages: list[tuple[int, str, str]] = []
 
         for row_idx, values in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
             raw = {
@@ -192,34 +193,47 @@ class CandidateImportService:
                 continue
 
             try:
-                publish(
-                    topic=settings.KAFKA_TOPIC_EVALUATION_ASYNC,
-                    key=application_id,
-                    value=AsyncEvaluationMessage(
-                        application_id=application_id,
-                        job_id=external_job_id,
-                        candidate_name=row.get("name"),
-                        candidate_email=row.get("email"),
-                        candidate_phone=row.get("phone"),
-                        cover_letter=row.get("cover_letter") or None,
-                        resume_url=row.get("resume_url"),
-                        current_ctc=row.get("current_ctc") or None,
-                        expected_ctc=row.get("expected_ctc") or None,
-                        location=row.get("location") or None,
-                        years_of_experience=row.get("years_of_experience") or None,
-                        notice_period=row.get("notice_period") or None,
-                        how_did_you_hear=row.get("how_did_you_hear") or None,
-                        linkedin_url=row.get("linkedin_url") or None,
-                        willing_to_relocate=_parse_relocate(row.get("willing_to_relocate", "")),
-                        candidate_type=row.get("candidate_type") or "REGULAR",
-                    ).model_dump_json(),
+                pending_messages.append(
+                    (
+                        row_idx,
+                        application_id,
+                        AsyncEvaluationMessage(
+                            application_id=application_id,
+                            job_id=external_job_id,
+                            candidate_name=row.get("name"),
+                            candidate_email=row.get("email"),
+                            candidate_phone=row.get("phone"),
+                            cover_letter=row.get("cover_letter") or None,
+                            resume_url=row.get("resume_url"),
+                            current_ctc=row.get("current_ctc") or None,
+                            expected_ctc=row.get("expected_ctc") or None,
+                            location=row.get("location") or None,
+                            years_of_experience=row.get("years_of_experience") or None,
+                            notice_period=row.get("notice_period") or None,
+                            how_did_you_hear=row.get("how_did_you_hear") or None,
+                            linkedin_url=row.get("linkedin_url") or None,
+                            willing_to_relocate=_parse_relocate(row.get("willing_to_relocate", "")),
+                            candidate_type=row.get("candidate_type") or "REGULAR",
+                        ).model_dump_json(),
+                    )
                 )
             except Exception as exc:  # noqa: BLE001
-                logger.error("Import row %s queued but Kafka publish failed: %s", row_idx, exc)
+                logger.error("Import row %s failed to build message: %s", row_idx, exc)
                 failed.append({"row": row_idx, "error": "Candidate saved but failed to queue for evaluation"})
                 continue
 
             imported += 1
+
+        if pending_messages:
+            try:
+                publish_many(
+                    topic=settings.KAFKA_TOPIC_EVALUATION_ASYNC,
+                    messages=[(application_id, value) for _, application_id, value in pending_messages],
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.error("Batch Kafka publish failed for %s messages: %s", len(pending_messages), exc)
+                for row_idx, _, _ in pending_messages:
+                    failed.append({"row": row_idx, "error": "Candidate saved but failed to queue for evaluation"})
 
         logger.info(
             "Candidate import complete: hiring_request=%s | total=%s | imported=%s | duplicates=%s | failed=%s",

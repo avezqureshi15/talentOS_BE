@@ -13,6 +13,7 @@ class Permission(str, Enum):
     HIRING_REQUEST_DELETE = "hiring_request.delete"
     USER_INVITE = "user.invite"
     USER_MANAGE = "user.manage"
+    EMPLOYEE_VIEW = "employee.view"
     TENANT_VIEW = "tenant.view"
     TENANT_EDIT = "tenant.edit"
     API_KEY_MANAGE = "api_key.manage"
@@ -42,6 +43,7 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, set[Permission]] = {
         Permission.HIRING_REQUEST_DELETE,
         Permission.USER_INVITE,
         Permission.USER_MANAGE,
+        Permission.EMPLOYEE_VIEW,
         Permission.API_KEY_MANAGE,
         Permission.SETTINGS_VIEW,
         Permission.SETTINGS_EDIT,
@@ -68,6 +70,7 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, set[Permission]] = {
         Permission.INTERVIEW_PLAN_EDIT,
         Permission.JOB_TEAM_MANAGE,
         Permission.SETTINGS_VIEW,
+        Permission.EMPLOYEE_VIEW,
         Permission.CHAT,
     },
     "recruiter": {
@@ -82,6 +85,7 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, set[Permission]] = {
         Permission.REVIEW_VIEW_ALL,
         Permission.REPORT_EXPORT,
         Permission.SETTINGS_VIEW,
+        Permission.EMPLOYEE_VIEW,
         Permission.CHAT,
     },
     "reviewer": {
@@ -91,6 +95,7 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, set[Permission]] = {
         Permission.HIRING_REQUEST_VIEW,
         Permission.REPORT_EXPORT,
         Permission.SETTINGS_VIEW,
+        Permission.EMPLOYEE_VIEW,
         Permission.CHAT,
     },
 }
@@ -105,6 +110,7 @@ PERMISSION_ENDPOINTS: dict[str, str] = {
     Permission.HIRING_REQUEST_DELETE.value: "DELETE /api/v1/hiring-requests/{id}",
     Permission.USER_INVITE.value: "POST /api/v1/admin/users/invites",
     Permission.USER_MANAGE.value: "PATCH /api/v1/admin/users/{user_id}",
+    Permission.EMPLOYEE_VIEW.value: "GET /api/v1/employees",
     Permission.TENANT_VIEW.value: "GET /api/v1/superadmin/tenants",
     Permission.TENANT_EDIT.value: "PATCH /api/v1/superadmin/tenants/{tenant_id}",
     Permission.API_KEY_MANAGE.value: "GET /api/v1/admin/apps, POST /api/v1/admin/apps",

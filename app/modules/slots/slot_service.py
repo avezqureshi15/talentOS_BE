@@ -5,6 +5,7 @@ from app.common.exceptions.slot_exception import (
     EmployeeNotFoundException,
 )
 from app.core.logger import get_logger
+from app.modules.employees.employee_directory_repository import EmployeeDirectoryRepository
 from app.modules.slots.slot_actions import resolve_slot_action
 from app.modules.slots.slot_model import Slot, SlotStatus
 from app.modules.slots.slot_presenter import now_ist, present_slot_item, to_ist
@@ -18,7 +19,6 @@ from app.modules.slots.slot_schema import (
     SlotsCreateRequest,
     SlotsCreateResponse,
 )
-from app.modules.users.user_repository import UserRepository
 
 logger = get_logger(__name__)
 
@@ -27,17 +27,17 @@ class SlotService:
     def __init__(self, db: Session):
         self.db = db
         self.repository = SlotRepository(db)
-        self.user_repository = UserRepository(db)
+        self.employees = EmployeeDirectoryRepository(db)
 
     def create_slots(self, data: SlotsCreateRequest) -> SlotsCreateResponse:
-        user = self.user_repository.get_by_emp_id(data.emp_id)
-        if not user:
+        employee = self.employees.get_by_emp_id(data.emp_id)
+        if not employee:
             raise EmployeeNotFoundException(data.emp_id)
 
         logger.info("Creating %d slot(s) for emp_id=%s", len(data.slots), data.emp_id)
 
         working_slots: list[Slot] = self.repository.get_slots_for_employee(
-            user.id,
+            employee.id,
             status=None,
             include_past=True,
         )
@@ -82,7 +82,7 @@ class SlotService:
                     continue
 
                 slot = self.repository.create_slot(
-                    employee_id=user.id,
+                    employee_id=employee.id,
                     start_at=slot_data.start_at,
                     end_at=slot_data.end_at,
                 )
@@ -115,12 +115,12 @@ class SlotService:
     def get_slots_for_employees(self, emp_ids: list[str]) -> BatchEmployeeSlotsResponse:
         data: list[EmployeeSlotsResponse] = []
         for emp_id in emp_ids:
-            user = self.user_repository.get_by_emp_id(emp_id)
-            if not user:
+            employee = self.employees.get_by_emp_id(emp_id)
+            if not employee:
                 data.append(EmployeeSlotsResponse(emp_id=emp_id, slots=[]))
                 continue
             slots = self.repository.get_slots_for_employee(
-                user.id,
+                employee.id,
                 status=SlotStatus.AVAILABLE.value,
                 include_past=False,
             )

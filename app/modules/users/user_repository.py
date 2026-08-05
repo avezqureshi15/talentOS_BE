@@ -8,14 +8,6 @@ class UserRepository:
     def __init__(self, db: Session):
         self.db = db
 
-    def get_benched_by_designation(self, designation: str) -> list[User]:
-        return (
-            self.db.query(User)
-            .filter(User.status == "benched", User.designation == designation)
-            .order_by(User.name)
-            .all()
-        )
-
     def search_paginated(
         self,
         query: str | None = None,
@@ -24,7 +16,10 @@ class UserRepository:
         slots_info: bool = False,
         tenant_id: int | None = None,
     ) -> tuple[list[User] | list[tuple[User, int]], int]:
-        base_query = self.db.query(User)
+        from app.modules.employees.employee_model import Employee
+        # Join Employee (left) so we can search across HR fields; users
+        # without a linked employee still show up.
+        base_query = self.db.query(User).outerjoin(Employee, Employee.id == User.employee_id)
 
         if tenant_id is not None:
             base_query = base_query.filter(User.tenant_id == tenant_id)
@@ -34,8 +29,8 @@ class UserRepository:
                 User.name.ilike(f"%{query}%"),
                 User.email.ilike(f"%{query}%"),
                 User.emp_id.ilike(f"%{query}%"),
-                User.designation.ilike(f"%{query}%"),
-                User.department.ilike(f"%{query}%"),
+                Employee.designation.ilike(f"%{query}%"),
+                Employee.department.ilike(f"%{query}%"),
             )
             base_query = base_query.filter(filter_condition)
 
@@ -45,7 +40,7 @@ class UserRepository:
             from app.modules.slots.slot_model import Slot, SlotStatus
             results = (
                 base_query.outerjoin(Slot, and_(
-                    Slot.employee_id == User.id,
+                    Slot.employee_id == User.employee_id,
                     Slot.status == SlotStatus.AVAILABLE.value,
                     Slot.start_at > func.now(),
                 ))

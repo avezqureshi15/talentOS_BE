@@ -10,7 +10,7 @@ from app.db.base import Base
 class JobTeamMember(Base):
     __tablename__ = "job_team_members"
     __table_args__ = (
-        UniqueConstraint("hiring_request_id", "user_id", name="uq_job_team_member"),
+        UniqueConstraint("hiring_request_id", "employee_id", name="uq_job_team_member"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -20,8 +20,8 @@ class JobTeamMember(Base):
         nullable=False,
         index=True,
     )
-    user_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"),
+    employee_id: Mapped[int] = mapped_column(
+        ForeignKey("employees.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
