@@ -46,6 +46,7 @@ def notify_form(
         raise HTTPException(status_code=429, detail=str(exc))
 
     try:
+        # data.user_id is wire-name legacy; value is now an employees.id.
         if data.type == FormType.REVIEW.value:
             background_tasks.add_task(
                 send_review_mail_task, data.user_id, form.id,
@@ -83,12 +84,12 @@ def remind_form(
     try:
         if form.type == FormType.REVIEW.value:
             background_tasks.add_task(
-                send_review_mail_task, form.user.id, form.id,
+                send_review_mail_task, form.employee_id, form.id,
                 None, None, None, is_reminder=True,
             )
         else:
             background_tasks.add_task(
-                send_slot_mail_task, form.user.id, form.id,
+                send_slot_mail_task, form.employee_id, form.id,
                 is_reminder=True,
             )
         db.commit()

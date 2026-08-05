@@ -5,10 +5,10 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.session import get_db
+from app.modules.employees.employee_directory_repository import EmployeeDirectoryRepository
 from app.modules.forms.form_mail import send_slot_mail_task
 from app.modules.forms.form_schema import AskFormRequest, AskFormResponse
 from app.modules.forms.form_service import FormService
-from app.modules.users.user_repository import UserRepository
 
 router = APIRouter(prefix=settings.API_V1_PREFIX, tags=["forms"])
 
@@ -43,13 +43,13 @@ def _generate_review_forms(data: AskFormRequest, db: Session) -> AskFormResponse
     if not round_detail:
         raise HTTPException(status_code=404, detail="Round not found")
 
-    user_repo = UserRepository(db)
+    employees = EmployeeDirectoryRepository(db)
     service = FormService(db)
     results: list[AskFormResultItem] = []
 
     for emp_id in data.emp_ids:
-        user = user_repo.get_by_emp_id(emp_id)
-        if not user:
+        employee = employees.get_by_emp_id(emp_id)
+        if not employee:
             results.append(AskFormResultItem(emp_id=emp_id, status="FAILED", message="Employee not found"))
             continue
         try:
@@ -59,8 +59,8 @@ def _generate_review_forms(data: AskFormRequest, db: Session) -> AskFormResponse
                 candidate_id=data.candidate_id,
                 candidate_name=round_detail.candidate or "Candidate",
                 round_name=round_detail.round or "Interview",
-                interviewer_name=user.name or emp_id,
-                interviewer_email=user.email or "",
+                interviewer_name=employee.name or emp_id,
+                interviewer_email=employee.email or "",
             )
             results.append(AskFormResultItem(emp_id=emp_id, status="SUCCESS", message="Review form sent"))
         except ValueError as exc:
