@@ -25,13 +25,40 @@ from app.modules.settings.settings_model import TenantSetting
 logger = get_logger(__name__)
 
 # Keys an admin may manage from the superadmin dashboard.
-MANAGEABLE_API_KEYS: list[str] = [
-    "RH_API_KEY",
-    "SERVICE_API_KEY",
-    "MEETMIND_API_TOKEN",
-    "SUPABASE_SERVICE_ROLE_KEY",
-    "RESEND_API_KEY",
+MANAGEABLE_API_KEY_META: list[dict[str, str]] = [
+    {
+        "key": "RH_API_KEY",
+        "label": "Recruitment hub",
+        "icon": "bx bx-code-alt",
+        "hint": "Bearer key used for the Recruitment hub service (jobs, candidates, screening, interviews).",
+    },
+    {
+        "key": "SERVICE_API_KEY",
+        "label": "Incoming service callbacks",
+        "icon": "bx bx-shield-quarter",
+        "hint": "Shared secret the ai-recruitment-poc uses to call talentOS internal endpoints.",
+    },
+    {
+        "key": "MEETMIND_API_TOKEN",
+        "label": "MeetMind",
+        "icon": "bx bx-code-alt",
+        "hint": "X-API-Key used when registering Google Meet interview schedules with MeetMind.",
+    },
+    {
+        "key": "SUPABASE_SERVICE_ROLE_KEY",
+        "label": "Supabase Storage",
+        "icon": "bx bx-code-alt",
+        "hint": "Service-role key for downloading resumes from private Supabase Storage buckets.",
+    },
+    {
+        "key": "RESEND_API_KEY",
+        "label": "Resend (email)",
+        "icon": "bx bx-envelope",
+        "hint": "API key used for transactional emails.",
+    },
 ]
+
+MANAGEABLE_API_KEYS: list[str] = [m["key"] for m in MANAGEABLE_API_KEY_META]
 
 PREFIX = "enc:v1:"
 

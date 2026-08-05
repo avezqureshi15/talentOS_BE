@@ -32,6 +32,7 @@ def get_current_user(
             auth_provider="api_key",
             is_active=True,
             permissions=permissions,
+            is_api_key=True,
         )
 
     from app.modules.auth.auth_service import AuthService
@@ -58,3 +59,20 @@ def _require_superadmin(current_user: UserInfo = Depends(get_current_user)) -> U
 
 
 RequireSuperAdmin = _require_superadmin
+
+
+def require_human_user(current_user: UserInfo = Depends(get_current_user)) -> UserInfo:
+    """Reject requests authenticated via an API key.
+
+    Use this on endpoints that write rows with FKs to `users.id` or that
+    otherwise only make sense for a real human session (invites, chats,
+    hiring-request ownership). API keys still authenticate for every other
+    endpoint they hold permissions for — this dependency only guards the
+    specific handlers it decorates. It never mutates the key itself.
+    """
+    if current_user.is_api_key:
+        raise HTTPException(
+            status_code=403,
+            detail="This endpoint is not available for API-key callers.",
+        )
+    return current_user

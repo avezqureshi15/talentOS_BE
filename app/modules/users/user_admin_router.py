@@ -280,6 +280,8 @@ def create_invite(
     db: Session = Depends(get_db),
     current_user: UserInfo = Depends(require_permission(Permission.USER_MANAGE)),
 ):
+    if current_user.is_api_key:
+        raise HTTPException(status_code=403, detail="Invites cannot be created by an API key")
     tid = _resolve_tenant(current_user, body.tenant_id)
     _validate_role(db, body.role)
 

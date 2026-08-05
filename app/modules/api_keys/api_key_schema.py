@@ -7,11 +7,19 @@ class CreateAppRequest(BaseModel):
     name: str
     description: str | None = None
     tenant_id: int | None = None
+    expires_at: datetime | None = None
 
 
 class UpdateAppRequest(BaseModel):
     name: str | None = None
     description: str | None = None
+    expires_at: datetime | None = None
+
+
+class CreatedByBrief(BaseModel):
+    id: int
+    name: str | None = None
+    email: str | None = None
 
 
 class ApiKeyResponse(BaseModel):
@@ -25,6 +33,7 @@ class ApiKeyResponse(BaseModel):
     expires_at: datetime | None = None
     last_used_at: datetime | None = None
     created_at: datetime
+    created_by: CreatedByBrief | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

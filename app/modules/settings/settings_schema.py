@@ -31,3 +31,14 @@ class ApiKeysResponse(BaseModel):
 class UpdateApiKeysRequest(BaseModel):
     keys: list[SettingEntry]
     tenant_id: int | None = None
+
+
+class ManageableApiKeyMeta(BaseModel):
+    key: str
+    label: str
+    icon: str
+    hint: str
+
+
+class ManageableApiKeysResponse(BaseModel):
+    keys: list[ManageableApiKeyMeta]

@@ -65,6 +65,7 @@ class UserInfo(BaseModel):
     auth_provider: str
     is_active: bool
     permissions: list[str] = []
+    is_api_key: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 

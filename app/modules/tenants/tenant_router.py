@@ -32,6 +32,8 @@ def create_tenant(
     db: Session = Depends(get_db),
     current_user: UserInfo = Depends(require_permission(Permission.TENANT_EDIT)),
 ):
+    if current_user.is_api_key:
+        raise HTTPException(status_code=403, detail="Tenants cannot be created by an API key")
     service = TenantService(db)
     try:
         return service.create_tenant(

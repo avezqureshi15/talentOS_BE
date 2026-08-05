@@ -23,6 +23,8 @@ def create_hiring_request(
     db: Session = Depends(get_db),
     current_user: UserInfo = Depends(get_current_user),
 ):
+    if current_user.is_api_key:
+        raise HTTPException(status_code=403, detail="Hiring requests cannot be created by an API key")
     if not can_create_job(db, current_user):
         raise HTTPException(status_code=403, detail="Missing required permission: hiring_request.create")
     service = HiringRequestService(db)

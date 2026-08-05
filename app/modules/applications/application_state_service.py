@@ -60,12 +60,22 @@ class ApplicationStateService:
             "Transition applied: candidate_id=%s | trigger=%s | final_verdict=%s | status=%s",
             candidate_id, trigger, t.set_final_verdict, t.set_status,
         )
-        if t.set_final_verdict in ("SELECTED", "REJECTED"):
+        if t.set_final_verdict in ("SELECTED", "REJECTED", "ON_HOLD"):
+            _verdict_event_name = {
+                "SELECTED": "Candidate Selected",
+                "REJECTED": "Candidate Rejected",
+                "ON_HOLD": "Candidate Put On Hold",
+            }[t.set_final_verdict]
+            _verdict_state_code = {
+                "SELECTED": "FINAL_SELECTED",
+                "REJECTED": "FINAL_REJECTED",
+                "ON_HOLD": "FINAL_ON_HOLD",
+            }[t.set_final_verdict]
             EventService(self.db).create_event(EventCreate(
                 entity_type="CANDIDATE",
                 entity_id=str(candidate_id),
-                event_name="Candidate Selected" if t.set_final_verdict == "SELECTED" else "Candidate Rejected",
-                state_code="FINAL_SELECTED" if t.set_final_verdict == "SELECTED" else "FINAL_REJECTED",
+                event_name=_verdict_event_name,
+                state_code=_verdict_state_code,
                 actor_type="HR",
                 candidate_id=candidate_id,
                 event_metadata={"final_verdict": t.set_final_verdict},
@@ -76,11 +86,13 @@ class ApplicationStateService:
                     from app.modules.notifications.notification_model import NotificationType
                     from app.modules.notifications.notification_service import NotificationService
 
+                    _verdict_display = t.set_final_verdict.replace("_", " ").title()
+                    _verdict_lower = t.set_final_verdict.replace("_", " ").lower()
                     NotificationService(self.db).notify_job_team(
                         jd_uuid,
                         notification_type=NotificationType.FINAL_VERDICT.value,
-                        title=f"Candidate {t.set_final_verdict.title()}",
-                        body=f"{candidate.candidate_name or f'Candidate #{candidate_id}'} was {t.set_final_verdict.lower()}.",
+                        title=f"Candidate {_verdict_display}",
+                        body=f"{candidate.candidate_name or f'Candidate #{candidate_id}'} was {_verdict_lower}.",
                         action_url=f"/hiring-requests/{jd_uuid}/candidates/{candidate_id}",
                         action_label="View candidate",
                         candidate_id=candidate_id,
@@ -150,13 +162,28 @@ class ApplicationStateService:
         return self.trigger_transition(f"final.selection.{verdict}", candidate_id=candidate_id)
 
     def update_candidate_status(self, candidate_id: int, new_status: str) -> EvaluationResponse:
+        # Capture from-state before the mutation so the event metadata can
+        # describe the transition rather than just the destination.
+        existing = self.repo.get_by_candidate_id(candidate_id)
+        prev_status = existing.status if existing else None
+
         candidate = self.repo.update_status(candidate_id, new_status)
         if not candidate:
-            existing = self.repo.get_by_candidate_id(candidate_id)
             if not existing:
                 raise ApplicationNotFoundException(candidate_id)
             raise CandidateFinalizedException(candidate_id, existing.final_verdict)
         self.db.commit()
         self.db.refresh(candidate)
         logger.info("Candidate status updated: candidate_id=%s | status=%s", candidate_id, new_status)
+
+        if prev_status != new_status:
+            EventService(self.db).create_event(EventCreate(
+                entity_type="CANDIDATE",
+                entity_id=str(candidate_id),
+                event_name="Candidate Status Changed",
+                state_code="STATUS_CHANGED",
+                actor_type="HR",
+                candidate_id=candidate_id,
+                event_metadata={"from_status": prev_status, "to_status": new_status},
+            ))
         return EvaluationResponse.model_validate(candidate)

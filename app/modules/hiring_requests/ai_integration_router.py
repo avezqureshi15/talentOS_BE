@@ -11,6 +11,8 @@ from app.core.permissions import Permission
 from app.db.session import get_db
 from app.modules.hiring_requests.hiring_request_model import HiringRequest
 from app.modules.evaluations.evaluation_model import Candidate
+from app.modules.events.event_schema import EventCreate
+from app.modules.events.event_service import EventService
 from app.modules.reviews.review_model import Review
 from app.modules.rounds.round_model import Round
 from app.modules.talentos_integration.talentos_result_service import (
@@ -186,6 +188,20 @@ async def move_to_ai_screening(
         candidate.status = "SCREENING_ROUND_SCHEDULED"
         candidate.stage = "AI_SCREENING"
         db.commit()
+        EventService(db).create_event(EventCreate(
+            entity_type="CANDIDATE",
+            entity_id=str(candidate.id),
+            candidate_id=candidate.id,
+            event_name="Screening Round Scheduled",
+            state_code="SCREENING_ROUND_SCHEDULED",
+            actor_type="SYSTEM",
+            event_metadata={
+                "stage": "AI_SCREENING",
+                "source": "ai_integration",
+                "round_id": str(round_obj.id),
+                "screening_call_id": result.get("screening_call_id"),
+            },
+        ))
     except Exception:
         db.rollback()
         raise
@@ -261,6 +277,20 @@ async def move_to_ai_interview(
         candidate.status = "INTERVIEW_SCHEDULED"
         candidate.stage = "AI_INTERVIEW"
         db.commit()
+        EventService(db).create_event(EventCreate(
+            entity_type="CANDIDATE",
+            entity_id=str(candidate.id),
+            candidate_id=candidate.id,
+            event_name="Interview Scheduled",
+            state_code="INTERVIEW_SCHEDULED",
+            actor_type="SYSTEM",
+            event_metadata={
+                "stage": "AI_INTERVIEW",
+                "source": "ai_integration",
+                "round_id": str(round_obj.id),
+                "interview_url": interview_url,
+            },
+        ))
     except Exception:
         db.rollback()
         raise

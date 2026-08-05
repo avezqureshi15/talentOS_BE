@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.session import get_db
-from app.modules.auth.auth_dependencies import get_current_user
+from app.modules.auth.auth_dependencies import get_current_user, require_human_user
 from app.modules.auth.auth_schema import UserInfo
 from app.modules.chat.chat_schema import ChatResponse, ChatStreamRequest, MessageResponse
 from app.modules.chat.chat_service import (
@@ -33,7 +33,7 @@ router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/chat", tags=["chat"])
 async def chat_stream(
     body: ChatStreamRequest,
     db: Session = Depends(get_db),
-    current_user: UserInfo = Depends(get_current_user),
+    current_user: UserInfo = Depends(require_human_user),
 ):
     chat = get_or_create_chat(db, body.chat_id, current_user.id, body.message)
     save_message(db, chat.id, "user", body.message)
@@ -61,7 +61,7 @@ def get_chats(
     limit: int = Query(5, ge=1, le=50, description="Items per page"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
     db: Session = Depends(get_db),
-    current_user: UserInfo = Depends(get_current_user),
+    current_user: UserInfo = Depends(require_human_user),
 ):
     chats, has_more = list_chats_by_user(db, current_user.id, limit, offset)
     items = [ChatResponse.model_validate(c).model_dump() for c in chats]
@@ -74,7 +74,7 @@ def get_messages(
     limit: int = Query(20, ge=1, le=100, description="Max messages per page"),
     before: int | None = Query(None, ge=0, description="Cursor: last message ID from previous page"),
     db: Session = Depends(get_db),
-    current_user: UserInfo = Depends(get_current_user),
+    current_user: UserInfo = Depends(require_human_user),
 ):
     chat = get_chat_owned_by_user(db, chat_id, current_user.id)
     if not chat:
@@ -92,7 +92,7 @@ def patch_chat_endpoint(
     chat_id: UUID,
     body: UpdateTitleRequest,
     db: Session = Depends(get_db),
-    current_user: UserInfo = Depends(get_current_user),
+    current_user: UserInfo = Depends(require_human_user),
 ):
     chat = get_chat_owned_by_user(db, chat_id, current_user.id)
     if not chat:
@@ -106,7 +106,7 @@ def patch_chat_endpoint(
 def delete_chat_endpoint(
     chat_id: UUID,
     db: Session = Depends(get_db),
-    current_user: UserInfo = Depends(get_current_user),
+    current_user: UserInfo = Depends(require_human_user),
 ):
     chat = get_chat_owned_by_user(db, chat_id, current_user.id)
     if not chat:

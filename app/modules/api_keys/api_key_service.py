@@ -2,6 +2,7 @@ import hashlib
 import secrets
 from datetime import datetime, timezone
 
+from fastapi import HTTPException
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
@@ -13,10 +14,12 @@ from app.modules.api_keys.api_key_schema import (
     ApiKeyDetailResponse,
     ApiKeyListResponse,
     ApiKeyResponse,
+    CreatedByBrief,
     PermissionInfo,
 )
 from app.modules.tenants.tenant_model import Tenant
 from app.modules.users.permission_model import PermissionModel
+from app.modules.users.user_model import User
 
 logger = get_logger(__name__)
 
@@ -32,6 +35,29 @@ def _generate_api_key() -> tuple[str, str, str]:
     return full_key, key_hash, key_prefix
 
 
+def _validate_permission_codes(db: Session, codes: list[str]) -> list[str]:
+    """Return the input codes filtered to those known to `PermissionModel`.
+
+    Raises 400 with the unknown codes if any are rejected. Duplicates in the
+    input are collapsed. Order is not preserved (permissions are unordered).
+    """
+    unique = list(dict.fromkeys(codes))
+    if not unique:
+        return []
+    known = set(
+        db.execute(
+            select(PermissionModel.code).where(PermissionModel.code.in_(unique))
+        ).scalars().all()
+    )
+    unknown = [c for c in unique if c not in known]
+    if unknown:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown permission codes: {sorted(unknown)}",
+        )
+    return [c for c in unique if c in known]
+
+
 class ApiKeyService:
     def __init__(self, db: Session):
         self.db = db
@@ -45,7 +71,21 @@ class ApiKeyService:
         ).all()
         return {row.id: row.name for row in rows}
 
-    def _api_key_to_response(self, key: ApiKey, tenant_names: dict[int, str]) -> ApiKeyResponse:
+    def _creator_briefs(self, user_ids: set[int | None]) -> dict[int, CreatedByBrief]:
+        ids = {uid for uid in user_ids if uid is not None and uid > 0}
+        if not ids:
+            return {}
+        rows = self.db.execute(
+            select(User.id, User.name, User.email).where(User.id.in_(ids))
+        ).all()
+        return {row.id: CreatedByBrief(id=row.id, name=row.name, email=row.email) for row in rows}
+
+    def _api_key_to_response(
+        self,
+        key: ApiKey,
+        tenant_names: dict[int, str],
+        creators: dict[int, CreatedByBrief] | None = None,
+    ) -> ApiKeyResponse:
         return ApiKeyResponse(
             id=key.id,
             name=key.name,
@@ -57,14 +97,16 @@ class ApiKeyService:
             expires_at=key.expires_at,
             last_used_at=key.last_used_at,
             created_at=key.created_at,
+            created_by=(creators or {}).get(key.created_by_user_id) if key.created_by_user_id else None,
         )
 
     def create_app(
         self,
         name: str,
         description: str | None,
-        created_by_user_id: int,
+        created_by_user_id: int | None,
         tenant_id: int | None,
+        expires_at: datetime | None = None,
     ) -> ApiKeyCreatedResponse:
         full_key, key_hash, key_prefix = _generate_api_key()
         now = datetime.now(timezone.utc)
@@ -76,6 +118,7 @@ class ApiKeyService:
             created_by_user_id=created_by_user_id,
             tenant_id=tenant_id,
             is_active=True,
+            expires_at=expires_at,
             created_at=now,
             updated_at=now,
         )
@@ -90,20 +133,24 @@ class ApiKeyService:
             for code in default_perms:
                 self.db.add(ApiKeyPermission(api_key_id=api_key.id, permission_code=code))
         else:
-            for code in PERMISSION_META:
-                self.db.add(ApiKeyPermission(api_key_id=api_key.id, permission_code=code))
+            logger.warning(
+                "No default permissions found in DB — API key id=%d created with zero permissions. "
+                "Assign explicit permissions via the update-permissions endpoint before use.",
+                api_key.id,
+            )
 
         self.db.commit()
         self.db.refresh(api_key)
         logger.info(
-            "Created API app: id=%d name=%s by user_id=%d tenant_id=%s",
+            "Created API app: id=%d name=%s by user_id=%s tenant_id=%s",
             api_key.id,
             name,
             created_by_user_id,
             tenant_id,
         )
         tenant_names = self._tenant_names({api_key.tenant_id})
-        response = self._api_key_to_response(api_key, tenant_names)
+        creators = self._creator_briefs({api_key.created_by_user_id})
+        response = self._api_key_to_response(api_key, tenant_names, creators)
         return ApiKeyCreatedResponse(**response.model_dump(), full_key=full_key)
 
     def list_apps(
@@ -129,7 +176,8 @@ class ApiKeyService:
         rows = self.db.execute(query.offset(offset).limit(per_page)).scalars().all()
 
         tenant_names = self._tenant_names({r.tenant_id for r in rows})
-        data = [self._api_key_to_response(r, tenant_names) for r in rows]
+        creators = self._creator_briefs({r.created_by_user_id for r in rows})
+        data = [self._api_key_to_response(r, tenant_names, creators) for r in rows]
         has_more = (page * per_page) < total
         return ApiKeyListResponse(data=data, total=total, page=page, per_page=per_page, has_more=has_more)
 
@@ -171,7 +219,8 @@ class ApiKeyService:
         ]
 
         tenant_names = self._tenant_names({api_key.tenant_id})
-        response = self._api_key_to_response(api_key, tenant_names)
+        creators = self._creator_briefs({api_key.created_by_user_id})
+        response = self._api_key_to_response(api_key, tenant_names, creators)
         return ApiKeyDetailResponse(**response.model_dump(), permissions=permissions)
 
     def update_app(
@@ -180,6 +229,8 @@ class ApiKeyService:
         name: str | None,
         description: str | None,
         tenant_id: int | None = None,
+        expires_at: datetime | None = None,
+        clear_expiry: bool = False,
     ) -> ApiKeyResponse | None:
         api_key = self._get_scoped(app_id, tenant_id)
         if not api_key:
@@ -189,12 +240,17 @@ class ApiKeyService:
             api_key.name = name
         if description is not None:
             api_key.description = description
+        if clear_expiry:
+            api_key.expires_at = None
+        elif expires_at is not None:
+            api_key.expires_at = expires_at
         api_key.updated_at = datetime.now(timezone.utc)
         self.db.commit()
         self.db.refresh(api_key)
 
         tenant_names = self._tenant_names({api_key.tenant_id})
-        return self._api_key_to_response(api_key, tenant_names)
+        creators = self._creator_briefs({api_key.created_by_user_id})
+        return self._api_key_to_response(api_key, tenant_names, creators)
 
     def revoke_app(self, app_id: int, tenant_id: int | None = None) -> bool:
         api_key = self._get_scoped(app_id, tenant_id)
@@ -220,7 +276,8 @@ class ApiKeyService:
         logger.info("Rotated API key: id=%d", app_id)
 
         tenant_names = self._tenant_names({api_key.tenant_id})
-        response = self._api_key_to_response(api_key, tenant_names)
+        creators = self._creator_briefs({api_key.created_by_user_id})
+        response = self._api_key_to_response(api_key, tenant_names, creators)
         return ApiKeyCreatedResponse(**response.model_dump(), full_key=full_key)
 
     def update_permissions(
@@ -233,15 +290,17 @@ class ApiKeyService:
         if not api_key:
             return None
 
+        validated = _validate_permission_codes(self.db, permission_codes)
+
         self.db.execute(
             delete(ApiKeyPermission).where(ApiKeyPermission.api_key_id == app_id)
         )
 
-        for code in permission_codes:
+        for code in validated:
             self.db.add(ApiKeyPermission(api_key_id=app_id, permission_code=code))
 
         self.db.commit()
-        logger.info("Updated permissions for API app: id=%d codes=%s", app_id, permission_codes)
+        logger.info("Updated permissions for API app: id=%d codes=%s", app_id, validated)
         return self.get_app(app_id, tenant_id=tenant_id)
 
     @staticmethod
@@ -261,7 +320,7 @@ class ApiKeyService:
             return None
 
         api_key.last_used_at = datetime.now(timezone.utc)
-        db.flush()
+        db.commit()
         return api_key
 
     @staticmethod
@@ -271,9 +330,4 @@ class ApiKeyService:
                 ApiKeyPermission.api_key_id == api_key_id
             )
         ).scalars().all()
-
-        if not rows:
-            from app.core.permissions import Permission
-            return sorted(p.value for p in Permission)
-
         return sorted(rows)

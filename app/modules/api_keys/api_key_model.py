@@ -14,7 +14,7 @@ class ApiKey(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     key_hash: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     key_prefix: Mapped[str] = mapped_column(String(8), nullable=False)
-    created_by_user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    created_by_user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
     tenant_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("tenants.id"), nullable=True, index=True
     )

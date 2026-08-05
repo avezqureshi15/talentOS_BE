@@ -41,8 +41,9 @@ def create_app(
     result = service.create_app(
         name=body.name,
         description=body.description,
-        created_by_user_id=current_user.id,
+        created_by_user_id=None if current_user.is_api_key else current_user.id,
         tenant_id=_own_tenant_id(current_user),
+        expires_at=body.expires_at,
     )
     return result
 
@@ -80,7 +81,13 @@ def update_app(
     current_user: UserInfo = Depends(require_permission(Permission.API_KEY_MANAGE)),
 ):
     service = ApiKeyService(db)
-    result = service.update_app(app_id, name=body.name, description=body.description, tenant_id=_own_tenant_id(current_user))
+    result = service.update_app(
+        app_id,
+        name=body.name,
+        description=body.description,
+        tenant_id=_own_tenant_id(current_user),
+        expires_at=body.expires_at,
+    )
     if not result:
         raise HTTPException(status_code=404, detail="App not found")
     return result
@@ -92,6 +99,7 @@ def revoke_app(
     db: Session = Depends(get_db),
     current_user: UserInfo = Depends(require_permission(Permission.API_KEY_MANAGE)),
 ):
+    """Soft-delete: sets `is_active=false`. The row and its permission grants are preserved for audit."""
     service = ApiKeyService(db)
     ok = service.revoke_app(app_id, tenant_id=_own_tenant_id(current_user))
     if not ok:

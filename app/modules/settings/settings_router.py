@@ -6,8 +6,11 @@ from app.db.session import get_db
 from app.core.authorization import require_permission
 from app.core.permissions import Permission
 from app.modules.auth.auth_schema import UserInfo
+from app.core.secrets import MANAGEABLE_API_KEY_META
 from app.modules.settings.settings_schema import (
     ApiKeysResponse,
+    ManageableApiKeyMeta,
+    ManageableApiKeysResponse,
     SettingsResponse,
     UpdateApiKeysRequest,
     UpdateSettingsRequest,
@@ -59,6 +62,21 @@ def update_settings(
 
 
 # ── API keys (superadmin only) ────────────────────────────────────────────
+
+
+@router.get("/api-keys/manageable", response_model=ManageableApiKeysResponse)
+def get_manageable_api_keys(
+    current_user: UserInfo = Depends(require_permission(Permission.SETTINGS_VIEW)),
+):
+    """Return the catalogue of API keys an admin may set (labels/icons/hints).
+
+    The FE uses this to render the settings section without hardcoding the list.
+    Superadmin-only, same as the value endpoints below.
+    """
+    _require_superadmin(current_user)
+    return ManageableApiKeysResponse(
+        keys=[ManageableApiKeyMeta(**meta) for meta in MANAGEABLE_API_KEY_META]
+    )
 
 
 @router.get("/api-keys", response_model=ApiKeysResponse)

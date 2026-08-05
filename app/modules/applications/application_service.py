@@ -14,6 +14,8 @@ from app.modules.applications.application_schema import ApplicationCreate
 from app.modules.applications.application_state_service import ApplicationStateService
 from app.modules.evaluations.evaluation_schema import EvaluationResponse, WebhookRecord
 from app.modules.events.event_repository import EventRepository
+from app.modules.events.event_schema import EventCreate
+from app.modules.events.event_service import EventService
 from app.modules.rounds.round_model import Round
 
 logger = get_logger(__name__)
@@ -214,10 +216,31 @@ class ApplicationService:
         candidate = self.db.query(Candidate).filter(Candidate.id == candidate_id).first()
         if not candidate:
             raise HTTPException(status_code=404, detail="Candidate not found")
+        prev_stage = candidate.stage
+        prev_status = candidate.status
+        prev_round_id = candidate.current_round_id
         candidate.stage = data.stage
         candidate.status = data.status
         candidate.current_round_id = data.current_round_id
         self.db.commit()
+
+        if (prev_status, prev_stage, prev_round_id) != (data.status, data.stage, data.current_round_id):
+            EventService(self.db).create_event(EventCreate(
+                entity_type="CANDIDATE",
+                entity_id=str(candidate_id),
+                event_name="Candidate Round Status Updated",
+                state_code="ROUND_STATUS_UPDATED",
+                actor_type="HR",
+                candidate_id=candidate_id,
+                event_metadata={
+                    "from_status": prev_status,
+                    "to_status": data.status,
+                    "from_stage": prev_stage,
+                    "to_stage": data.stage,
+                    "from_round_id": str(prev_round_id) if prev_round_id else None,
+                    "to_round_id": str(data.current_round_id) if data.current_round_id else None,
+                },
+            ))
 
         return {"success": True}
 
@@ -226,8 +249,20 @@ class ApplicationService:
         candidate = self.db.query(Candidate).filter(Candidate.id == candidate_id).first()
         if not candidate:
             raise HTTPException(status_code=404, detail="Candidate not found")
+        prev_archived = bool(candidate.archived)
         candidate.archived = archived
         self.db.commit()
+
+        if prev_archived != bool(archived):
+            EventService(self.db).create_event(EventCreate(
+                entity_type="CANDIDATE",
+                entity_id=str(candidate_id),
+                event_name="Candidate Archived" if archived else "Candidate Unarchived",
+                state_code="CANDIDATE_ARCHIVED" if archived else "CANDIDATE_UNARCHIVED",
+                actor_type="HR",
+                candidate_id=candidate_id,
+                event_metadata={"archived": bool(archived)},
+            ))
         return {"success": True, "archived": bool(candidate.archived)}
 
     def update_candidate_status(self, candidate_id: int, new_status: str) -> EvaluationResponse:
