@@ -59,14 +59,14 @@ logger = get_logger(__name__)
 
 
 def run_migrations():
-    alembic_dir = Path(__file__).resolve().parent.parent / "alembic"
-    if not (alembic_dir / "alembic.ini").exists():
+    project_dir = Path(__file__).resolve().parent.parent
+    if not (project_dir / "alembic.ini").exists():
         logger.warning("alembic.ini not found, skipping auto-migration")
         return
     try:
         result = subprocess.run(
             [sys.executable, "-m", "alembic", "upgrade", "head"],
-            cwd=alembic_dir.parent,
+            cwd=project_dir,
             capture_output=True, text=True, timeout=30,
         )
         if result.returncode == 0:
