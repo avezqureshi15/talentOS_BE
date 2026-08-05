@@ -93,6 +93,17 @@ def upgrade() -> None:
     # --- CASCADE : events.candidate_id → candidates.id (added by c9cefeb0e6c2
     # on fresh DBs, still missing on DBs stamped at/above 0072) ---
     if not _has_fk("events", "fk_events_candidate_id"):
+        # events has no FKs, so 0076's TRUNCATE CASCADE never reached it —
+        # stale rows may reference candidates that 0076 truncated. Purge
+        # orphans before adding the FK, else the constraint creation fails
+        # with a ForeignKeyViolation on real data.
+        op.execute(
+            """
+            DELETE FROM events e
+            WHERE e.candidate_id IS NOT NULL
+              AND NOT EXISTS (SELECT 1 FROM candidates c WHERE c.id = e.candidate_id)
+            """
+        )
         op.create_foreign_key(
             "fk_events_candidate_id", "events", "candidates",
             ["candidate_id"], ["id"],
