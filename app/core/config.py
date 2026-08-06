@@ -123,10 +123,11 @@ class Settings(BaseSettings):
             if self.APP_ENV in ("development", "uat", "staging")
             else _PROD_TIMING
         )
-        self.FORM_REMINDER_HOURS = timing["FORM_REMINDER_HOURS"]
-        self.FORM_ESCALATION_HOURS = timing["FORM_ESCALATION_HOURS"]
-        self.FORM_EXPIRY_HOURS = timing["FORM_EXPIRY_HOURS"]
-        self.AI_ROUND_EVALUATION_DELAY_MINUTES = timing["AI_ROUND_EVALUATION_DELAY_MINUTES"]
+        for key, value in timing.items():
+            # Explicitly-set env vars (FORM_REMINDER_HOURS etc.) override the
+            # APP_ENV defaults; unset fields fall back to the env's timing.
+            if key not in self.model_fields_set:
+                setattr(self, key, value)
         return self
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "case_sensitive": True}
