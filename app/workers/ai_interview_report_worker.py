@@ -27,6 +27,7 @@ from sqlalchemy.exc import OperationalError
 
 from app.core.config import settings
 from app.core.kafka import ConsumedMessage, consume, publish
+from app.core.logger import setup_logging
 from app.db.session import SessionLocal
 from app.modules.ai.interview_report_schema import InterviewReportMessage
 from app.modules.ai.interview_report_transform import (
@@ -142,7 +143,7 @@ def _handler_with_retry(msg: ConsumedMessage) -> None:
 
 
 def main() -> None:
-    logging.basicConfig(level=logging.INFO)
+    setup_logging()
     logger.info(
         "Starting AI interview report worker — topic=%s",
         settings.KAFKA_TOPIC_INTERVIEW_REPORT_ASYNC,

@@ -44,3 +44,13 @@ def test_explicit_override_wins_in_production():
     s = _settings(APP_ENV="production", FORM_REMINDER_HOURS=1)
     assert s.FORM_REMINDER_HOURS == 1
     assert s.FORM_ESCALATION_HOURS == 3
+
+
+def test_log_timezone_defaults_to_ist():
+    s = _settings()
+    assert s.LOG_TIMEZONE == "Asia/Kolkata"
+
+
+def test_log_timezone_overridable():
+    s = _settings(LOG_TIMEZONE="UTC")
+    assert s.LOG_TIMEZONE == "UTC"

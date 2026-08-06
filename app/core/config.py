@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     APP_ENV: str = "development"
     LOG_LEVEL: str = "INFO"
+    # Timezone for log line timestamps (e.g. Asia/Kolkata for IST).
+    # DB timestamps and API payloads remain UTC regardless of this.
+    LOG_TIMEZONE: str = "Asia/Kolkata"
     APP_NAME: str = "talentOS API"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = False

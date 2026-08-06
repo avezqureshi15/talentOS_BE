@@ -1,6 +1,8 @@
 import logging
 import sys
+from datetime import datetime
 from typing import Union
+from zoneinfo import ZoneInfo
 
 from .config import settings
 
@@ -22,6 +24,19 @@ _LEVEL_COLOR = {
 
 
 class _ColoredFormatter(logging.Formatter):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        try:
+            self._tz = ZoneInfo(settings.LOG_TIMEZONE)
+        except Exception:
+            self._tz = None
+
+    def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
+        if self._tz is not None:
+            record_time = datetime.fromtimestamp(record.created, self._tz)
+            return record_time.strftime(datefmt) if datefmt else record_time.isoformat()
+        return super().formatTime(record, datefmt)
+
     def format(self, record: logging.LogRecord) -> str:
         level_color = _LEVEL_COLOR.get(record.levelno, _RESET)
         original_levelname = record.levelname
