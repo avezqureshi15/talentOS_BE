@@ -68,7 +68,7 @@ def _run_expiry_job() -> None:
 
 
 def _cron_trigger(job_id: str) -> IntervalTrigger | CronTrigger:
-    if settings.APP_ENV == "development":
+    if settings.APP_ENV in ("development", "uat", "staging"):
         return IntervalTrigger(seconds=3)
     triggers = {
         "form_reminder": CronTrigger(hour="*", minute=0),

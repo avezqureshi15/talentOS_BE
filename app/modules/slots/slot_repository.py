@@ -24,8 +24,9 @@ class SlotRepositoryProtocol(Protocol):
     def update_slot_times(
         self,
         slot: Slot,
-        end_at: datetime | None,
-        status: str | None,
+        start_at: datetime | None = None,
+        end_at: datetime | None = None,
+        status: str | None = None,
     ) -> Slot: ...
 
 
@@ -74,13 +75,16 @@ class SlotRepository:
     def update_slot_times(
         self,
         slot: Slot,
+        start_at: datetime | None = None,
         end_at: datetime | None = None,
         status: str | None = None,
     ) -> Slot:
+        if start_at is not None:
+            slot.start_at = start_at
         if end_at is not None:
             slot.end_at = end_at
         if status is not None:
             slot.status = status
         self.db.flush()
-        logger.debug("Updated slot: id=%s | end_at=%s | status=%s", slot.id, slot.end_at, slot.status)
+        logger.debug("Updated slot: id=%s | start_at=%s | end_at=%s | status=%s", slot.id, slot.start_at, slot.end_at, slot.status)
         return slot

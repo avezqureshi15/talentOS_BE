@@ -15,6 +15,13 @@ from app.modules.events.event_schema import EventCreate
 from app.modules.events.event_service import EventService
 from app.modules.reviews.review_model import Review
 from app.modules.rounds.round_model import Round
+from app.modules.hiring_requests.ai_interview_mail import send_interview_invite_email
+from app.modules.hiring_requests.ai_interview_template_mapper import (
+    build_interview_template_response,
+)
+from app.modules.hiring_requests.ai_interview_template_schema import (
+    AiInterviewTemplateResponse,
+)
 from app.modules.talentos_integration.talentos_result_service import (
     persist_interview_result,
     persist_screening_result,
@@ -117,6 +124,51 @@ async def get_interview_detail(
     if round_obj:
         persist_interview_result(db, round_obj, result)
     return result
+
+
+@router.get(
+    "/candidates/{candidate_id}/interviews/{interview_id}/template",
+    response_model=AiInterviewTemplateResponse,
+)
+async def get_interview_template(
+    hiring_request_id: str,
+    candidate_id: int,
+    interview_id: str,
+    db: Session = Depends(get_db),
+):
+    hr = db.query(HiringRequest).filter(HiringRequest.id == hiring_request_id).first()
+    if not hr:
+        raise HTTPException(status_code=404, detail="Hiring request not found")
+    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    rh_job_id = await _get_or_create_rh_job(hiring_request_id, db)
+    rh_candidate_id = _get_rh_candidate_id(candidate_id, db)
+    client = AiRecruitmentClient()
+    detail = await client.get_interview_detail(rh_job_id, rh_candidate_id, interview_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Interview not found")
+
+    recording_url = await client.get_interview_recording_url(rh_job_id, rh_candidate_id, interview_id)
+
+    round_obj = db.query(Round).filter(Round.rh_external_session_id == interview_id).first()
+    if round_obj:
+        persist_interview_result(db, round_obj, detail)
+        db.commit()
+
+    applied_source = candidate.created_at or (round_obj.created_at if round_obj else None)
+    applied_date = applied_source.isoformat() if applied_source else ""
+
+    payload = build_interview_template_response(
+        detail,
+        candidate_name=candidate.candidate_name,
+        candidate_email=candidate.candidate_email,
+        role_title=hr.title,
+        applied_date=applied_date,
+        recording_url=recording_url,
+    )
+    return AiInterviewTemplateResponse(**payload)
 
 
 @router.get("/candidates")
@@ -305,6 +357,29 @@ async def move_to_ai_interview(
     except Exception:
         db.rollback()
         raise
+
+    email_sent = send_interview_invite_email(
+        candidate_email=candidate.candidate_email,
+        candidate_name=candidate.candidate_name,
+        role_title=hr.title,
+        interview_url=interview_url,
+    )
+    if not email_sent:
+        try:
+            EventService(db).create_event(EventCreate(
+                entity_type="CANDIDATE",
+                entity_id=str(candidate.id),
+                candidate_id=candidate.id,
+                event_name="Interview Invite Email Failed",
+                state_code="INTERVIEW_INVITE_EMAIL_FAILED",
+                actor_type="SYSTEM",
+                event_metadata={
+                    "round_id": str(round_obj.id),
+                    "interview_url": interview_url,
+                },
+            ))
+        except Exception:
+            db.rollback()
 
     return {
         "round_id": str(round_obj.id),

@@ -129,7 +129,7 @@ class InterviewScheduleService:
                 participant_emails=attendees,
             )
 
-        schedule_interview_fallback(str(created.id), slot.start_at)
+        schedule_interview_fallback(str(created.id), slot.end_at)
         logger.info(
             "Interview scheduled: id=%s | event_id=%s | fallback_in_seconds=%s",
             created.id,
@@ -188,7 +188,7 @@ class InterviewScheduleService:
                 participant_emails=attendees,
             )
 
-        reschedule_interview_fallback(str(interview.id), new_slot.start_at)
+        reschedule_interview_fallback(str(interview.id), new_slot.end_at)
         logger.info("Interview rescheduled: id=%s", interview.id)
         return ScheduleInterviewResponse(
             id=str(interview.id), round_id=str(interview.round_id),

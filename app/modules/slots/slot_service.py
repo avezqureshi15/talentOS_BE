@@ -75,6 +75,7 @@ class SlotService:
                     assert action.target is not None
                     updated = self.repository.update_slot_times(
                         action.target,
+                        start_at=action.start_at,
                         end_at=action.end_at,
                         status=action.status,
                     )

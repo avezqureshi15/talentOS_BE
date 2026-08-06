@@ -16,17 +16,17 @@ def fallback_job_id(interview_id: str) -> str:
     return f"interview_fallback_{interview_id}"
 
 
-def _fallback_run_date(start_at: datetime) -> datetime:
-    run_date = start_at + timedelta(seconds=settings.INTERVIEW_FALLBACK_SECONDS)
+def _fallback_run_date(end_at: datetime) -> datetime:
+    run_date = end_at + timedelta(seconds=settings.INTERVIEW_FALLBACK_SECONDS)
     if run_date.tzinfo is None:
         run_date = run_date.replace(tzinfo=timezone.utc)
     return run_date
 
 
-def schedule_interview_fallback(interview_id: str, start_at: datetime) -> None:
-    """Schedule finalize_for_review at start_at + INTERVIEW_FALLBACK_SECONDS."""
+def schedule_interview_fallback(interview_id: str, end_at: datetime) -> None:
+    """Schedule finalize_for_review at end_at + INTERVIEW_FALLBACK_SECONDS."""
     job_id = fallback_job_id(interview_id)
-    run_date = _fallback_run_date(start_at)
+    run_date = _fallback_run_date(end_at)
     try:
         get_scheduler().add_job(
             "app.cron.interview_fallback:run_interview_fallback",
@@ -45,13 +45,13 @@ def schedule_interview_fallback(interview_id: str, start_at: datetime) -> None:
         logger.exception("Failed to schedule interview fallback job | interview_id=%s", interview_id)
 
 
-def reschedule_interview_fallback(interview_id: str, start_at: datetime) -> None:
+def reschedule_interview_fallback(interview_id: str, end_at: datetime) -> None:
     job_id = fallback_job_id(interview_id)
-    run_date = _fallback_run_date(start_at)
+    run_date = _fallback_run_date(end_at)
     try:
         scheduler = get_scheduler()
         if scheduler.get_job(job_id) is None:
-            schedule_interview_fallback(interview_id, start_at)
+            schedule_interview_fallback(interview_id, end_at)
             return
         scheduler.reschedule_job(job_id, trigger=DateTrigger(run_date=run_date))
         logger.info("Interview fallback job rescheduled | job_id=%s run_date=%s", job_id, run_date)

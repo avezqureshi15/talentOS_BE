@@ -118,7 +118,11 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _apply_env_timing(self) -> "Settings":
-        timing = _DEV_TIMING if self.APP_ENV == "development" else _PROD_TIMING
+        timing = (
+            _DEV_TIMING
+            if self.APP_ENV in ("development", "uat", "staging")
+            else _PROD_TIMING
+        )
         self.FORM_REMINDER_HOURS = timing["FORM_REMINDER_HOURS"]
         self.FORM_ESCALATION_HOURS = timing["FORM_ESCALATION_HOURS"]
         self.FORM_EXPIRY_HOURS = timing["FORM_EXPIRY_HOURS"]
