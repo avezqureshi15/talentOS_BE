@@ -15,14 +15,11 @@ from app.modules.forms.form_service import FormService
 from app.modules.hiring_requests.hiring_request_model import HiringRequest
 from app.modules.interviews.interview_repository import InterviewRepository
 from app.modules.interviews.models.interview import Interview
-from app.modules.interviews.models.round_interviewer import RoundInterviewer
 from app.modules.interviews.review_questions_constants import (
     STATIC_REVIEW_PHASES,
     STATIC_REVIEW_QUESTIONS_SOURCE,
 )
 from app.modules.rounds.round_model import Round
-from app.modules.users.user_model import User
-from sqlalchemy import and_
 
 logger = get_logger(__name__)
 
@@ -220,51 +217,69 @@ class ReviewQuestionsService:
 
     def _send_review_forms(self, round_: Round | None, candidate_id: int | None) -> None:
         if not round_ or not candidate_id:
+            logger.warning(
+                "Review forms skipped | missing round or candidate_id | round_id=%s candidate_id=%s",
+                getattr(round_, "id", None),
+                candidate_id,
+            )
             return
 
         candidate = self.db.query(Candidate).filter(Candidate.id == candidate_id).first()
         candidate_name = candidate.candidate_name if candidate else "Candidate"
         round_name = round_.name or "Interview"
 
-        _join = and_(
-            User.employee_id == RoundInterviewer.employee_id,
-            User.employee_id.isnot(None),
-        )
-        interviewers = (
-            self.db.query(User)
-            .join(RoundInterviewer, _join)
-            .filter(RoundInterviewer.round_id == round_.id)
-            .all()
-        )
+        # Forms + mail key off employees.id; do not require a linked users row.
+        interviewers = self.repository.get_interviewer_employees_for_round(round_.id)
+        if not interviewers:
+            logger.warning(
+                "Review forms skipped | no interviewer employees on round | round_id=%s",
+                round_.id,
+            )
+            return
 
-        for interviewer in interviewers:
+        for employee in interviewers:
             try:
                 form_db = SessionLocal()
                 try:
-                    active = FormRepository(form_db).get_active_sent_by_emp_and_round(
-                        interviewer.emp_id,
+                    active = FormRepository(form_db).get_active_sent_by_employee_and_round(
+                        employee.id,
                         round_.id,
                     )
                     if active:
-                        logger.debug(
-                            "Skipping review form; active form exists | emp_id=%s round_id=%s",
-                            interviewer.emp_id,
+                        logger.info(
+                            "Skipping review form; active form exists | emp_id=%s employee_id=%s round_id=%s form_id=%s",
+                            employee.emp_id,
+                            employee.id,
                             round_.id,
+                            active.id,
                         )
                         continue
-                    FormService(form_db).generate_review_form(
-                        emp_id=interviewer.emp_id,
+                    form = FormService(form_db).generate_review_form(
+                        emp_id=employee.emp_id,
                         round_id=round_.id,
                         candidate_id=candidate_id,
                         candidate_name=candidate_name,
                         round_name=round_name,
-                        interviewer_name=interviewer.name or interviewer.emp_id,
-                        interviewer_email=interviewer.email or "",
+                        interviewer_name=employee.name or employee.emp_id,
+                        interviewer_email=employee.email or "",
+                    )
+                    logger.info(
+                        "Review form sent | emp_id=%s employee_id=%s round_id=%s form_id=%s",
+                        employee.emp_id,
+                        employee.id,
+                        round_.id,
+                        form.id,
                     )
                 finally:
                     form_db.close()
             except Exception as exc:
-                logger.error("Failed to send review form | interviewer=%s | %s", interviewer.emp_id, exc)
+                logger.error(
+                    "Failed to send review form | emp_id=%s employee_id=%s | %s",
+                    employee.emp_id,
+                    employee.id,
+                    exc,
+                )
+
 
 
 def _format_hiring_request_jd(hiring_request: HiringRequest) -> str:
