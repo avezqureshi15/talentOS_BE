@@ -43,6 +43,7 @@ async def _get_or_create_rh_job(hiring_request_id: str, db: Session) -> str:
         location=hr.location,
         department=hr.department,
         employment_type=hr.type,
+        external_job_id=str(hr.id),
     )
     if not created:
         raise HTTPException(status_code=502, detail="Failed to create job in ai-recruitment-poc")
@@ -78,6 +79,8 @@ async def get_screening_result(
 
     if candidate.current_round_id:
         persist_screening_result(db, candidate.current_round_id, result)
+    if isinstance(result, dict) and "screening_call_id" not in result and result.get("id"):
+        result = {**result, "screening_call_id": result["id"]}
     return result
 
 
@@ -187,6 +190,10 @@ async def move_to_ai_screening(
         candidate.current_round_id = round_obj.id
         candidate.status = "SCREENING_ROUND_SCHEDULED"
         candidate.stage = "AI_SCREENING"
+
+        rh_job_id = result.get("candidate", {}).get("job_id")
+        if rh_job_id and not hr.rh_external_job_id:
+            hr.rh_external_job_id = str(rh_job_id)
         db.commit()
         EventService(db).create_event(EventCreate(
             entity_type="CANDIDATE",
@@ -276,6 +283,10 @@ async def move_to_ai_interview(
         candidate.current_round_id = round_obj.id
         candidate.status = "INTERVIEW_SCHEDULED"
         candidate.stage = "AI_INTERVIEW"
+
+        rh_job_id = result.get("candidate", {}).get("job_id")
+        if rh_job_id and not hr.rh_external_job_id:
+            hr.rh_external_job_id = str(rh_job_id)
         db.commit()
         EventService(db).create_event(EventCreate(
             entity_type="CANDIDATE",
