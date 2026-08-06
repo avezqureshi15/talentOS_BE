@@ -14,7 +14,7 @@ from app.core.kafka import ensure_topics
 from app.core.logger import get_logger, setup_logging
 from app.db.session import engine
 from app.cron.hourly_jobs import setup_form_jobs
-from app.middleware import RequestLoggingMiddleware, TenantContextMiddleware
+from app.middleware import OriginCaptureMiddleware, RequestLoggingMiddleware, TenantContextMiddleware
 from app.scheduler import init_scheduler, shutdown_scheduler
 from app.modules.applications import router as applications_router
 from app.modules.notifications import router as notifications_router
@@ -111,6 +111,7 @@ app = FastAPI(
 
 app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(TenantContextMiddleware)
+app.add_middleware(OriginCaptureMiddleware)
 
 app.add_middleware(
     CORSMiddleware,

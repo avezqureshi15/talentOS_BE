@@ -5,6 +5,7 @@ from uuid import UUID
 from app.common.email_templates import render_review_form_email, render_slot_form_email
 from app.common.services.email_service import EmailService
 from app.core.config import settings
+from app.core.frontend import build_frontend_link
 from app.core.logger import get_logger
 from app.db.session import SessionLocal
 from app.modules.employees.employee_model import Employee
@@ -36,11 +37,11 @@ def is_smtp_configured() -> bool:
 
 
 def build_slot_link(form_id: UUID) -> str:
-    return f"{settings.FRONTEND_BASE_URL.rstrip('/')}/book-slot/{form_id}"
+    return build_frontend_link(f"/book-slot/{form_id}")
 
 
 def build_review_link(form_id: UUID) -> str:
-    return f"{settings.FRONTEND_BASE_URL.rstrip('/')}/rate-candidate/{form_id}"
+    return build_frontend_link(f"/rate-candidate/{form_id}")
 
 
 def detail_to_message(detail: str) -> str:

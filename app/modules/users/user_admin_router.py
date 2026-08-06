@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.constants import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
+from app.core.frontend import build_frontend_link
 from app.core.logger import get_logger
 from app.core.security import hash_password
 from app.common.services.email_service import EmailService
@@ -43,7 +44,7 @@ def _send_invite_email(email: str, token: str) -> None:
             password=settings.SMTP_PASSWORD,
             use_tls=settings.SMTP_USE_TLS,
         )
-        link = f"{settings.FRONTEND_BASE_URL}/auth/invite/{token}"
+        link = build_frontend_link(f"/auth/invite/{token}")
         subject = "You're invited to join TalentOS"
         body = f"""Hello,
 
