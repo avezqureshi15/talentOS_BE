@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.constants import get_pipeline_stage
 from app.core.logger import get_logger
+from app.modules.employees.employee_model import Employee
 from app.modules.evaluations.evaluation_model import Candidate
 from app.modules.hiring_requests.hiring_request_model import HiringRequest
 from sqlalchemy import and_
@@ -29,6 +30,7 @@ class InterviewRepositoryProtocol(Protocol):
     def get_candidate_by_id(self, candidate_id: int) -> Candidate | None: ...
     def get_hiring_request_by_id(self, hr_id: uuid.UUID) -> HiringRequest | None: ...
     def get_interviewer_emails_for_round(self, round_id: uuid.UUID) -> list[str]: ...
+    def get_interviewer_employees_for_round(self, round_id: uuid.UUID) -> list[Employee]: ...
     def update_slot_status(self, slot_id: uuid.UUID | None, status: str) -> None: ...
     def create_round(self, name: str, candidate_id: int, jd_id: uuid.UUID, slot_id: uuid.UUID, round_type: str | None = None) -> Round: ...
     def create_round_interviewer(self, round_id: uuid.UUID, employee_id: int) -> RoundInterviewer: ...
@@ -135,6 +137,24 @@ class InterviewRepository:
         ]
         logger.info("Found %d interviewer(s) for round_id=%s", len(emails), round_id)
         return emails
+
+    def get_interviewer_employees_for_round(self, round_id: uuid.UUID) -> list[Employee]:
+        """Interviewers for a round from employees via round_interviewers.
+
+        Does not require a linked users row — forms/mail key off employees.
+        """
+        employees = (
+            self.db.query(Employee)
+            .join(RoundInterviewer, RoundInterviewer.employee_id == Employee.id)
+            .filter(RoundInterviewer.round_id == round_id)
+            .all()
+        )
+        logger.info(
+            "Found %d interviewer employee(s) for round_id=%s",
+            len(employees),
+            round_id,
+        )
+        return employees
 
     def update_slot_status(self, slot_id: uuid.UUID | None, status: str) -> None:
         if slot_id is not None:
