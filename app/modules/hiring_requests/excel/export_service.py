@@ -37,7 +37,12 @@ class HiringRequestExportService:
 
         candidates: list[Candidate] = []
         if external_job_id:
-            candidates = self.applications.get_candidates_by_job(str(external_job_id))
+            # Include archived + active so All Candidates is complete; archived
+            # rows are grouped onto their own sheet via resolve_stage_sheet_key.
+            candidates = self.applications.get_candidates_by_job(
+                str(external_job_id),
+                archived=None,
+            )
         else:
             logger.warning(
                 "Hiring request %s has no external_job_id — exporting empty candidate sheets",
@@ -82,6 +87,7 @@ class HiringRequestExportService:
             "phone": candidate.candidate_phone or "",
             "status": candidate.status or "",
             "stage": candidate.stage or "",
+            "archived": "Yes" if candidate.archived else "No",
             "fit_score": candidate.fit_score if candidate.fit_score is not None else "",
             "review_verdict": candidate.review_verdict or "",
             "final_verdict": candidate.final_verdict or "",

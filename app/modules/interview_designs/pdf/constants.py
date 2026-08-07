@@ -1,0 +1,5 @@
+DOC_SUBTITLE = "Interview Design"
+CHAPTER_SCREENING = "AI Screening Questions"
+CHAPTER_INTERVIEW = "AI Interview Questions"
+FILENAME_SUFFIX = "interview_design"
+EMPTY_CHAPTER_SUMMARY = "0 sections · 0 min"
