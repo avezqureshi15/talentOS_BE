@@ -10,11 +10,11 @@ from app.common.pdf.models import (
     DocumentSpec,
 )
 from app.modules.hiring_requests.hiring_request_model import HiringRequest
-from app.modules.interview_designs.pdf.constants import (
-    CHAPTER_INTERVIEW,
-    CHAPTER_SCREENING,
-    DOC_SUBTITLE,
-    EMPTY_CHAPTER_SUMMARY,
+from app.modules.interview_designs.pdf.constants import DOC_SUBTITLE, EMPTY_CHAPTER_SUMMARY
+from app.modules.interview_designs.pdf.kinds import (
+    ExportKind,
+    filename_suffix_for_kind,
+    resolve_chapters,
 )
 
 
@@ -90,9 +90,9 @@ def map_sections_to_chapter(title: str, sections: list[dict[str, Any]] | None) -
 
 def build_document_spec(
     hiring_request: HiringRequest,
-    screening_sections: list[dict[str, Any]] | None,
-    interview_sections: list[dict[str, Any]] | None,
+    design: Any,
     *,
+    kind: ExportKind = "all",
     generated_at: datetime | None = None,
 ) -> DocumentSpec:
     generated = generated_at or datetime.now(timezone.utc)
@@ -105,20 +105,20 @@ def build_document_spec(
         meta.append(("Type", str(hiring_request.type)))
     meta.append(("Generated", generated.strftime("%Y-%m-%d %H:%M UTC")))
 
+    chapters = []
+    for chapter_def in resolve_chapters(kind):
+        sections = getattr(design, chapter_def.sections_attr, None)
+        chapters.append(map_sections_to_chapter(chapter_def.title, sections))
+
     return DocumentSpec(
         title=str(hiring_request.title or "Untitled hiring request"),
         subtitle=DOC_SUBTITLE,
         meta=meta,
-        chapters=[
-            map_sections_to_chapter(CHAPTER_SCREENING, screening_sections),
-            map_sections_to_chapter(CHAPTER_INTERVIEW, interview_sections),
-        ],
+        chapters=chapters,
     )
 
 
-def safe_filename(title: str) -> str:
-    from app.modules.interview_designs.pdf.constants import FILENAME_SUFFIX
-
+def safe_filename(title: str, kind: ExportKind = "all") -> str:
     cleaned = str(title or "export").replace("/", "_").replace("\\", "_").strip()
     cleaned = cleaned or "export"
-    return f"{cleaned}_{FILENAME_SUFFIX}.pdf"
+    return f"{cleaned}_{filename_suffix_for_kind(kind)}.pdf"
