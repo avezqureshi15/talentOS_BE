@@ -161,6 +161,24 @@ class AiRecruitmentClient:
         except AiRecruitmentError:
             return None
 
+    async def get_screening_status(self, job_id: str, candidate_id: str) -> dict | None:
+        """Server-computed screening disposition (pending/completed/flagged).
+
+        Unlike get_screening_result, this returns a classification even when no
+        screening call exists yet (a candidate with no valid phone is flagged).
+        """
+        try:
+            return await self._request(
+                "GET",
+                f"/internal/talentos/jobs/{job_id}/candidates/{candidate_id}/screening-status",
+                timeout=10.0,
+                context={"job_id": job_id, "candidate_id": candidate_id},
+            )
+        except AiRecruitmentNotFound:
+            return None
+        except AiRecruitmentError:
+            return None
+
     async def list_interviews(self, job_id: str, candidate_id: str) -> list | None:
         try:
             return await self._request(
@@ -347,6 +365,47 @@ class AiRecruitmentClient:
                 json=payload,
                 params=params,
                 context={"job_id": job_id, "external_job_id": external_job_id},
+            )
+        except AiRecruitmentError:
+            return None
+
+    async def schedule_interview(
+        self,
+        job_id: str,
+        candidate_id: str,
+        scheduled_date: str,
+        scheduled_time: str,
+        timezone: str,
+    ) -> dict | None:
+        """Set the scheduled slot (date/time in an IANA timezone) on a candidate's AI interview."""
+        try:
+            return await self._request(
+                "PUT",
+                f"/internal/talentos/jobs/{job_id}/candidates/{candidate_id}/interview/schedule",
+                timeout=15.0,
+                json={
+                    "scheduled_date": scheduled_date,
+                    "scheduled_time": scheduled_time,
+                    "timezone": timezone,
+                },
+                context={"job_id": job_id, "candidate_id": candidate_id},
+            )
+        except AiRecruitmentError:
+            return None
+
+    async def clear_interview_schedule(
+        self,
+        job_id: str,
+        candidate_id: str,
+    ) -> dict | None:
+        """Clear the scheduled slot so the candidate can join immediately."""
+        try:
+            return await self._request(
+                "PUT",
+                f"/internal/talentos/jobs/{job_id}/candidates/{candidate_id}/interview/schedule",
+                timeout=15.0,
+                json=None,
+                context={"job_id": job_id, "candidate_id": candidate_id},
             )
         except AiRecruitmentError:
             return None

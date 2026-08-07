@@ -8,12 +8,10 @@ from app.core.logger import get_logger
 from app.modules.employees.employee_model import Employee
 from app.modules.evaluations.evaluation_model import Candidate
 from app.modules.hiring_requests.hiring_request_model import HiringRequest
-from sqlalchemy import and_
 from app.modules.interviews.models.interview import Interview
 from app.modules.interviews.models.round_interviewer import RoundInterviewer
 from app.modules.rounds.round_model import Round
 from app.modules.slots.slot_model import Slot
-from app.modules.users.user_model import User
 
 logger = get_logger(__name__)
 
@@ -123,17 +121,13 @@ class InterviewRepository:
         return self.db.query(HiringRequest).filter(HiringRequest.id == hr_id).first()
 
     def get_interviewer_emails_for_round(self, round_id: uuid.UUID) -> list[str]:
-        join_on = and_(
-            User.employee_id == RoundInterviewer.employee_id,
-            User.employee_id.isnot(None),
-        )
         emails = [
-            u.email
-            for u in self.db.query(User)
-            .join(RoundInterviewer, join_on)
+            e.email
+            for e in self.db.query(Employee)
+            .join(RoundInterviewer, RoundInterviewer.employee_id == Employee.id)
             .filter(RoundInterviewer.round_id == round_id)
             .all()
-            if u.email
+            if e.email
         ]
         logger.info("Found %d interviewer(s) for round_id=%s", len(emails), round_id)
         return emails

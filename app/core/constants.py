@@ -67,6 +67,9 @@ def get_pipeline_stage(status: str, final_verdict: str | None = None) -> str | N
         EvaluationStatus.FAILED.value: PipelineStage.RESUME_SHORTLISTING.value,
         EvaluationStatus.MOVE_TO_NEXT_ROUND.value: PipelineStage.MOVE_TO_NEXT_ROUND.value,
         EvaluationStatus.WAITING_FOR_REVIEW.value: PipelineStage.WAITING_FOR_EVALUATION.value,
+        EvaluationStatus.SCREENING_ROUND_SCHEDULED.value: PipelineStage.SCREENING.value,
+        EvaluationStatus.AI_SCREENING_EVALUATION_FAILED.value: PipelineStage.SCREENING.value,
+        EvaluationStatus.AI_SCREENING_FLAGGED.value: PipelineStage.SCREENING.value,
         EvaluationStatus.INTERVIEW_SCHEDULED.value: PipelineStage.INTERVIEW.value,
         EvaluationStatus.INTERVIEW_RESCHEDULED.value: PipelineStage.INTERVIEW.value,
         EvaluationStatus.INTERVIEW_CANCELLED.value: PipelineStage.INTERVIEW.value,
@@ -91,6 +94,9 @@ class EvaluationStatus(str, Enum):
     INTERVIEW_RESCHEDULED = "INTERVIEW_RESCHEDULED"
     INTERVIEW_CANCELLED = "INTERVIEW_CANCELLED"
     INTERVIEW_COMPLETED = "INTERVIEW_COMPLETED"
+    SCREENING_ROUND_SCHEDULED = "SCREENING_ROUND_SCHEDULED"
+    AI_SCREENING_EVALUATION_FAILED = "AI_SCREENING_EVALUATION_FAILED"
+    AI_SCREENING_FLAGGED = "AI_SCREENING_FLAGGED"
     WAITING_FOR_REVIEW = "WAITING_FOR_REVIEW"
 
 

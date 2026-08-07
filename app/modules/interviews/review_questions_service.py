@@ -12,7 +12,7 @@ from app.modules.events.event_schema import EventCreate
 from app.modules.events.event_service import EventService
 from app.modules.forms.form_repository import FormRepository
 from app.modules.forms.form_service import FormService
-from app.modules.hiring_requests.hiring_request_model import HiringRequest
+from app.modules.interview_designs.interview_design_model import InterviewDesign
 from app.modules.interviews.interview_repository import InterviewRepository
 from app.modules.interviews.models.interview import Interview
 from app.modules.interviews.review_questions_constants import (
@@ -24,7 +24,6 @@ from app.modules.rounds.round_model import Round
 logger = get_logger(__name__)
 
 _SOURCE_TRANSCRIPT = "transcript"
-_SOURCE_JD = "jd"
 
 _ACTIVE_STATUSES = (InterviewStatus.SCHEDULED.value, InterviewStatus.RESCHEDULED.value)
 
@@ -35,12 +34,22 @@ class ReviewQuestionsService:
         self.repository = InterviewRepository(db)
         self.ai = ai or AIClient()
 
-    def get_questions_for_round(self, round_id: uuid.UUID) -> ReviewQuestionsPayload:
+    def get_questions_for_round(self, round_id: uuid.UUID) -> dict:
         """Return interview review questions for a round, or static fallback."""
         interview = self.repository.get_by_round_id(round_id)
         if interview and interview.review_questions:
-            raw_phases = interview.review_questions.get("phases") or []
-            phases: list[ReviewPhase] = []
+            rq = interview.review_questions
+            source = (interview.review_questions_source or "").strip() or _SOURCE_TRANSCRIPT
+
+            # Rich format from design review sections (has 'sections' key)
+            if "sections" in rq:
+                sections = [s for s in (rq.get("sections") or []) if s.get("questions")]
+                if sections:
+                    return {"format": "sections", "questions_source": source, "sections": sections}
+
+            # Legacy phases format (transcript-based)
+            raw_phases = rq.get("phases") or []
+            phases = []
             for item in raw_phases:
                 if not isinstance(item, dict):
                     continue
@@ -50,16 +59,16 @@ class ReviewQuestionsService:
                     continue
                 cleaned = [str(q).strip() for q in questions if str(q).strip()]
                 if cleaned:
-                    phases.append(ReviewPhase(phase=phase_name, questions=cleaned))
+                    phases.append({"phase": phase_name, "questions": cleaned})
             if phases:
-                source = (interview.review_questions_source or "").strip() or _SOURCE_JD
-                return ReviewQuestionsPayload(questions_source=source, phases=phases)
+                return {"format": "phases", "questions_source": source, "phases": phases}
 
         logger.info("Using static review questions | round_id=%s", round_id)
-        return ReviewQuestionsPayload(
-            questions_source=STATIC_REVIEW_QUESTIONS_SOURCE,
-            phases=list(STATIC_REVIEW_PHASES),
-        )
+        return {
+            "format": "phases",
+            "questions_source": STATIC_REVIEW_QUESTIONS_SOURCE,
+            "phases": [p.model_dump() for p in STATIC_REVIEW_PHASES],
+        }
 
     def finalize_for_review(
         self,
@@ -187,33 +196,55 @@ class ReviewQuestionsService:
                 logger.info("Review questions already present | interview_id=%s", interview_id)
                 return
 
-            jd_details = self._build_jd_text(round_)
-            if jd_details:
-                response = self.ai.generate_review_questions(jd_details=jd_details)
-                self.repository.save_review_questions(
-                    interview_id=interview.id,
-                    transcript_text=None,
-                    review_questions=response.model_dump(),
-                    source=_SOURCE_JD,
-                )
-                self.db.commit()
-                logger.info("Review questions saved from JD | interview_id=%s", interview_id)
-            else:
-                logger.warning(
-                    "No transcript and no JD for review questions; FE static fallback | interview_id=%s",
-                    interview_id,
-                )
+            review_sections = self._get_review_sections_for_round(round_)
+            if review_sections:
+                sections_snapshot = [
+                    {
+                        "section": sec.get("title", ""),
+                        "questions": [
+                            {
+                                "question": q.get("question", ""),
+                                "score": q.get("score", 5),
+                                "expected_points": q.get("expected_points") or [],
+                            }
+                            for q in sec.get("questions", [])
+                            if q.get("question")
+                        ],
+                    }
+                    for sec in review_sections
+                    if sec.get("title") and sec.get("questions")
+                ]
+                sections_snapshot = [s for s in sections_snapshot if s["questions"]]
+                if sections_snapshot:
+                    self.repository.save_review_questions(
+                        interview_id=interview.id,
+                        transcript_text=None,
+                        review_questions={"questions_source": "review", "sections": sections_snapshot},
+                        source="review",
+                    )
+                    self.db.commit()
+                    logger.info("Review questions saved from design review sections | interview_id=%s", interview_id)
+                    return
+
+            logger.warning(
+                "No transcript and no review sections; FE static fallback | interview_id=%s",
+                interview_id,
+            )
         except Exception:
             logger.exception("Review questions generation failed | interview_id=%s", interview_id)
             self.db.rollback()
 
-    def _build_jd_text(self, round_: Round | None) -> str | None:
+    def _get_review_sections_for_round(self, round_: Round | None) -> list[dict]:
         if not round_ or not round_.jd_id:
-            return None
-        hiring_request = self.repository.get_hiring_request_by_id(round_.jd_id)
-        if not hiring_request:
-            return None
-        return _format_hiring_request_jd(hiring_request)
+            return []
+        design = (
+            self.db.query(InterviewDesign)
+            .filter(InterviewDesign.hiring_request_id == round_.jd_id)
+            .first()
+        )
+        if not design:
+            return []
+        return design.review_sections or []
 
     def _send_review_forms(self, round_: Round | None, candidate_id: int | None) -> None:
         if not round_ or not candidate_id:
@@ -228,7 +259,7 @@ class ReviewQuestionsService:
         candidate_name = candidate.candidate_name if candidate else "Candidate"
         round_name = round_.name or "Interview"
 
-        # Forms + mail key off employees.id; do not require a linked users row.
+# Forms + email key off employees.id; do not require a linked users row.
         interviewers = self.repository.get_interviewer_employees_for_round(round_.id)
         if not interviewers:
             logger.warning(
@@ -282,15 +313,3 @@ class ReviewQuestionsService:
 
 
 
-def _format_hiring_request_jd(hiring_request: HiringRequest) -> str:
-    requirements = hiring_request.requirements or []
-    req_text = (
-        "\n".join(f"- {r}" for r in requirements)
-        if isinstance(requirements, list)
-        else str(requirements)
-    )
-    return (
-        f"Title: {hiring_request.title}\n\n"
-        f"Description:\n{hiring_request.description}\n\n"
-        f"Requirements:\n{req_text}"
-    ).strip()

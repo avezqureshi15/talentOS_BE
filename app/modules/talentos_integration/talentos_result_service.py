@@ -12,10 +12,12 @@ ai_interview); ``round_verdict`` stays HR-driven.
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.constants import EvaluationStatus
 from app.core.kafka import publish
 from app.core.logger import get_logger
 from app.modules.ai.interview_report_schema import InterviewReportMessage
@@ -24,6 +26,8 @@ from app.modules.events.event_schema import EventCreate
 from app.modules.events.event_service import EventService
 from app.modules.notifications.notification_model import NotificationType
 from app.modules.notifications.notification_service import NotificationService
+from app.modules.reviews.review_model import Review
+from app.modules.reviews.review_repository import ReviewRepository
 from app.modules.reviews.review_schema import ReviewUpdateByRound
 from app.modules.reviews.review_service import ReviewService
 from app.modules.rounds.round_model import Round
@@ -41,6 +45,10 @@ _AI_VERDICT_MAP: dict[str, str] = {
 
 SCREENING_FAILURE_OUTCOMES = frozenset(
     {"no_answer", "voicemail", "declined", "dropped", "failed"}
+)
+
+SCREENING_ACTIVE_STATUSES = frozenset(
+    {"SCREENING_ROUND_SCHEDULED", "AI_SCREENING_EVALUATION_FAILED"}
 )
 
 
@@ -201,24 +209,28 @@ def _notify_ai_failure(
     round_name: str | None,
     title: str,
     body: str,
+    notification_type: str = NotificationType.EVALUATION_FAILED.value,
+    event_name: str = "AI Evaluation Failed",
+    state_code: str = "AI_EVALUATION_FAILED",
+    dedupe_key: str | None = None,
 ) -> None:
-    NotificationService(db).notify_job_team(
+    NotificationService(db).notify_job_team_and_admins(
         hiring_request_id,
-        notification_type=NotificationType.EVALUATION_FAILED.value,
+        notification_type=notification_type,
         title=title,
         body=body,
         action_url=f"/hiring-requests/{hiring_request_id}/candidates/{candidate_id}" if candidate_id else None,
         action_label="View candidate" if candidate_id else None,
         candidate_id=candidate_id,
-        dedupe_key=f"AI_FAILED-{round_id}",
+        dedupe_key=dedupe_key or f"AI_FAILED-{round_id}",
     )
     EventService(db).create_event(EventCreate(
         entity_type="CANDIDATE",
         entity_id=str(candidate_id) if candidate_id else str(round_id),
         job_id=hiring_request_id,
         candidate_id=candidate_id,
-        event_name="AI Evaluation Failed",
-        state_code="AI_EVALUATION_FAILED",
+        event_name=event_name,
+        state_code=state_code,
         actor_type="SYSTEM",
         event_metadata={
             "round_id": str(round_id),
@@ -228,22 +240,133 @@ def _notify_ai_failure(
     ))
 
 
-def handle_screening_webhook(db: Session, body: dict) -> dict:
-    result = body.get("result") or {}
-    candidate, round_id = resolve_screening_round(db, body)
-    if round_id is None:
-        return {"status": "ignored", "reason": "no matching candidate or round"}
+def apply_screening_flag(
+    db: Session,
+    round_id: uuid.UUID,
+    candidate: Candidate | None,
+    status_info: dict,
+) -> None:
+    """Persist an AI screening flag and move the candidate to the flagged state.
 
-    persist_screening_result(db, round_id, result)
+    The POC classifies a candidate as "flagged" when screening can never
+    complete (missing/invalid phone, declined, technical failure, or exhausted
+    dial attempts). talentOS records the flag in the ``reviews`` JSONB
+    (entity_type ``ai_screening``, verdict ``flagged``), moves the candidate to
+    ``AI_SCREENING_FLAGGED`` (stage stays ``AI_SCREENING``) and notifies the job
+    team (deduped per round).
 
-    if _is_screening_failure(result):
-        round_obj = db.query(Round).filter(Round.id == round_id).first()
+    ``round_verdict`` is intentionally left untouched — it stays HR-driven. The
+    review row is written directly through the repository (not
+    ReviewService.upsert_review) so the round-verdict recompute is not triggered.
+    Idempotent: a re-run on a candidate already in AI_SCREENING_FLAGGED only
+    refreshes the persisted flag payload.
+    """
+    if candidate is None:
+        return
+
+    if candidate.status != EvaluationStatus.AI_SCREENING_FLAGGED.value:
+        candidate.stage = "AI_SCREENING"
+        candidate.status = EvaluationStatus.AI_SCREENING_FLAGGED.value
+        db.commit()
+        logger.info(
+            "AI screening marked flagged | candidate_id=%s round_id=%s reason=%s",
+            candidate.id, round_id, status_info.get("flag_reason"),
+        )
+
+    flag_reason = status_info.get("flag_reason")
+    latest_call = status_info.get("latest_call") or {}
+    payload = {
+        "flagged": True,
+        "flag_reason": flag_reason,
+        "disposition": "flagged",
+        "screening_call_id": latest_call.get("id"),
+        "flagged_at": datetime.now(timezone.utc).isoformat(),
+    }
+    repo = ReviewRepository(db)
+    review = repo.get_by_round_and_entity(round_id, "ai_screening")
+    if review is not None:
+        review.reviews = payload
+        review.verdict = "flagged"
+        repo.update(review)
+    else:
+        review = Review(
+            round_id=round_id,
+            entity_type="ai_screening",
+            reviews=payload,
+            verdict="flagged",
+        )
+        repo.create(review)
+    db.commit()
+
+    round_obj = db.query(Round).filter(Round.id == round_id).first() if round_id else None
+    if round_obj and round_obj.jd_id:
+        _notify_ai_failure(
+            db,
+            hiring_request_id=round_obj.jd_id,
+            round_id=round_id,
+            candidate_id=candidate.id,
+            entity_type="ai_review",
+            round_name=round_obj.name,
+            title="AI screening flagged for a candidate",
+            body=(
+                f"AI screening round \"{round_obj.name or round_id}\" was flagged and could not "
+                f"complete. Reason: {flag_reason or 'unknown'}. Review the candidate from the "
+                "AI screening section."
+            ),
+            notification_type=NotificationType.AI_SCREENING_FLAGGED.value,
+            event_name="AI Screening Flagged",
+            state_code=EvaluationStatus.AI_SCREENING_FLAGGED.value,
+            dedupe_key=f"AI_FLAGGED-{round_id}",
+        )
+
+
+def apply_screening_outcome(
+    db: Session,
+    round_id: uuid.UUID,
+    candidate: Candidate | None,
+    result: dict,
+) -> None:
+    """Apply a screening result to the candidate's pipeline state.
+
+    Failure (terminal): stage stays ``AI_SCREENING`` and status becomes
+    ``AI_SCREENING_EVALUATION_FAILED`` so the candidate remains in the
+    screening pipeline for retry; sends the EVALUATION_FAILED notification
+    and AI_EVALUATION_FAILED event (deduped per round).
+
+    Success: ``SCREENING_ROUND_SCHEDULED`` / ``AI_SCREENING_EVALUATION_FAILED``
+    -> ``UNDER_EVALUATION`` while retaining stage ``AI_SCREENING`` (the stage
+    is never renamed for AI screening — only the status changes), so a re-run
+    after failure recovers the candidate.
+
+    Payloads pulled from the POC carry ``terminal_failure`` (authoritative —
+    retries may still be pending otherwise). Webhook push payloads don't, so
+    they fall back to the legacy ``_is_screening_failure`` check.
+    """
+    if result.get("terminal_failure") is None:
+        is_failure = _is_screening_failure(result)
+    else:
+        is_failure = bool(result.get("terminal_failure"))
+
+    if candidate is None:
+        return
+
+    if is_failure:
+        if candidate.stage == "AI_SCREENING" or candidate.status in SCREENING_ACTIVE_STATUSES:
+            if candidate.status != EvaluationStatus.AI_SCREENING_EVALUATION_FAILED.value:
+                candidate.status = EvaluationStatus.AI_SCREENING_EVALUATION_FAILED.value
+                candidate.stage = "AI_SCREENING"
+                db.commit()
+                logger.info(
+                    "AI screening marked failed | candidate_id=%s round_id=%s",
+                    candidate.id, round_id,
+                )
+        round_obj = db.query(Round).filter(Round.id == round_id).first() if round_id else None
         if round_obj and round_obj.jd_id:
             _notify_ai_failure(
                 db,
                 hiring_request_id=round_obj.jd_id,
                 round_id=round_id,
-                candidate_id=round_obj.candidate_id,
+                candidate_id=candidate.id,
                 entity_type="ai_screening",
                 round_name=round_obj.name,
                 title="AI screening failed for a candidate",
@@ -253,6 +376,37 @@ def handle_screening_webhook(db: Session, body: dict) -> dict:
                     "You can retry from the candidate's AI screening section."
                 ),
             )
+        return
+
+    if candidate.status not in SCREENING_ACTIVE_STATUSES:
+        return
+
+    candidate.stage = "AI_SCREENING"
+    candidate.status = EvaluationStatus.UNDER_EVALUATION.value
+    db.commit()
+    EventService(db).create_event(EventCreate(
+        entity_type="CANDIDATE",
+        entity_id=str(candidate.id),
+        candidate_id=candidate.id,
+        event_name="AI Screening Completed",
+        state_code=EvaluationStatus.UNDER_EVALUATION.value,
+        actor_type="SYSTEM",
+        event_metadata={"round_id": str(round_id)},
+    ))
+    logger.info(
+        "AI screening completed | candidate_id=%s round_id=%s new_status=%s",
+        candidate.id, round_id, EvaluationStatus.UNDER_EVALUATION.value,
+    )
+
+
+def handle_screening_webhook(db: Session, body: dict) -> dict:
+    result = body.get("result") or {}
+    candidate, round_id = resolve_screening_round(db, body)
+    if round_id is None:
+        return {"status": "ignored", "reason": "no matching candidate or round"}
+
+    persist_screening_result(db, round_id, result)
+    apply_screening_outcome(db, round_id, candidate, result)
 
     return {
         "status": "received",

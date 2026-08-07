@@ -107,7 +107,7 @@ class InterviewScheduleService:
                 from app.modules.notifications.notification_model import NotificationType
                 from app.modules.notifications.notification_service import NotificationService
 
-                NotificationService(self.db).notify_job_team(
+                NotificationService(self.db).notify_job_team_and_admins(
                     round_obj.jd_id,
                     notification_type=NotificationType.INTERVIEW_SCHEDULED.value,
                     title="Interview scheduled",
@@ -178,6 +178,19 @@ class InterviewScheduleService:
                 candidate_id=round_obj.candidate_id,
                 event_metadata={"round_id": str(interview.round_id), "old_slot": str(old_slot_id), "new_slot": str(new_slot_id)},
             ))
+        if round_obj and round_obj.jd_id:
+            from app.modules.notifications.notification_model import NotificationType
+            from app.modules.notifications.notification_service import NotificationService
+
+            NotificationService(self.db).notify_job_team_and_admins(
+                round_obj.jd_id,
+                notification_type=NotificationType.INTERVIEW_SCHEDULED.value,
+                title="Interview rescheduled",
+                body=f"The interview for round \"{round_obj.name or interview.round_id}\" was rescheduled.",
+                candidate_id=round_obj.candidate_id,
+                dedupe_key=f"INTERVIEW_RESCHEDULED-{interview.id}",
+            )
+            self.db.commit()
 
         if interview.meet_link:
             attendees = self.repository.get_interviewer_emails_for_round(interview.round_id)
@@ -224,6 +237,19 @@ class InterviewScheduleService:
                 candidate_id=round_obj.candidate_id,
                 event_metadata={"round_id": str(interview.round_id)},
             ))
+        if round_obj and round_obj.jd_id:
+            from app.modules.notifications.notification_model import NotificationType
+            from app.modules.notifications.notification_service import NotificationService
+
+            NotificationService(self.db).notify_job_team_and_admins(
+                round_obj.jd_id,
+                notification_type=NotificationType.INTERVIEW_SCHEDULED.value,
+                title="Interview cancelled",
+                body=f"The interview for round \"{round_obj.name or interview.round_id}\" was cancelled.",
+                candidate_id=round_obj.candidate_id,
+                dedupe_key=f"INTERVIEW_CANCELLED-{interview.id}",
+            )
+            self.db.commit()
         remove_interview_fallback(str(interview.id))
         logger.info("Interview cancelled: id=%s", interview.id)
         return CancelInterviewResponse(id=str(interview.id), status=interview.status)

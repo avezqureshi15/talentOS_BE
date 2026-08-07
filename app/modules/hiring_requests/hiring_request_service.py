@@ -73,6 +73,35 @@ class HiringRequestService:
         total = self.repository.count_active()
         return total + 1
 
+    def _resolve_creator_employee_id(self, user_id: int) -> int | None:
+        """Resolve a user id to a real ``employees.id`` for job-team rows
+        (``job_team_members.employee_id`` is an employees FK). Falls back to
+        creating/linking the employee row so new creators always get a valid
+        owner entry."""
+        from app.modules.employees.employee_lookup import ensure_employee_for_user
+        from app.modules.users.user_model import User
+
+        user = self.repository.db.query(User).filter(User.id == user_id).first()
+        if not user:
+            return None
+        employee = ensure_employee_for_user(self.repository.db, user)
+        return employee.id if employee else None
+
+    def _notify_job_created(self, hr, tenant_id: int, current_user: UserInfo) -> None:
+        from app.modules.notifications.notification_model import NotificationType
+        from app.modules.notifications.notification_service import NotificationService
+
+        NotificationService(self.repository.db).notify_tenant_admins(
+            tenant_id,
+            notification_type=NotificationType.JOB_CREATED.value,
+            title="New job created",
+            body=f"{current_user.name} created \"{hr.title}\".",
+            action_url=f"/hiring-requests/{hr.id}",
+            action_label="View job",
+            job_id=hr.id,
+        )
+        self.repository.db.commit()
+
     def create_hiring_request(
         self,
         data: HiringRequestCreate,
@@ -112,16 +141,25 @@ class HiringRequestService:
             ) from exc
 
         if current_user is not None:
-            JobTeamRepository(self.repository.db).add_member(
-                local_record.id,
-                current_user.id,
-                is_owner=True,
-            )
-            logger.info(
-                "Creator added as job owner: hiring_request_id=%s user_id=%d",
-                local_record.id,
-                current_user.id,
-            )
+            owner_row = self._resolve_creator_employee_id(current_user.id)
+            if owner_row is None:
+                logger.warning(
+                    "No linked employee for creator user_id=%d — job owner not added to team",
+                    current_user.id,
+                )
+            else:
+                JobTeamRepository(self.repository.db).add_member(
+                    local_record.id,
+                    owner_row,
+                    is_owner=True,
+                )
+                logger.info(
+                    "Creator added as owner: job_id=%s user_id=%d employee_id=%d",
+                    local_record.id,
+                    current_user.id,
+                    owner_row,
+                )
+                self._notify_job_created(local_record, tenant_id, current_user)
 
         if background_tasks is not None:
             background_tasks.add_task(_sync_rh_job, str(local_record.id))

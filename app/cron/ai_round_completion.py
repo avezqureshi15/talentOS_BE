@@ -30,7 +30,6 @@ def _do_complete_ai_round(candidate_id: int, round_id: str) -> None:
             return
 
         previous_stage = candidate.stage
-        candidate.stage = f"{candidate.stage}_EVALUATED"
         candidate.status = EvaluationStatus.UNDER_EVALUATION.value
         db.commit()
 

@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from app.common.services.email_service import EmailService
 from app.core.config import settings
 from app.core.logger import get_logger
 from app.modules.hiring_requests.ai_interview_mail_templates import (
     render_interview_invite_email,
+    render_interview_slot_email,
 )
 
 logger = get_logger(__name__)
@@ -22,6 +25,42 @@ def _is_valid_email(email: str | None) -> bool:
 
 def _is_smtp_configured() -> bool:
     return bool(settings.SMTP_USERNAME.strip() and settings.SMTP_PASSWORD.strip())
+
+
+def _send_interview_mail(
+    candidate_email: str,
+    subject: str,
+    body: str,
+    html: str,
+) -> bool:
+    """Return True on send-success, False if skipped or failed.
+
+    Never raises: the caller does not care about SMTP outcomes at commit time.
+    """
+    if not _is_valid_email(candidate_email):
+        logger.warning("Interview mail skipped: invalid candidate email %r", candidate_email)
+        return False
+    if not _is_smtp_configured():
+        logger.warning("Interview mail skipped: SMTP not configured")
+        return False
+
+    try:
+        EmailService(
+            smtp_host=settings.SMTP_HOST,
+            smtp_port=settings.SMTP_PORT,
+            username=settings.SMTP_USERNAME,
+            password=settings.SMTP_PASSWORD,
+            use_tls=settings.SMTP_USE_TLS,
+        ).send(
+            to_email=candidate_email.strip(),
+            subject=subject,
+            body=body,
+            html=html,
+        )
+        return True
+    except Exception as exc:
+        logger.warning("Interview mail send failed for %s: %s", candidate_email, exc)
+        return False
 
 
 def send_interview_invite_email(
@@ -49,20 +88,49 @@ def send_interview_invite_email(
         role_title=(role_title or "the role").strip(),
         interview_url=interview_url,
     )
+    return _send_interview_mail(candidate_email, subject, body, html)
+
+
+def format_scheduled_slot_label(
+    scheduled_date: str | None,
+    scheduled_time: str | None,
+    timezone: str | None,
+) -> str:
+    """Human-readable slot label, e.g. 'Monday, 21 July 2026 at 4:00 PM IST'."""
+    if not scheduled_date or not scheduled_time:
+        return ""
     try:
-        EmailService(
-            smtp_host=settings.SMTP_HOST,
-            smtp_port=settings.SMTP_PORT,
-            username=settings.SMTP_USERNAME,
-            password=settings.SMTP_PASSWORD,
-            use_tls=settings.SMTP_USE_TLS,
-        ).send(
-            to_email=candidate_email.strip(),
-            subject=subject,
-            body=body,
-            html=html,
-        )
-        return True
-    except Exception as exc:
-        logger.warning("Interview invite send failed for %s: %s", candidate_email, exc)
+        tz = ZoneInfo(timezone or "Asia/Kolkata")
+    except Exception:
+        tz = ZoneInfo("Asia/Kolkata")
+    dt = datetime.fromisoformat(f"{scheduled_date}T{scheduled_time}").replace(tzinfo=tz)
+    label = dt.strftime("%A, %d %B %Y at %I:%M %p").replace(" 0", " ")
+    tz_name = dt.tzname() or ""
+    return f"{label} {tz_name}".rstrip()
+
+
+def send_interview_slot_email(
+    candidate_email: str | None,
+    candidate_name: str | None,
+    role_title: str | None,
+    interview_url: str | None,
+    scheduled_at_label: str | None,
+) -> bool:
+    """Send a 'scheduled for <slot>' email. Best-effort like the invite mail."""
+    if not interview_url or not scheduled_at_label:
+        logger.warning("Interview slot email skipped: missing url or slot label")
         return False
+    if not _is_valid_email(candidate_email):
+        logger.warning("Interview slot email skipped: invalid candidate email %r", candidate_email)
+        return False
+    if not _is_smtp_configured():
+        logger.warning("Interview slot email skipped: SMTP not configured")
+        return False
+
+    subject, body, html = render_interview_slot_email(
+        candidate_name=(candidate_name or "there").strip(),
+        role_title=(role_title or "the role").strip(),
+        interview_url=interview_url,
+        scheduled_at_label=scheduled_at_label,
+    )
+    return _send_interview_mail(candidate_email, subject, body, html)

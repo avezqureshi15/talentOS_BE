@@ -110,6 +110,26 @@ class NotificationService:
         kwargs.setdefault("job_id", hiring_request_id)
         return self.notify_many(member_ids, **kwargs)
 
+    def notify_job_team_and_admins(
+        self,
+        hiring_request_id: UUID,
+        **kwargs,
+    ) -> int:
+        """Fan out to every member of a job's team plus the tenant admins
+        (account_admin / superadmin). The job's tenant is resolved from the
+        hiring request; dedupe keys already prevent double-notifying users
+        who are both team members and admins.
+        """
+        from app.modules.hiring_requests.hiring_request_model import HiringRequest
+
+        created = self.notify_job_team(hiring_request_id, **kwargs)
+        if not self.db:
+            return created
+        hr = self.db.query(HiringRequest).filter(HiringRequest.id == hiring_request_id).first()
+        if hr is not None and hr.tenant_id is not None:
+            created += self.notify_tenant_admins(hr.tenant_id, **kwargs)
+        return created
+
     def notify_tenant_users(
         self,
         tenant_id: int,

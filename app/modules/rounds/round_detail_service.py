@@ -76,6 +76,21 @@ class RoundDetailService:
                 else:
                     rest[k] = v
 
+            # Extract per-question scores from sections/phases when no top-level numeric ratings
+            if not ratings and r.entity_type.lower() == "interviewer":
+                groups = rv.get("sections") or rv.get("phases") or []
+                for group in groups:
+                    group_name = (group.get("section") or group.get("phase") or "Overall").strip()
+                    for answer in group.get("answers", []):
+                        if isinstance(answer.get("score"), (int, float)):
+                            q_label = str(answer.get("question", "")).strip()[:60]
+                            ratings.append(RatingItem(
+                                label=f"{group_name}: {q_label}" if q_label else group_name,
+                                score=float(answer["score"]),
+                                max_score=5.0,
+                                entity_type="interviewer",
+                            ))
+
             verdict = _VERDICT_NORMALIZE.get(r.verdict, r.verdict) if r.verdict else None
             entity = ReviewEntity(
                 entity_type=r.entity_type.lower(),
@@ -96,6 +111,7 @@ class RoundDetailService:
             slot=self._format_slot_time(slot),
             status=self._resolve_status(slot, reviews),
             candidate=candidate.candidate_name if candidate else None,
+            candidate_id=round_obj.candidate_id,
             role=jd.title if jd else None,
             jd_label=jd.description if jd else None,
             interviewer=interviewer,

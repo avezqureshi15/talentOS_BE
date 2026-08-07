@@ -51,7 +51,7 @@ def _notify_evaluation_failed(db, job_id: str, candidate_id: int, reason: str) -
     repo = ApplicationRepository(db)
     jd_uuid = repo.resolve_hiring_request_id(job_id)
     if jd_uuid:
-        NotificationService(db).notify_job_team(
+        NotificationService(db).notify_job_team_and_admins(
             jd_uuid,
             notification_type=NotificationType.EVALUATION_FAILED.value,
             title="Resume evaluation failed",
@@ -224,7 +224,7 @@ def _evaluate_full(message: AsyncEvaluationMessage) -> None:
 
         jd_uuid = repo.resolve_hiring_request_id(job_id)
         if jd_uuid:
-            NotificationService(db).notify_job_team(
+            NotificationService(db).notify_job_team_and_admins(
                 jd_uuid,
                 notification_type=NotificationType.EVALUATION_COMPLETED.value,
                 title="Resume evaluation completed",

@@ -87,14 +87,17 @@ class ReviewService:
                 detail=exc.errors(),
             ) from exc
 
-        scores = [answer.score for phase in payload.phases for answer in phase.answers]
+        if payload.phases:
+            scores = [answer.score for phase in payload.phases for answer in phase.answers]
+        else:
+            scores = [answer.score for section in (payload.sections or []) for answer in section.answers]
         if not scores:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Interviewer review must include at least one scored answer",
             )
         payload.average_rating = round(sum(scores) / len(scores), 1)
-        return payload.model_dump()
+        return payload.model_dump(exclude_none=True)
 
     def upsert_review(self, round_id: uuid.UUID, data: ReviewUpdateByRound) -> ReviewResponse:
         reviews_payload = data.reviews
@@ -136,7 +139,7 @@ class ReviewService:
                     from app.modules.notifications.notification_model import NotificationType
                     from app.modules.notifications.notification_service import NotificationService
 
-                    NotificationService(self.db).notify_job_team(
+                    NotificationService(self.db).notify_job_team_and_admins(
                         round_obj.jd_id,
                         notification_type=NotificationType.REVIEW_SUBMITTED.value,
                         title="Interviewer review submitted",

@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from fastapi import HTTPException
+from sqlalchemy import String, cast
 from sqlalchemy.orm import Session
 
 from app.common.clients import SupabaseClient
@@ -109,6 +110,7 @@ class ApplicationService:
         events_map = self.repo.build_events_map(items, ai=ai) if ai else {}
         disqualified_map = self.repo.build_disqualified_by_map(items)
         self.repo.attach_interview_data(items)
+        self.repo.attach_screening_review_data(items)
 
         stage_counts = None
         archived_stage_counts = None
@@ -222,6 +224,8 @@ class ApplicationService:
         candidate.stage = data.stage
         candidate.status = data.status
         candidate.current_round_id = data.current_round_id
+        if data.status == "INTERVIEW_CANCELLED":
+            self._cancel_active_interviews(candidate_id, data.current_round_id)
         self.db.commit()
 
         if (prev_status, prev_stage, prev_round_id) != (data.status, data.stage, data.current_round_id):
@@ -243,6 +247,43 @@ class ApplicationService:
             ))
 
         return {"success": True}
+
+    def _cancel_active_interviews(self, candidate_id: int, current_round_id: str | None = None) -> None:
+        from app.core.constants import InterviewStatus
+        from app.modules.interviews.interview_helpers import get_calendar_service
+        from app.modules.interviews.models.interview import Interview
+        from app.modules.slots.slot_model import Slot, SlotStatus
+
+        active_statuses = (InterviewStatus.SCHEDULED.value, InterviewStatus.RESCHEDULED.value)
+        query = (
+            self.db.query(Interview)
+            .join(Round, Round.id == Interview.round_id)
+            .filter(Round.candidate_id == candidate_id, Interview.status.in_(active_statuses))
+        )
+        if current_round_id:
+            query = query.filter(cast(Round.id, String) == current_round_id)
+        interviews = query.all()
+        if not interviews:
+            return
+        logger.info("Cancelling %d active interview(s) for candidate_id=%s", len(interviews), candidate_id)
+        for interview in interviews:
+            if interview.event_id:
+                try:
+                    get_calendar_service().cancel_event(event_id=interview.event_id)
+                except Exception as exc:
+                    logger.warning("Calendar cancel failed: interview_id=%s | %s", interview.id, exc)
+            if interview.slot_id:
+                self.db.query(Slot).filter(Slot.id == interview.slot_id).update({"status": SlotStatus.AVAILABLE.value})
+            interview.status = InterviewStatus.CANCELLED.value
+            EventService(self.db).create_event(EventCreate(
+                entity_type="CANDIDATE",
+                entity_id=str(candidate_id),
+                event_name="Interview Cancelled",
+                state_code="INTERVIEW_CANCELLED",
+                actor_type="HR",
+                candidate_id=candidate_id,
+                event_metadata={"interview_id": str(interview.id), "reason": "round_status_cancelled"},
+            ))
 
     def set_candidate_archived(self, candidate_id: int, archived: bool) -> dict:
         from app.modules.evaluations.evaluation_model import Candidate

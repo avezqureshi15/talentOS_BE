@@ -90,6 +90,8 @@ class FormService:
         if active:
             self.repository.touch_last_sent_at(active, last_sent_at=now)
             self.db.commit()
+            self._notify_form_sent(active)
+            self.db.commit()
             send_review_mail_task(employee.id, active.id, candidate_name, round_name, interviewer_name)
             return active
 
@@ -104,6 +106,8 @@ class FormService:
             round_id=round_id,
             candidate_id=candidate_id,
         )
+        self.db.commit()
+        self._notify_form_sent(form)
         self.db.commit()
         send_review_mail_task(employee.id, form.id, candidate_name, round_name, interviewer_name)
         return form
@@ -167,6 +171,18 @@ class FormService:
         except sa_exc.SQLAlchemyError:
             self.db.rollback()
             raise
+
+        notified = 0
+        try:
+            for task in mail_tasks:
+                form = self.repository.get_by_id(task.form_id)
+                if form is not None:
+                    notified += self._notify_form_sent(form)
+            self.db.commit()
+        except sa_exc.SQLAlchemyError:
+            self.db.rollback()
+            raise
+        logger.info("Ask-form notifications created: %d", notified)
 
         return (
             AskFormResponse(
@@ -306,18 +322,21 @@ class FormService:
             round_name=round_name,
         )
 
-        self.notification_service.notify(
-            employee_id=user_id,
-            notification_type=alert_type,
-            title=content["title"],
-            body=content["body"],
-            action_url=content["action_url"],
-            action_label=content["action_label"],
-            form_id=form.id,
-            candidate_id=form.candidate_id,
-            job_id=hr.id if hr else None,
-            dedupe_key=f"{form.type}-{form.id}",
-        )
+        # Notifications are user-scoped; resolve the linked users.id from the
+        # form's employee (HR-only employees with no login are skipped).
+        if form.user is not None:
+            self.notification_service.notify(
+                employee_id=form.user.id,
+                notification_type=alert_type,
+                title=content["title"],
+                body=content["body"],
+                action_url=content["action_url"],
+                action_label=content["action_label"],
+                form_id=form.id,
+                candidate_id=form.candidate_id,
+                job_id=hr.id if hr else None,
+                dedupe_key=f"{form.type}-{form.id}",
+            )
 
         if form.type == FormType.REVIEW.value and form.candidate_id:
             EventService(self.db).create_event(EventCreate(
@@ -348,6 +367,8 @@ class FormService:
         except sa_exc.SQLAlchemyError:
             self.db.rollback()
             raise
+        # Notify the org (tenant admins) that this employee's slots are live.
+        self._notify_slots_submitted(form)
         # notifications are user-scoped; resolve via the form's user relationship
         # (may be None for HR-only employees — nothing to mark then).
         if form.user is not None:
@@ -390,6 +411,80 @@ class FormService:
 
     def _get_alert_type(self, form_type: str) -> str:
         return NotificationType.REVIEW.value if form_type == FormType.REVIEW.value else NotificationType.SLOTS.value
+
+    def _notify_form_sent(self, form: Form) -> int:
+        """In-app notification when a review/slots form is sent (or resent).
+
+        REVIEW forms fan out to the job team (owner/recruiter/reviewer) and
+        the tenant admins, plus the reviewer themself. SLOTS forms have no
+        job mapping, so they go to the tenant admins only. The shared
+        ``dedupe_key`` keeps reminders and escalations from duplicating.
+        Returns the number of notifications created.
+        """
+        from app.modules.hiring_requests.hiring_request_model import HiringRequest
+        from app.modules.rounds.round_model import Round
+
+        candidate_name = None
+        job_title = None
+        round_name = None
+        jd_id = None
+        if form.candidate_id:
+            from app.modules.evaluations.evaluation_model import Candidate
+
+            candidate = self.db.query(Candidate).filter(Candidate.id == form.candidate_id).first()
+            candidate_name = candidate.candidate_name if candidate else None
+        if form.round_id:
+            round_obj = self.db.query(Round).filter(Round.id == form.round_id).first()
+            if round_obj:
+                round_name = round_obj.name
+                jd_id = round_obj.jd_id
+                if jd_id:
+                    hr = self.db.query(HiringRequest).filter(HiringRequest.id == jd_id).first()
+                    job_title = hr.title if hr else None
+
+        content = self._build_notification_content(
+            form,
+            candidate_name=candidate_name,
+            job_title=job_title,
+            round_name=round_name,
+        )
+        payload = dict(
+            notification_type=self._get_alert_type(form.type),
+            title=content["title"],
+            body=content["body"],
+            action_url=content["action_url"],
+            action_label="Open form",
+            form_id=form.id,
+            job_id=jd_id,
+            candidate_id=form.candidate_id,
+            dedupe_key=f"{form.type}-{form.id}",
+        )
+        created = 0
+        if jd_id:
+            created += self.notification_service.notify_job_team_and_admins(jd_id, **payload)
+        elif form.employee and form.employee.tenant_id is not None:
+            created += self.notification_service.notify_tenant_admins(
+                form.employee.tenant_id, **payload
+            )
+        if form.user is not None:
+            created += int(self.notification_service.notify(employee_id=form.user.id, **payload) is not None)
+        return created
+
+    def _notify_slots_submitted(self, form: Form) -> int:
+        """Notify tenant admins that an employee submitted slot availability."""
+        if form.employee is None or form.employee.tenant_id is None:
+            return 0
+        employee_name = form.employee.name or form.employee.emp_id or str(form.employee_id)
+        return self.notification_service.notify_tenant_admins(
+            form.employee.tenant_id,
+            notification_type=NotificationType.SLOTS.value,
+            title="Slot availability submitted",
+            body=f"{employee_name} submitted their slot availability.",
+            action_url=f"/book-slot/{form.id}",
+            action_label="View slots",
+            form_id=form.id,
+            dedupe_key=f"SLOTS-SUBMITTED-{form.id}",
+        )
 
     def _build_notification_content(
         self,
@@ -544,14 +639,10 @@ class FormService:
                 created_notification = self.notification_service.notify(
                     employee_id=form.user.id, **payload,
                 )
-            if alert_type == NotificationType.REVIEW.value:
-                if jd_id:
-                    self.notification_service.notify_job_team(jd_id, **payload)
-                if tenant_id is not None:
-                    self.notification_service.notify_tenant_admins(tenant_id, **payload)
-            else:
-                if tenant_id is not None:
-                    self.notification_service.notify_tenant_users(tenant_id, **payload)
+            if jd_id:
+                self.notification_service.notify_job_team(jd_id, **payload)
+            if tenant_id is not None:
+                self.notification_service.notify_tenant_admins(tenant_id, **payload)
             if created_notification:
                 created += 1
                 if form.type == FormType.REVIEW.value and form.candidate_id:
@@ -568,6 +659,8 @@ class FormService:
                             "alert_type": alert_type,
                         },
                     ))
+        if forms:
+            self.db.commit()
         return created
 
     def run_expiry_reconciliation_job(self) -> int:

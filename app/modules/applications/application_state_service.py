@@ -88,7 +88,7 @@ class ApplicationStateService:
 
                     _verdict_display = t.set_final_verdict.replace("_", " ").title()
                     _verdict_lower = t.set_final_verdict.replace("_", " ").lower()
-                    NotificationService(self.db).notify_job_team(
+                    NotificationService(self.db).notify_job_team_and_admins(
                         jd_uuid,
                         notification_type=NotificationType.FINAL_VERDICT.value,
                         title=f"Candidate {_verdict_display}",

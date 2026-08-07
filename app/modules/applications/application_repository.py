@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import String, and_, cast
+from sqlalchemy import String, cast
 from sqlalchemy.orm import Session
 
 from app.core.logger import get_logger
@@ -17,9 +17,9 @@ from app.modules.events.event_repository import EventRepository
 from app.modules.hiring_requests.hiring_request_model import HiringRequest
 from app.modules.interviews.models.interview import Interview
 from app.modules.interviews.models.round_interviewer import RoundInterviewer
+from app.modules.reviews.review_model import Review
 from app.modules.rounds.round_model import Round
 from app.modules.slots.slot_model import Slot
-from app.modules.users.user_model import User
 
 logger = get_logger(__name__)
 
@@ -97,42 +97,38 @@ class ApplicationRepository:
         round_ids = [str(c.current_round_id) for c in candidates if c.current_round_id]
         if not round_ids:
             return
-        logger.warning("attach_interview_data: round_ids_str=%s", round_ids)
-        _u_join = and_(
-            User.employee_id == RoundInterviewer.employee_id,
-            User.employee_id.isnot(None),
-        )
+        logger.debug("attach_interview_data: round_ids=%s", round_ids)
         rows = (
-            self.db.query(Interview, Round, RoundInterviewer, User, Slot)
+            self.db.query(Interview, Round, Slot)
             .join(Round, Interview.round_id == Round.id)
-            .join(RoundInterviewer, Round.id == RoundInterviewer.round_id)
-            .join(User, _u_join)
             .outerjoin(Slot, Round.slot_id == Slot.id)
             .filter(cast(Interview.round_id, String).in_(round_ids))
+            .order_by(Interview.created_at.desc())
             .all()
         )
-        logger.warning("attach_interview_data: rows_found=%d", len(rows))
+        logger.debug("attach_interview_data: rows_found=%d", len(rows))
         interview_by_round: dict[str, dict] = {}
-        for interview, round_, ri, user, slot in rows:
+        for interview, round_, slot in rows:
             rid = str(interview.round_id)
-            if rid not in interview_by_round:
-                scheduled_at = None
-                scheduled_end_at = None
-                if slot and slot.start_at:
-                    scheduled_at = slot.start_at.isoformat()
-                    scheduled_end_at = slot.end_at.isoformat() if slot.end_at else None
-                elif round_.scheduled_date and round_.scheduled_time:
-                    scheduled_at = f"{round_.scheduled_date.isoformat()}T{round_.scheduled_time.isoformat()}"
-                    if round_.scheduled_end_date and round_.scheduled_end_time:
-                        scheduled_end_at = f"{round_.scheduled_end_date.isoformat()}T{round_.scheduled_end_time.isoformat()}"
-                interview_by_round[rid] = {
-                    "interview_id": str(interview.id),
-                    "interviewer_emp_id": str(user.id),
-                    "interviewer_name": user.name,
-                    "round_name": round_.name or "",
-                    "scheduled_at": scheduled_at,
-                    "scheduled_end_at": scheduled_end_at,
-                }
+            if rid in interview_by_round:
+                continue
+            scheduled_at = None
+            scheduled_end_at = None
+            if slot and slot.start_at:
+                scheduled_at = slot.start_at.isoformat()
+                scheduled_end_at = slot.end_at.isoformat() if slot.end_at else None
+            elif round_.scheduled_date and round_.scheduled_time:
+                scheduled_at = f"{round_.scheduled_date.isoformat()}T{round_.scheduled_time.isoformat()}"
+                if round_.scheduled_end_date and round_.scheduled_end_time:
+                    scheduled_end_at = f"{round_.scheduled_end_date.isoformat()}T{round_.scheduled_end_time.isoformat()}"
+            interview_by_round[rid] = {
+                "interview_id": str(interview.id),
+                "interviewer_emp_id": None,
+                "interviewer_name": None,
+                "round_name": round_.name or "",
+                "scheduled_at": scheduled_at,
+                "scheduled_end_at": scheduled_end_at,
+            }
         found_ids = set(interview_by_round.keys())
         missing_ids = [rid for rid in round_ids if rid not in found_ids]
         if missing_ids:
@@ -157,10 +153,56 @@ class ApplicationRepository:
                     "scheduled_at": scheduled_at,
                     "scheduled_end_at": scheduled_end_at,
                 }
+        round_interviewers = (
+            self.db.query(RoundInterviewer)
+            .filter(cast(RoundInterviewer.round_id, String).in_(round_ids))
+            .all()
+        )
+        for ri in round_interviewers:
+            rid = str(ri.round_id)
+            entry = interview_by_round.get(rid)
+            if not entry:
+                continue
+            employee = ri.employee
+            if not employee:
+                continue
+            entry["interviewer_emp_id"] = str(employee.id)
+            entry["interviewer_name"] = employee.name
         for c in candidates:
             rid = str(c.current_round_id) if c.current_round_id else None
             if rid and rid in interview_by_round:
                 c._interview_data = interview_by_round[rid]
+
+    def attach_screening_review_data(self, candidates: list[Candidate]) -> None:
+        targets = [
+            c for c in candidates
+            if c.status in ("AI_SCREENING_EVALUATION_FAILED", "AI_SCREENING_FLAGGED")
+            and c.current_round_id
+        ]
+        round_ids = [str(c.current_round_id) for c in targets]
+        if not round_ids:
+            return
+        rows = (
+            self.db.query(Review)
+            .filter(
+                cast(Review.round_id, String).in_(round_ids),
+                Review.entity_type == "ai_screening",
+            )
+            .all()
+        )
+        review_by_round = {str(r.round_id): r.reviews for r in rows if r.reviews}
+        for c in targets:
+            rid = str(c.current_round_id)
+            if rid in review_by_round:
+                rv = review_by_round[rid]
+                c._screening_review = {
+                    "call_outcome": rv.get("call_outcome"),
+                    "ended_reason": rv.get("ended_reason"),
+                    "summary": rv.get("summary"),
+                    "flag_reason": rv.get("flag_reason"),
+                    "disposition": rv.get("disposition"),
+                    "flagged": rv.get("flagged"),
+                }
 
     def to_candidate_dict(
         self,
@@ -171,12 +213,14 @@ class ApplicationRepository:
     ) -> dict:
         events = events_map.get(candidate.id) if events_map else None
         interview_data = getattr(candidate, '_interview_data', None)
+        screening_review = getattr(candidate, '_screening_review', None)
         return build_candidate_response(
             candidate,
             hide_cover_letter=ai,
             events=events,
             disqualified_by=disqualified_by,
             interview_data=interview_data,
+            screening_review=screening_review,
         )
 
     def create_queued_candidate(self, application_id: str, job_id: str, **kwargs) -> Candidate:

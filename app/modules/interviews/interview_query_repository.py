@@ -1,27 +1,24 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import and_, or_
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.constants import InterviewStatus
 from app.core.logger import get_logger
+from app.modules.employees.employee_model import Employee
 from app.modules.evaluations.evaluation_model import Candidate
 from app.modules.hiring_requests.hiring_request_model import HiringRequest
 from app.modules.interviews.models.interview import Interview
 from app.modules.interviews.models.round_interviewer import RoundInterviewer
 from app.modules.rounds.round_model import Round
 from app.modules.slots.slot_model import Slot
-from app.modules.users.user_model import User
 
 
-def _ri_to_user_join():
-    """ON clause joining ``users`` to ``round_interviewers`` through the
-    employees linkage. Requires ``users.employee_id`` to be populated."""
-    return and_(
-        User.employee_id == RoundInterviewer.employee_id,
-        User.employee_id.isnot(None),
-    )
+def _ri_to_employee_join():
+    """ON clause joining ``round_interviewers`` to ``employees`` directly.
+    Interviewers are employees — a linked ``users`` row is not required."""
+    return RoundInterviewer.employee_id == Employee.id
 
 logger = get_logger(__name__)
 
@@ -55,10 +52,10 @@ class InterviewQueryRepository:
                 Interview.meet_link,
                 Round.jd_id,
                 Round.candidate_id,
-                User.id.label("interviewer_user_id"),
-                User.emp_id,
-                User.name.label("interviewer_name"),
-                User.email.label("interviewer_email"),
+                Employee.id.label("interviewer_employee_id"),
+                Employee.emp_id,
+                Employee.name.label("interviewer_name"),
+                Employee.email.label("interviewer_email"),
                 Candidate.candidate_name,
                 Candidate.candidate_email,
                 Candidate.external_application_id,
@@ -67,7 +64,7 @@ class InterviewQueryRepository:
             )
             .join(Round, Interview.round_id == Round.id)
             .join(RoundInterviewer, RoundInterviewer.round_id == Round.id)
-            .join(User, _ri_to_user_join())
+            .join(Employee, _ri_to_employee_join())
             .join(Slot, Interview.slot_id == Slot.id)
             .outerjoin(Candidate, Round.candidate_id == Candidate.id)
             .outerjoin(HiringRequest, Round.jd_id == HiringRequest.id)
@@ -91,7 +88,7 @@ class InterviewQueryRepository:
                     Round.name.ilike(pattern),
                     HiringRequest.title.ilike(pattern),
                     Candidate.candidate_name.ilike(pattern),
-                    User.name.ilike(pattern),
+                    Employee.name.ilike(pattern),
                 )
             )
         total = query.count()
@@ -116,10 +113,10 @@ class InterviewQueryRepository:
                 Interview.meet_link,
                 Round.jd_id,
                 Round.candidate_id,
-                User.id.label("interviewer_user_id"),
-                User.emp_id,
-                User.name.label("interviewer_name"),
-                User.email.label("interviewer_email"),
+                Employee.id.label("interviewer_employee_id"),
+                Employee.emp_id,
+                Employee.name.label("interviewer_name"),
+                Employee.email.label("interviewer_email"),
                 Candidate.candidate_name,
                 Candidate.candidate_email,
                 Candidate.external_application_id,
@@ -128,7 +125,7 @@ class InterviewQueryRepository:
             )
             .join(Round, Interview.round_id == Round.id)
             .join(RoundInterviewer, RoundInterviewer.round_id == Round.id)
-            .join(User, _ri_to_user_join())
+            .join(Employee, _ri_to_employee_join())
             .join(Slot, Interview.slot_id == Slot.id)
             .outerjoin(Candidate, Round.candidate_id == Candidate.id)
             .outerjoin(HiringRequest, Round.jd_id == HiringRequest.id)
@@ -150,7 +147,7 @@ class InterviewQueryRepository:
                 "title": row.position_title or "",
             },
             "interviewer": {
-                "id": str(row.interviewer_user_id) if row.interviewer_user_id else "",
+                "id": str(row.interviewer_employee_id) if row.interviewer_employee_id else "",
                 "name": row.interviewer_name or "",
                 "email": row.interviewer_email or "",
             },

@@ -20,6 +20,7 @@ class InterviewDesign(Base):
     )
     screening_sections: Mapped[list[dict]] = mapped_column(JSONB, nullable=False, default=list)
     interview_sections: Mapped[list[dict]] = mapped_column(JSONB, nullable=False, default=list)
+    review_sections: Mapped[list[dict]] = mapped_column(JSONB, nullable=False, default=list)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

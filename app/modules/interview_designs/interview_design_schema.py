@@ -12,12 +12,12 @@ class InterviewDesignQuestion(BaseModel):
     id: str
     question: str
     score: int = Field(ge=1, le=10)
-    timeAllocationMinutes: int = Field(ge=1, le=60)
+    timeAllocationMinutes: int = Field(ge=0, le=60)
     expected_points: list[str] = Field(default_factory=list)
 
 
 class ScreeningDesignQuestion(InterviewDesignQuestion):
-    timeAllocationMinutes: int = Field(ge=1, le=2)
+    timeAllocationMinutes: float = Field(ge=0.25, le=2)
 
 
 class InterviewDesignSection(BaseModel):
@@ -41,10 +41,11 @@ class ScreeningDesignSection(BaseModel):
 class InterviewDesignUpdate(BaseModel):
     screening_sections: list[ScreeningDesignSection] | None = None
     interview_sections: list[InterviewDesignSection] | None = None
+    review_sections: list[InterviewDesignSection] | None = None
 
 
 class InterviewDesignGenerate(BaseModel):
-    kind: Literal["screening", "interview"]
+    kind: Literal["screening", "interview", "review"]
     count: int = Field(default=8, ge=1, le=15)
 
 
@@ -52,6 +53,7 @@ class InterviewDesignResponse(BaseModel):
     hiring_request_id: uuid.UUID
     screening_sections: list[dict]
     interview_sections: list[dict]
+    review_sections: list[dict]
     updated_at: datetime
     sync_status: Literal["synced", "draft"]
     sync_errors: list[str] = Field(default_factory=list)

@@ -1,4 +1,5 @@
 import uuid
+from datetime import date, time
 
 from pydantic import BaseModel
 
@@ -15,7 +16,11 @@ from app.modules.events.event_schema import EventCreate
 from app.modules.events.event_service import EventService
 from app.modules.reviews.review_model import Review
 from app.modules.rounds.round_model import Round
-from app.modules.hiring_requests.ai_interview_mail import send_interview_invite_email
+from app.modules.hiring_requests.ai_interview_mail import (
+    format_scheduled_slot_label,
+    send_interview_invite_email,
+    send_interview_slot_email,
+)
 from app.modules.hiring_requests.ai_interview_template_mapper import (
     build_interview_template_response,
 )
@@ -23,6 +28,7 @@ from app.modules.hiring_requests.ai_interview_template_schema import (
     AiInterviewTemplateResponse,
 )
 from app.modules.talentos_integration.talentos_result_service import (
+    apply_screening_outcome,
     persist_interview_result,
     persist_screening_result,
 )
@@ -86,6 +92,7 @@ async def get_screening_result(
 
     if candidate.current_round_id:
         persist_screening_result(db, candidate.current_round_id, result)
+        apply_screening_outcome(db, candidate.current_round_id, candidate, result)
     if isinstance(result, dict) and "screening_call_id" not in result and result.get("id"):
         result = {**result, "screening_call_id": result["id"]}
     return result
@@ -182,6 +189,150 @@ async def list_ai_candidates(
     if result is None:
         return []
     return result
+
+
+class AiInterviewScheduleRequest(BaseModel):
+    scheduled_date: str
+    scheduled_time: str
+    timezone: str | None = None
+
+
+@router.post("/candidates/{candidate_id}/interview/schedule")
+async def schedule_ai_interview(
+    hiring_request_id: str,
+    candidate_id: int,
+    body: AiInterviewScheduleRequest,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission(Permission.APPLICATION_WORKFLOW)),
+):
+    """Set a specific slot for a candidate's AI interview."""
+    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+    round_obj = (
+        db.query(Round).filter(Round.id == candidate.current_round_id).first()
+        if candidate.current_round_id
+        else None
+    )
+    if not round_obj or not round_obj.rh_external_session_id:
+        raise HTTPException(
+            status_code=409,
+            detail="Candidate has no interview session yet — move to AI interview first",
+        )
+
+    try:
+        slot_date = date.fromisoformat(body.scheduled_date)
+        slot_time = time.fromisoformat(body.scheduled_time)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid scheduled date or time")
+
+    rh_job_id = await _get_or_create_rh_job(hiring_request_id, db)
+    rh_candidate_id = _get_rh_candidate_id(candidate_id, db)
+    timezone = body.timezone or "Asia/Kolkata"
+    if not body.timezone:
+        window = await AiRecruitmentClient().get_call_window(rh_job_id)
+        if window and window.get("screening_timezone"):
+            timezone = window["screening_timezone"]
+
+    result = await AiRecruitmentClient().schedule_interview(
+        rh_job_id, rh_candidate_id, body.scheduled_date, body.scheduled_time, timezone
+    )
+    if result is None:
+        raise HTTPException(
+            status_code=502,
+            detail="Failed to schedule interview in ai-recruitment-poc",
+        )
+
+    round_obj.scheduled_date = slot_date
+    round_obj.scheduled_time = slot_time
+    round_obj.scheduled_timezone = timezone
+    db.commit()
+    EventService(db).create_event(EventCreate(
+        entity_type="CANDIDATE",
+        entity_id=str(candidate.id),
+        candidate_id=candidate.id,
+        event_name="AI Interview Scheduled",
+        state_code="AI_INTERVIEW_SCHEDULED",
+        actor_type="SYSTEM",
+        event_metadata={
+            "stage": "AI_INTERVIEW",
+            "source": "ai_integration",
+            "round_id": str(round_obj.id),
+            "scheduled_date": body.scheduled_date,
+            "scheduled_time": body.scheduled_time,
+            "timezone": timezone,
+        },
+    ))
+
+    hr = db.query(HiringRequest).filter(HiringRequest.id == hiring_request_id).first()
+    send_interview_slot_email(
+        candidate_email=candidate.candidate_email,
+        candidate_name=candidate.candidate_name or "there",
+        role_title=hr.title if hr else "the position",
+        interview_url=round_obj.rh_interview_url,
+        scheduled_at_label=format_scheduled_slot_label(
+            body.scheduled_date, body.scheduled_time, timezone
+        ),
+    )
+
+    return {
+        "round_id": str(round_obj.id),
+        "scheduled_date": body.scheduled_date,
+        "scheduled_time": body.scheduled_time,
+        "timezone": timezone,
+        "scheduled_at": result.get("scheduled_interview_at"),
+    }
+
+
+@router.post("/candidates/{candidate_id}/interview/unschedule")
+async def unschedule_ai_interview(
+    hiring_request_id: str,
+    candidate_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission(Permission.APPLICATION_WORKFLOW)),
+):
+    """Clear a candidate's slot so the AI interview can be joined immediately."""
+    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+    round_obj = (
+        db.query(Round).filter(Round.id == candidate.current_round_id).first()
+        if candidate.current_round_id
+        else None
+    )
+    if not round_obj or not round_obj.rh_external_session_id:
+        raise HTTPException(
+            status_code=409,
+            detail="Candidate has no interview session yet — move to AI interview first",
+        )
+
+    rh_job_id = await _get_or_create_rh_job(hiring_request_id, db)
+    rh_candidate_id = _get_rh_candidate_id(candidate_id, db)
+    result = await AiRecruitmentClient().clear_interview_schedule(rh_job_id, rh_candidate_id)
+    if result is None:
+        raise HTTPException(
+            status_code=502,
+            detail="Failed to clear interview schedule in ai-recruitment-poc",
+        )
+
+    round_obj.scheduled_date = None
+    round_obj.scheduled_time = None
+    round_obj.scheduled_timezone = None
+    db.commit()
+    EventService(db).create_event(EventCreate(
+        entity_type="CANDIDATE",
+        entity_id=str(candidate.id),
+        candidate_id=candidate.id,
+        event_name="AI Interview Slot Cleared",
+        state_code="AI_INTERVIEW_SLOT_CLEARED",
+        actor_type="SYSTEM",
+        event_metadata={
+            "stage": "AI_INTERVIEW",
+            "source": "ai_integration",
+            "round_id": str(round_obj.id),
+        },
+    ))
+    return {"round_id": str(round_obj.id), "status": "cleared"}
 
 
 class MoveToAiScreeningRequest(BaseModel):
@@ -433,6 +584,7 @@ async def retry_ai_screening(
         )
 
     persist_screening_result(db, candidate.current_round_id, result)
+    apply_screening_outcome(db, candidate.current_round_id, candidate, result)
     db.commit()
 
     missing = [k for k in _SCREENING_KEYS if result.get(k) is None]

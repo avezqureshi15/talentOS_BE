@@ -14,6 +14,7 @@ from app.core.kafka import ensure_topics
 from app.core.logger import get_logger, setup_logging
 from app.db.session import engine
 from app.cron.hourly_jobs import setup_form_jobs
+from app.cron.screening_outcome import setup_screening_jobs
 from app.middleware import OriginCaptureMiddleware, RequestLoggingMiddleware, TenantContextMiddleware
 from app.scheduler import init_scheduler, shutdown_scheduler
 from app.modules.applications import router as applications_router
@@ -90,6 +91,7 @@ async def lifespan(app: FastAPI):
     ])
     scheduler = init_scheduler()
     setup_form_jobs(scheduler)
+    setup_screening_jobs(scheduler)
 
     try:
         _ = google_requests.Request()
