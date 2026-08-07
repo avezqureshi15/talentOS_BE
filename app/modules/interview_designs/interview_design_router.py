@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.authorization import require_permission
@@ -14,6 +15,7 @@ from app.modules.interview_designs.interview_design_service import (
     get_or_seed_design,
     update_design,
 )
+from app.modules.interview_designs.pdf import InterviewDesignPdfExportService
 
 router = APIRouter(
     prefix="/api/v1/hiring-requests/{hiring_request_id}/ai",
@@ -28,6 +30,19 @@ async def get_questions(
     db: Session = Depends(get_db),
 ):
     return await get_or_seed_design(hiring_request_id, db)
+
+
+@router.get("/questions/export")
+def export_interview_design_pdf(
+    hiring_request_id: str,
+    db: Session = Depends(get_db),
+):
+    buf, filename = InterviewDesignPdfExportService(db).export(hiring_request_id)
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.put(

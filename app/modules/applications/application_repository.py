@@ -53,7 +53,12 @@ class ApplicationRepository:
             .first()
         )
 
-    def get_candidates_by_job(self, job_id: str, status: str | None = None, archived: bool = False) -> list[Candidate]:
+    def get_candidates_by_job(
+        self,
+        job_id: str,
+        status: str | None = None,
+        archived: bool | None = False,
+    ) -> list[Candidate]:
         query = self.db.query(Candidate).filter(Candidate.external_job_id == job_id)
         if status:
             query = query.filter(Candidate.status == status)
