@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -16,6 +16,7 @@ from app.modules.interview_designs.interview_design_service import (
     update_design,
 )
 from app.modules.interview_designs.pdf import InterviewDesignPdfExportService
+from app.modules.interview_designs.pdf.kinds import ExportKind
 
 router = APIRouter(
     prefix="/api/v1/hiring-requests/{hiring_request_id}/ai",
@@ -36,8 +37,9 @@ async def get_questions(
 def export_interview_design_pdf(
     hiring_request_id: str,
     db: Session = Depends(get_db),
+    kind: ExportKind = Query(default="all"),
 ):
-    buf, filename = InterviewDesignPdfExportService(db).export(hiring_request_id)
+    buf, filename = InterviewDesignPdfExportService(db).export(hiring_request_id, kind=kind)
     return StreamingResponse(
         iter([buf.getvalue()]),
         media_type="application/pdf",
