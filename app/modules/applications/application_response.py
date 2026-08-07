@@ -43,6 +43,7 @@ def build_candidate_response(
     disqualified_by: list[str] | None = None,
     interview_data: dict | None = None,
     screening_review: dict | None = None,
+    ai_interview_review: dict | None = None,
 ) -> dict:
     result = {
         "id": candidate.external_application_id,
@@ -77,6 +78,7 @@ def build_candidate_response(
         "disqualified_by": disqualified_by or [],
         "events": events,
         "screening_review": screening_review,
+        "ai_interview_review": ai_interview_review,
         "interview_id": None,
         "interviewer_emp_id": None,
         "interviewer_name": None,

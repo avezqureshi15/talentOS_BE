@@ -26,6 +26,10 @@ class AiRecruitmentNotFound(AiRecruitmentError):
     """POC returned 404 for the requested resource."""
 
 
+class AiRecruitmentConflict(AiRecruitmentError):
+    """POC returned 409 — the requested action conflicts with current state."""
+
+
 class AiRecruitmentClient:
     def __init__(self) -> None:
         self.base_url = settings.RH_SERVICE_URL
@@ -76,6 +80,12 @@ class AiRecruitmentClient:
                 method, path, ctx,
             )
             raise AiRecruitmentNotFound(f"not found: {path}")
+        if resp.status_code == 409:
+            logger.info(
+                "ai-recruitment-poc conflict method=%s path=%s ctx=%s body=%s",
+                method, path, ctx, resp.text[:300],
+            )
+            raise AiRecruitmentConflict(f"conflict: {path}")
         if resp.is_error:
             logger.error(
                 "ai-recruitment-poc error method=%s path=%s ctx=%s status=%s body=%s",
@@ -141,10 +151,12 @@ class AiRecruitmentClient:
         try:
             return await self._request(
                 "POST",
-                f"/internal/talentos/jobs/{job_id}/candidates/{candidate_id}/trigger-screening",
+                f"/internal/talentos/jobs/{job_id}/candidates/{candidate_id}/call-now",
                 timeout=15.0,
                 context={"job_id": job_id, "candidate_id": candidate_id},
             )
+        except AiRecruitmentConflict:
+            raise
         except AiRecruitmentError:
             return None
 
@@ -186,6 +198,31 @@ class AiRecruitmentClient:
                 f"/internal/talentos/jobs/{job_id}/candidates/{candidate_id}/interviews",
                 timeout=10.0,
                 context={"job_id": job_id, "candidate_id": candidate_id},
+            )
+        except AiRecruitmentError:
+            return None
+
+    async def get_settings(self) -> dict | None:
+        """Read the POC tenant's system settings (phone geography, retries)."""
+        try:
+            return await self._request(
+                "GET",
+                "/api/settings",
+                timeout=10.0,
+                context={"path": "settings"},
+            )
+        except AiRecruitmentError:
+            return None
+
+    async def update_settings(self, payload: dict) -> dict | None:
+        """Best-effort sync of tenant system settings to the POC."""
+        try:
+            return await self._request(
+                "PATCH",
+                "/api/settings",
+                timeout=10.0,
+                json=payload,
+                context={"path": "settings"},
             )
         except AiRecruitmentError:
             return None

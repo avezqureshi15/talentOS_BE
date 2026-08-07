@@ -51,6 +51,49 @@ SCREENING_ACTIVE_STATUSES = frozenset(
     {"SCREENING_ROUND_SCHEDULED", "AI_SCREENING_EVALUATION_FAILED"}
 )
 
+INTERVIEW_ACTIVE_STATUSES = frozenset(
+    {"INTERVIEW_SCHEDULED", "INTERVIEW_RESCHEDULED", "ONGOING"}
+)
+
+# POC pipeline tab -> talentOS candidate status (see classify_interview_tab in
+# ai-recruitment-poc). Applied blindly for full sync.
+INTERVIEW_STATUS_MAP: dict[str, str] = {
+    "scheduled": EvaluationStatus.INTERVIEW_SCHEDULED.value,
+    "ongoing": EvaluationStatus.ONGOING.value,
+    "completed": EvaluationStatus.UNDER_EVALUATION.value,
+    "flagged": EvaluationStatus.NO_SHOW.value,
+    "finalists": EvaluationStatus.UNDER_EVALUATION.value,
+}
+
+_DEFAULT_FLAG_REASONS: dict[str, str] = {
+    "expired": "Interview link expired — candidate never joined",
+    "assessment_failed": "Interview did not produce a usable result",
+    "cancelled": "Interview was cancelled",
+    "completed": "Interview marked complete but was never started",
+}
+
+
+def _default_flag_reason(status: str) -> str:
+    return _DEFAULT_FLAG_REASONS.get(status, "Interview did not produce a usable result")
+
+
+def _map_result_to_status(result: dict) -> str | None:
+    """Derive the talentOS pipeline status from a raw POC session result.
+
+    Only used as a fallback when the POC did not send an explicit top-level
+    ``status``. Mirrors classify_interview_tab() behaviour.
+    """
+    status = (result.get("status") or "").lower()
+    if status in ("completed", "assessed"):
+        return EvaluationStatus.UNDER_EVALUATION.value
+    if status == "in_progress":
+        return EvaluationStatus.ONGOING.value
+    if status in ("scheduled", "pending"):
+        return EvaluationStatus.INTERVIEW_SCHEDULED.value
+    if status in ("expired", "cancelled"):
+        return EvaluationStatus.NO_SHOW.value
+    return None
+
 
 def _is_screening_failure(result: dict) -> bool:
     call_status = (result.get("call_status") or "").lower()
@@ -68,7 +111,14 @@ def _is_interview_failure(result: dict) -> bool:
     status = (result.get("status") or "").lower()
     if status == "assessment_failed":
         return True
-    if status in ("completed", "assessed") and not (result.get("transcript") or "").strip():
+    if status not in ("completed", "assessed"):
+        return False
+    has_report = bool(
+        (result.get("final_recommendation") or "").strip()
+        or (result.get("summary") or "").strip()
+        or result.get("overall_score") is not None
+    )
+    if not (result.get("transcript") or "").strip() and not has_report:
         return True
     return False
 
@@ -79,7 +129,7 @@ def persist_screening_result(db: Session, round_id: uuid.UUID, result: dict) -> 
         "summary", "transcript", "availability", "employment_status",
         "relevant_experience", "current_ctc", "expected_ctc", "notice_period",
         "location_preference", "communication_quality", "willingness_to_proceed",
-        "created_at",
+        "flag_reason", "disposition", "terminal_failure", "created_at",
     ]
     payload = {k: result.get(k) for k in keys}
     payload["screening_call_id"] = result.get("id")
@@ -91,7 +141,38 @@ def persist_screening_result(db: Session, round_id: uuid.UUID, result: dict) -> 
     )
 
 
-def persist_interview_result(db: Session, round_obj: Round, result: dict) -> None:
+def update_screening_call_status(
+    db: Session, round_id: uuid.UUID, call_status: str, retry_count: int | None = None
+) -> bool:
+    """Refresh only the live call status in the existing ai_screening review.
+
+    Used by the outcome sweep while a call is still live (initiated /
+    in_progress / pending retry) so the frontend can show current states
+    instead of a stale "queued". Returns True when something changed and was
+    committed; verdict and all other review fields are left untouched.
+    """
+    review = ReviewRepository(db).get_by_round_and_entity(round_id, "ai_screening")
+    if review is None:
+        return False
+    current = dict(review.reviews or {})
+    changed = False
+    if current.get("call_status") != call_status:
+        current["call_status"] = call_status
+        changed = True
+    if retry_count is not None and current.get("retry_count") != retry_count:
+        current["retry_count"] = retry_count
+        changed = True
+    if not changed:
+        return False
+    review.reviews = current
+    db.flush()
+    db.commit()
+    return True
+
+
+def persist_interview_result(
+    db: Session, round_obj: Round, result: dict, *, enqueue_report: bool = True
+) -> None:
     keys = [
         "status", "transcript", "transcript_segments", "summary", "transcript_summary",
         "overall_score", "technical_fit_score", "communication_score",
@@ -107,7 +188,8 @@ def persist_interview_result(db: Session, round_obj: Round, result: dict) -> Non
         round_obj.id,
         ReviewUpdateByRound(entity_type="ai_interview", reviews=payload, verdict=verdict),
     )
-    _enqueue_interview_report(round_obj.id)
+    if enqueue_report:
+        _enqueue_interview_report(round_obj.id)
 
 
 def _enqueue_interview_report(round_id: uuid.UUID) -> None:
@@ -142,6 +224,12 @@ def resolve_screening_round(db: Session, body: dict) -> tuple[Candidate | None, 
         candidate = (
             db.query(Candidate)
             .filter(Candidate.rh_external_candidate_id == external_candidate_id)
+            .first()
+        )
+    if candidate is None and external_candidate_id and external_candidate_id.isdigit():
+        candidate = (
+            db.query(Candidate)
+            .filter(Candidate.id == int(external_candidate_id))
             .first()
         )
     if candidate is None and screening_call_id:
@@ -182,6 +270,12 @@ def resolve_interview_round(db: Session, body: dict) -> tuple[Candidate | None, 
             .filter(Candidate.rh_external_candidate_id == external_candidate_id)
             .first()
         )
+        if candidate is None and external_candidate_id.isdigit():
+            candidate = (
+                db.query(Candidate)
+                .filter(Candidate.id == int(external_candidate_id))
+                .first()
+            )
         if candidate and candidate.current_round_id:
             round_obj = db.query(Round).filter(Round.id == candidate.current_round_id).first()
     if round_obj is not None and candidate is None:
@@ -415,13 +509,181 @@ def handle_screening_webhook(db: Session, body: dict) -> dict:
     }
 
 
+def apply_interview_outcome(
+    db: Session,
+    round_id: uuid.UUID | None,
+    candidate: Candidate | None,
+    result: dict,
+) -> None:
+    """Progress the candidate's pipeline state when an AI interview finishes.
+
+    Success (status ``assessed``/``completed`` with a transcript or assessment
+    report): ``INTERVIEW_SCHEDULED`` / ``INTERVIEW_RESCHEDULED`` / ``ONGOING``
+    -> ``UNDER_EVALUATION`` while retaining stage ``AI_INTERVIEW`` (the stage
+    is never renamed for AI interviews — only the status changes).
+
+    Failures leave the candidate in place for retry; the caller sends the
+    failure notification.
+    """
+    if candidate is None or candidate.status not in INTERVIEW_ACTIVE_STATUSES:
+        return
+
+    status = (result.get("status") or "").lower()
+    if status not in ("assessed", "completed"):
+        return
+    has_report = bool(
+        (result.get("final_recommendation") or "").strip()
+        or (result.get("summary") or "").strip()
+        or result.get("overall_score") is not None
+    )
+    if not (result.get("transcript") or "").strip() and not has_report:
+        return
+
+    candidate.stage = "AI_INTERVIEW"
+    candidate.status = EvaluationStatus.UNDER_EVALUATION.value
+    db.commit()
+    EventService(db).create_event(EventCreate(
+        entity_type="CANDIDATE",
+        entity_id=str(candidate.id),
+        candidate_id=candidate.id,
+        event_name="AI Interview Completed",
+        state_code=EvaluationStatus.UNDER_EVALUATION.value,
+        actor_type="SYSTEM",
+        event_metadata={"round_id": str(round_id)},
+    ))
+    logger.info(
+        "AI interview completed | candidate_id=%s round_id=%s new_status=%s",
+        candidate.id, round_id, EvaluationStatus.UNDER_EVALUATION.value,
+    )
+
+
+def _persist_interview_flag(
+    db: Session, round_id: uuid.UUID, flag_reason: str | None
+) -> None:
+    """Write the NO_SHOW flag into the ai_interview review row.
+
+    Uses the repository directly (not ReviewService.upsert_review) so the
+    HR-driven round_verdict recompute is not triggered — same pattern as
+    ``apply_screening_flag``.
+    """
+    payload = {
+        "flagged": True,
+        "flag_reason": flag_reason,
+        "disposition": "flagged",
+        "status": "NO_SHOW",
+        "flagged_at": datetime.now(timezone.utc).isoformat(),
+    }
+    repo = ReviewRepository(db)
+    review = repo.get_by_round_and_entity(round_id, "ai_interview")
+    if review is not None:
+        review.reviews = payload
+        review.verdict = "flagged"
+        repo.update(review)
+    else:
+        review = Review(
+            round_id=round_id,
+            entity_type="ai_interview",
+            reviews=payload,
+            verdict="flagged",
+        )
+        repo.create(review)
+    db.commit()
+
+
+def apply_interview_status_update(
+    db: Session,
+    round_id: uuid.UUID | None,
+    candidate: Candidate | None,
+    status: str,
+    flag_reason: str | None = None,
+) -> None:
+    """Blindly mirror the POC-issued AI interview pipeline status.
+
+    Full sync (no forward-only guard): whatever status the POC pushes is applied
+    verbatim with stage ``AI_INTERVIEW``. NO_SHOW additionally records the flag
+    (with reason) in the ``ai_interview`` review and notifies the job team.
+    """
+    if candidate is None:
+        return
+
+    if candidate.stage != "AI_INTERVIEW" or candidate.status != status:
+        candidate.stage = "AI_INTERVIEW"
+        candidate.status = status
+        db.commit()
+        logger.info(
+            "AI interview status update | candidate_id=%s round_id=%s new_status=%s",
+            candidate.id, round_id, status,
+        )
+
+    if status == EvaluationStatus.NO_SHOW.value:
+        reason = flag_reason or _default_flag_reason("expired")
+        _persist_interview_flag(db, round_id, reason)
+        EventService(db).create_event(EventCreate(
+            entity_type="CANDIDATE",
+            entity_id=str(candidate.id),
+            candidate_id=candidate.id,
+            event_name="AI Interview Flagged",
+            state_code=EvaluationStatus.NO_SHOW.value,
+            actor_type="SYSTEM",
+            event_metadata={"round_id": str(round_id), "flag_reason": reason},
+        ))
+        round_obj = db.query(Round).filter(Round.id == round_id).first() if round_id else None
+        if round_obj and round_obj.jd_id:
+            _notify_ai_failure(
+                db,
+                hiring_request_id=round_obj.jd_id,
+                round_id=round_id,
+                candidate_id=candidate.id,
+                entity_type="ai_interview",
+                round_name=round_obj.name,
+                title="AI interview flagged as no-show for a candidate",
+                body=(
+                    f"AI interview round \"{round_obj.name or round_id}\" was flagged. "
+                    f"Reason: {reason}. Review the candidate from the AI interview view."
+                ),
+                notification_type=NotificationType.EVALUATION_FAILED.value,
+                event_name="AI Interview Flagged",
+                state_code=EvaluationStatus.NO_SHOW.value,
+                dedupe_key=f"AI_NO_SHOW-{round_id}",
+            )
+        return
+
+    if status == EvaluationStatus.UNDER_EVALUATION.value:
+        EventService(db).create_event(EventCreate(
+            entity_type="CANDIDATE",
+            entity_id=str(candidate.id),
+            candidate_id=candidate.id,
+            event_name="AI Interview Completed",
+            state_code=EvaluationStatus.UNDER_EVALUATION.value,
+            actor_type="SYSTEM",
+            event_metadata={"round_id": str(round_id)},
+        ))
+
+
 def handle_interview_webhook(db: Session, body: dict) -> dict:
     result = body.get("result") or {}
     candidate, round_obj = resolve_interview_round(db, body)
     if round_obj is None:
         return {"status": "ignored", "reason": "no matching round or candidate"}
 
-    persist_interview_result(db, round_obj, result)
+    status = body.get("status") or _map_result_to_status(result)
+    if status:
+        flag_reason = body.get("flag_reason") or _default_flag_reason(
+            (result.get("status") or "").lower()
+        )
+        apply_interview_status_update(db, round_obj.id, candidate, status, flag_reason)
+        if status == EvaluationStatus.UNDER_EVALUATION.value:
+            persist_interview_result(db, round_obj, result)
+        elif status in (
+            EvaluationStatus.INTERVIEW_SCHEDULED.value,
+            EvaluationStatus.ONGOING.value,
+        ):
+            persist_interview_result(db, round_obj, result, enqueue_report=False)
+        # NO_SHOW: apply_interview_status_update already persisted the flag.
+    else:
+        # Legacy payload without a pipeline status — behave like the old pull.
+        persist_interview_result(db, round_obj, result)
+        apply_interview_outcome(db, round_obj.id, candidate, result)
 
     if _is_interview_failure(result) and round_obj.jd_id:
         _notify_ai_failure(

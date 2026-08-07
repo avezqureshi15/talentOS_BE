@@ -39,6 +39,8 @@ class TalentosInterviewWebhookBody(BaseModel):
     external_job_id: str | None = None
     external_candidate_id: str | None = None
     interview_id: str | None = None
+    status: str | None = None
+    flag_reason: str | None = None
     result: dict = {}
 
 

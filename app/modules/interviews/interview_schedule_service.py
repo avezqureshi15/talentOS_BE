@@ -19,6 +19,11 @@ from app.cron.interview_fallback import (
     reschedule_interview_fallback,
     schedule_interview_fallback,
 )
+from app.cron.interview_ongoing import (
+    remove_interview_ongoing,
+    reschedule_interview_ongoing,
+    schedule_interview_ongoing,
+)
 from app.modules.interviews.interview_helpers import get_calendar_service
 from app.modules.interviews.interview_repository import InterviewRepository, InterviewRepositoryProtocol
 from app.modules.interviews.interview_schema import CancelInterviewResponse, ScheduleInterviewResponse
@@ -130,6 +135,7 @@ class InterviewScheduleService:
             )
 
         schedule_interview_fallback(str(created.id), slot.end_at)
+        schedule_interview_ongoing(str(created.id), slot.start_at)
         logger.info(
             "Interview scheduled: id=%s | event_id=%s | fallback_in_seconds=%s",
             created.id,
@@ -202,6 +208,7 @@ class InterviewScheduleService:
             )
 
         reschedule_interview_fallback(str(interview.id), new_slot.end_at)
+        reschedule_interview_ongoing(str(interview.id), new_slot.start_at)
         logger.info("Interview rescheduled: id=%s", interview.id)
         return ScheduleInterviewResponse(
             id=str(interview.id), round_id=str(interview.round_id),
@@ -251,5 +258,6 @@ class InterviewScheduleService:
             )
             self.db.commit()
         remove_interview_fallback(str(interview.id))
+        remove_interview_ongoing(str(interview.id))
         logger.info("Interview cancelled: id=%s", interview.id)
         return CancelInterviewResponse(id=str(interview.id), status=interview.status)

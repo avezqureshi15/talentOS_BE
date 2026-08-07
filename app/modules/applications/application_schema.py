@@ -83,6 +83,7 @@ class EvaluatedCandidate(BaseModel):
     comparison_fields: list[ComparisonField] = []
     disqualified_by: list[str] = []
     events: list[EventInfo] | None = None
+    screening_review: dict | None = None
     interview_id: str | None = None
     interviewer_emp_id: str | None = None
     interviewer_name: str | None = None

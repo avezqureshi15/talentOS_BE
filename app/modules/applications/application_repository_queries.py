@@ -15,7 +15,7 @@ STAGE_QUERY_MAP: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     "screening": (("SCREENING", "AI_SCREENING"), ()),
     "interview": (
         ("INTERVIEW", "AI_INTERVIEW"),
-        ("INTERVIEW_SCHEDULED", "INTERVIEW_RESCHEDULED", "INTERVIEW_CANCELLED"),
+        ("INTERVIEW_SCHEDULED", "INTERVIEW_RESCHEDULED", "INTERVIEW_CANCELLED", "ONGOING"),
     ),
     "waiting-evaluation": (("WAITING_FOR_EVALUATION",), ("WAITING_FOR_REVIEW",)),
     "evaluated": (("INTERVIEW", "AI_INTERVIEW"), ("UNDER_EVALUATION",)),

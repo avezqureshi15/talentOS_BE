@@ -94,4 +94,4 @@ def setup_form_jobs(scheduler: BackgroundScheduler) -> None:
         )
     for j in scheduler.get_jobs():
         logger.info("Registered cron job | id=%s name=\"%s\" next_run=%s trigger=%s description=\"%s\"",
-                     j.id, j.name, j.next_run_time, j.trigger, JOB_DESCRIPTIONS.get(j.id, ""))
+                     j.id, j.name, getattr(j, "next_run_time", None), j.trigger, JOB_DESCRIPTIONS.get(j.id, ""))

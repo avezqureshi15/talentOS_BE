@@ -8,6 +8,8 @@ from app.core.permissions import Permission
 from app.modules.auth.auth_schema import UserInfo
 from app.core.secrets import MANAGEABLE_API_KEY_META
 from app.modules.settings.settings_schema import (
+    AiScreeningSettings,
+    AiScreeningSettingsUpdate,
     ApiKeysResponse,
     ManageableApiKeyMeta,
     ManageableApiKeysResponse,
@@ -100,5 +102,31 @@ def update_api_keys(
     tid = _resolve_tenant(current_user, body.tenant_id)
     try:
         return SettingsService(db).update_api_keys(tid, body.keys)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+# ── AI screening settings (per tenant) ─────────────────────────────────────
+
+
+@router.get("/ai-screening", response_model=AiScreeningSettings)
+async def get_ai_screening_settings(
+    tenant_id: int | None = Query(None, description="Required for superadmin"),
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(require_permission(Permission.SETTINGS_VIEW)),
+):
+    tid = _resolve_tenant(current_user, tenant_id)
+    return await SettingsService(db).get_ai_screening_settings(tid)
+
+
+@router.patch("/ai-screening", response_model=AiScreeningSettings)
+async def update_ai_screening_settings(
+    body: AiScreeningSettingsUpdate,
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(require_permission(Permission.SETTINGS_EDIT)),
+):
+    tid = _resolve_tenant(current_user, body.tenant_id)
+    try:
+        return await SettingsService(db).update_ai_screening_settings(tid, body)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))

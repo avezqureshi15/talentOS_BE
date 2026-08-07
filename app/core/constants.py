@@ -73,6 +73,8 @@ def get_pipeline_stage(status: str, final_verdict: str | None = None) -> str | N
         EvaluationStatus.INTERVIEW_SCHEDULED.value: PipelineStage.INTERVIEW.value,
         EvaluationStatus.INTERVIEW_RESCHEDULED.value: PipelineStage.INTERVIEW.value,
         EvaluationStatus.INTERVIEW_CANCELLED.value: PipelineStage.INTERVIEW.value,
+        EvaluationStatus.ONGOING.value: PipelineStage.INTERVIEW.value,
+        EvaluationStatus.NO_SHOW.value: PipelineStage.INTERVIEW.value,
     }
     return stage_map.get(status)
 
@@ -94,6 +96,8 @@ class EvaluationStatus(str, Enum):
     INTERVIEW_RESCHEDULED = "INTERVIEW_RESCHEDULED"
     INTERVIEW_CANCELLED = "INTERVIEW_CANCELLED"
     INTERVIEW_COMPLETED = "INTERVIEW_COMPLETED"
+    ONGOING = "ONGOING"
+    NO_SHOW = "NO_SHOW"
     SCREENING_ROUND_SCHEDULED = "SCREENING_ROUND_SCHEDULED"
     AI_SCREENING_EVALUATION_FAILED = "AI_SCREENING_EVALUATION_FAILED"
     AI_SCREENING_FLAGGED = "AI_SCREENING_FLAGGED"

@@ -1,12 +1,69 @@
 from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_MISSED, EVENT_JOB_MAX_INSTANCES
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.schedulers.background import BackgroundScheduler
+from sqlalchemy.exc import OperationalError
 
 from app.core.logger import get_logger
 from app.db.session import engine
 
 _scheduler: BackgroundScheduler | None = None
 logger = get_logger(__name__)
+
+
+class ResilientSQLAlchemyJobStore(SQLAlchemyJobStore):
+    """SQLAlchemy jobstore whose DB failures never kill the scheduler thread.
+
+    APSScheduler guards ``get_due_jobs()`` but not ``get_next_run_time()`` or
+    ``update_job()`` in ``_process_jobs``, so a transient DB error (dropped
+    pooled connection, server restart) escapes and the whole cron thread dies.
+    This store disposes the connection pool and retries a failed query once;
+    if the DB is still unreachable it degrades gracefully (empty results,
+    skipped writes) instead of raising, so the scheduler keeps running and
+    resumes normally once connectivity returns.
+    """
+
+    def _run(self, fn, default, *args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except OperationalError:
+            logger.warning(
+                "Jobstore DB error — disposing pool and retrying | op=%s", getattr(fn, "__name__", fn),
+            )
+            try:
+                self.engine.dispose()
+            except Exception:
+                pass
+            try:
+                return fn(*args, **kwargs)
+            except OperationalError:
+                logger.error(
+                    "Jobstore DB still unavailable — degrading | op=%s", getattr(fn, "__name__", fn),
+                )
+                return default
+
+    def lookup_job(self, job_id):
+        return self._run(super().lookup_job, None, job_id)
+
+    def get_due_jobs(self, now):
+        return self._run(super().get_due_jobs, [], now)
+
+    def get_next_run_time(self):
+        return self._run(super().get_next_run_time, None)
+
+    def get_all_jobs(self):
+        return self._run(super().get_all_jobs, [])
+
+    def add_job(self, job):
+        self._run(super().add_job, None, job)
+
+    def update_job(self, job):
+        self._run(super().update_job, None, job)
+
+    def remove_job(self, job_id):
+        self._run(super().remove_job, None, job_id)
+
+    def remove_all_jobs(self):
+        self._run(super().remove_all_jobs, None)
 
 
 JOB_DESCRIPTIONS: dict[str, str] = {
@@ -47,7 +104,7 @@ def get_scheduler() -> BackgroundScheduler:
 
 def init_scheduler() -> BackgroundScheduler:
     global _scheduler
-    jobstore = SQLAlchemyJobStore(engine=engine)
+    jobstore = ResilientSQLAlchemyJobStore(engine=engine)
     _scheduler = BackgroundScheduler(
         jobstores={"default": jobstore},
         timezone="UTC",
@@ -58,12 +115,25 @@ def init_scheduler() -> BackgroundScheduler:
         },
     )
     _register_listeners(_scheduler)
-    _scheduler.start()
-
     _ensure_failed_jobs_table()
 
-    logger.info("Scheduler started | jobstore=sqlalchemy timezone=UTC")
+    logger.info("Scheduler initialized | jobstore=sqlalchemy timezone=UTC (not started)")
     return _scheduler
+
+
+def start_scheduler() -> None:
+    """Start the scheduler after all startup jobs have been registered.
+
+    Jobs must be added *before* starting: with a persistent jobstore, starting
+    first lets the background thread process previously-persisted (misfired) jobs
+    while ``replace_existing=True`` re-registration removes/re-adds the same ids,
+    which surfaces as ``JobLookupError`` on ``update_job``.
+    """
+    global _scheduler
+    if _scheduler is None:
+        raise RuntimeError("Scheduler not initialized. Call init_scheduler first.")
+    _scheduler.start()
+    logger.info("Scheduler started | jobstore=sqlalchemy timezone=UTC | pending_jobs=%d", len(_scheduler.get_jobs()))
 
 
 def _ensure_failed_jobs_table() -> None:

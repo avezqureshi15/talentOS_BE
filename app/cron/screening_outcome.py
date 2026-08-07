@@ -9,6 +9,8 @@ completed / flagged) for candidates still in the screening pipeline:
     a flag review + notification is recorded (apply_screening_flag)
   - completed (real result)    -> candidate advances to UNDER_EVALUATION
   - pending (retries possible) -> candidate stays put (SCREENING_ROUND_SCHEDULED)
+    but the latest call_status / retry_count are refreshed so live states
+    (in progress, retry scheduled) reach the frontend
 
 If the POC doesn't yet expose the screening-status endpoint, the sweep falls
 back to the legacy get_screening_result + apply_screening_outcome path so the
@@ -34,6 +36,7 @@ from app.db.session import SessionLocal
 from app.modules.talentos_integration.talentos_result_service import (
     apply_screening_flag,
     apply_screening_outcome,
+    update_screening_call_status,
 )
 
 logger = get_logger(__name__)
@@ -129,7 +132,22 @@ async def _sweep_once(db) -> int:
             if isinstance(result, dict) and result:
                 apply_screening_outcome(db, candidate.current_round_id, candidate, result)
                 processed += 1
-        # disposition == "pending": leave the candidate as-is (POC may still retry)
+        else:
+            # disposition == "pending": the POC may still be dialing, have a
+            # call in progress, or have a retry scheduled — keep the candidate
+            # in place but refresh the live call status so the frontend shows
+            # the current state (in_progress / retry scheduled) instead of a
+            # stale "queued".
+            latest = status.get("latest_call")
+            if isinstance(latest, dict) and latest.get("call_status"):
+                changed = update_screening_call_status(
+                    db,
+                    candidate.current_round_id,
+                    str(latest.get("call_status")),
+                    latest.get("retry_count"),
+                )
+                if changed:
+                    processed += 1
     return processed
 
 
@@ -169,5 +187,5 @@ def setup_screening_jobs(scheduler: BackgroundScheduler) -> None:
     if job:
         logger.info(
             "Registered cron job | id=%s name=\"%s\" next_run=%s trigger=%s",
-            job.id, job.name, job.next_run_time, job.trigger,
+            job.id, job.name, getattr(job, "next_run_time", None), job.trigger,
         )

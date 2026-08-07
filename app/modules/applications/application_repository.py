@@ -216,6 +216,34 @@ class ApplicationRepository:
                     "attempt": retry_count + 1 if isinstance(retry_count, int) else None,
                 }
 
+    def attach_ai_interview_review_data(self, candidates: list[Candidate]) -> None:
+        targets = [
+            c for c in candidates
+            if c.status == "NO_SHOW" and c.current_round_id
+        ]
+        round_ids = [str(c.current_round_id) for c in targets]
+        if not round_ids:
+            return
+        rows = (
+            self.db.query(Review)
+            .filter(
+                cast(Review.round_id, String).in_(round_ids),
+                Review.entity_type == "ai_interview",
+            )
+            .all()
+        )
+        review_by_round = {str(r.round_id): r.reviews for r in rows if r.reviews}
+        for c in targets:
+            rid = str(c.current_round_id)
+            if rid in review_by_round:
+                rv = review_by_round[rid]
+                c._ai_interview_review = {
+                    "flag_reason": rv.get("flag_reason"),
+                    "flagged": rv.get("flagged"),
+                    "status": rv.get("status"),
+                    "flagged_at": rv.get("flagged_at"),
+                }
+
     def to_candidate_dict(
         self,
         candidate: Candidate,
@@ -226,6 +254,7 @@ class ApplicationRepository:
         events = events_map.get(candidate.id) if events_map else None
         interview_data = getattr(candidate, '_interview_data', None)
         screening_review = getattr(candidate, '_screening_review', None)
+        ai_interview_review = getattr(candidate, '_ai_interview_review', None)
         return build_candidate_response(
             candidate,
             hide_cover_letter=ai,
@@ -233,6 +262,7 @@ class ApplicationRepository:
             disqualified_by=disqualified_by,
             interview_data=interview_data,
             screening_review=screening_review,
+            ai_interview_review=ai_interview_review,
         )
 
     def create_queued_candidate(self, application_id: str, job_id: str, **kwargs) -> Candidate:

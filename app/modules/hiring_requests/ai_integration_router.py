@@ -28,6 +28,7 @@ from app.modules.hiring_requests.ai_interview_template_schema import (
     AiInterviewTemplateResponse,
 )
 from app.modules.talentos_integration.talentos_result_service import (
+    apply_interview_outcome,
     apply_screening_outcome,
     persist_interview_result,
     persist_screening_result,
@@ -130,6 +131,8 @@ async def get_interview_detail(
     round_obj = db.query(Round).filter(Round.rh_external_session_id == interview_id).first()
     if round_obj:
         persist_interview_result(db, round_obj, result)
+        candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+        apply_interview_outcome(db, round_obj.id, candidate, result)
     return result
 
 
@@ -162,6 +165,7 @@ async def get_interview_template(
     round_obj = db.query(Round).filter(Round.rh_external_session_id == interview_id).first()
     if round_obj:
         persist_interview_result(db, round_obj, detail)
+        apply_interview_outcome(db, round_obj.id, candidate, detail)
         db.commit()
 
     applied_source = candidate.created_at or (round_obj.created_at if round_obj else None)
@@ -556,6 +560,50 @@ _INTERVIEW_KEYS = [
     "strengths", "weaknesses", "jd_fit", "final_recommendation",
     "interview_url", "created_at", "started_at", "completed_at",
 ]
+
+
+@router.post("/screening/{candidate_id}/trigger")
+async def trigger_ai_screening(
+    hiring_request_id: str,
+    candidate_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_permission(Permission.APPLICATION_WORKFLOW)),
+):
+    """Place a real Vapi screening call for the candidate right now.
+
+    Delegates to the POC's call-now path (same mechanics as the POC's own
+    ScreeningTab trigger, but force=True so the call is dialled immediately).
+    """
+    from app.core.ai_recruitment_client import AiRecruitmentConflict
+
+    candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+    if not candidate.current_round_id:
+        raise HTTPException(
+            status_code=409, detail="Candidate has no AI screening round to trigger"
+        )
+
+    rh_job_id = await _get_or_create_rh_job(hiring_request_id, db)
+    rh_candidate_id = _get_rh_candidate_id(candidate_id, db)
+    client = AiRecruitmentClient()
+    try:
+        result = await client.trigger_screening(rh_job_id, rh_candidate_id)
+    except AiRecruitmentConflict:
+        raise HTTPException(
+            status_code=409,
+            detail="A screening call is already live or in progress for this candidate",
+        )
+    if result is None:
+        raise HTTPException(
+            status_code=502,
+            detail="Failed to trigger the screening call in ai-recruitment-poc",
+        )
+
+    return {
+        "screening_call_id": result.get("screening_call_id"),
+        "status": result.get("status", "triggered"),
+    }
 
 
 @router.post("/retry-screening/{candidate_id}")

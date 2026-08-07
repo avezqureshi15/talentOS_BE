@@ -45,6 +45,7 @@ class ApplicationService:
                 for e in raw_events
             ]
         self.repo.attach_interview_data([candidate])
+        self.repo.attach_ai_interview_review_data([candidate])
         return self.repo.to_candidate_dict(candidate, ai=ai, events_map={candidate.id: events} if events else None)
     def get_applications_paginated(
         self,
@@ -111,6 +112,7 @@ class ApplicationService:
         disqualified_map = self.repo.build_disqualified_by_map(items)
         self.repo.attach_interview_data(items)
         self.repo.attach_screening_review_data(items)
+        self.repo.attach_ai_interview_review_data(items)
 
         stage_counts = None
         archived_stage_counts = None
