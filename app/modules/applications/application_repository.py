@@ -174,9 +174,17 @@ class ApplicationRepository:
                 c._interview_data = interview_by_round[rid]
 
     def attach_screening_review_data(self, candidates: list[Candidate]) -> None:
+        screening_statuses = {
+            "SCREENING_ROUND_SCHEDULED",
+            "AI_SCREENING_EVALUATION_FAILED",
+            "AI_SCREENING_FLAGGED",
+            "UNDER_EVALUATION",
+            "SHORTLISTED",
+            "MOVE_TO_NEXT_ROUND",
+        }
         targets = [
             c for c in candidates
-            if c.status in ("AI_SCREENING_EVALUATION_FAILED", "AI_SCREENING_FLAGGED")
+            if c.status in screening_statuses
             and c.current_round_id
         ]
         round_ids = [str(c.current_round_id) for c in targets]
@@ -195,6 +203,7 @@ class ApplicationRepository:
             rid = str(c.current_round_id)
             if rid in review_by_round:
                 rv = review_by_round[rid]
+                retry_count = rv.get("retry_count")
                 c._screening_review = {
                     "call_outcome": rv.get("call_outcome"),
                     "ended_reason": rv.get("ended_reason"),
@@ -202,6 +211,9 @@ class ApplicationRepository:
                     "flag_reason": rv.get("flag_reason"),
                     "disposition": rv.get("disposition"),
                     "flagged": rv.get("flagged"),
+                    "call_status": rv.get("call_status"),
+                    "retry_count": retry_count,
+                    "attempt": retry_count + 1 if isinstance(retry_count, int) else None,
                 }
 
     def to_candidate_dict(
