@@ -3,7 +3,6 @@ from typing import Any
 
 import httpx
 
-from app.core.config import settings
 from app.core.secrets import get_secret
 from app.core.service_token import create_service_token
 
@@ -32,7 +31,7 @@ class AiRecruitmentConflict(AiRecruitmentError):
 
 class AiRecruitmentClient:
     def __init__(self) -> None:
-        self.base_url = settings.RH_SERVICE_URL
+        self.base_url = get_secret("RH_SERVICE_URL")
 
     def _headers(self) -> dict[str, str]:
         rh_api_key = get_secret("RH_API_KEY")

@@ -22,6 +22,8 @@ class ApiKeyEntry(BaseModel):
     value: str = ""
     hasOverride: bool = False
     source: Literal["tenant", "platform"] = "platform"
+    scope: Literal["platform", "tenant"] = "tenant"
+    isSecret: bool = True
 
 
 class ApiKeysResponse(BaseModel):
@@ -38,6 +40,8 @@ class ManageableApiKeyMeta(BaseModel):
     label: str
     icon: str
     hint: str
+    scope: Literal["platform", "tenant"] = "tenant"
+    is_secret: bool = True
 
 
 class ManageableApiKeysResponse(BaseModel):

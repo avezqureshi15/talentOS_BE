@@ -6,12 +6,13 @@ from app.core.config import settings as app_settings
 from app.core.logger import get_logger
 from app.core.ai_recruitment_client import AiRecruitmentClient
 from app.core.secrets import (
+    MANAGEABLE_API_KEY_META,
     MANAGEABLE_API_KEYS,
     decrypt_secret,
     encrypt_secret,
     mask_secret,
 )
-from app.modules.settings.settings_model import TenantSetting
+from app.modules.settings.settings_model import PlatformSetting, TenantSetting
 from app.modules.settings.settings_schema import (
     AiScreeningSettings,
     AiScreeningSettingsUpdate,
@@ -61,47 +62,124 @@ class SettingsService:
 
     # ── API keys (superadmin only, Fernet-encrypted) ─────────────────────
 
-    def get_api_keys(self, tenant_id: int) -> ApiKeysResponse:
-        rows = {
+    def _api_key_meta(self, key: str) -> dict[str, str | bool] | None:
+        for meta in MANAGEABLE_API_KEY_META:
+            if meta["key"] == key:
+                return meta
+        return None
+
+    def _platform_row(self, key: str) -> PlatformSetting | None:
+        return (
+            self.db.query(PlatformSetting)
+            .filter(PlatformSetting.key == key)
+            .first()
+        )
+
+    def _entry_from_value(self, meta: dict[str, str | bool], value: str, has_override: bool) -> ApiKeyEntry:
+        key = str(meta["key"])
+        scope = str(meta.get("scope") or "tenant")
+        is_secret = bool(meta.get("is_secret", True))
+        shown = mask_secret(value) if (value and is_secret) else value
+        return ApiKeyEntry(
+            key=key,
+            value=shown,
+            hasOverride=has_override,
+            source=scope if has_override else "platform",
+            scope=scope,
+            isSecret=is_secret,
+        )
+
+    def get_api_keys(self, tenant_id: int | None) -> ApiKeysResponse:
+        tenant_rows: dict[str, str] = {}
+        if tenant_id is not None:
+            tenant_rows = {
+                r.key: r.value
+                for r in self.db.query(TenantSetting).filter(
+                    TenantSetting.tenant_id == tenant_id,
+                    TenantSetting.key.in_(MANAGEABLE_API_KEYS),
+                ).all()
+            }
+        platform_rows = {
             r.key: r.value
-            for r in self.db.query(TenantSetting).filter(
-                TenantSetting.tenant_id == tenant_id,
-                TenantSetting.key.in_(MANAGEABLE_API_KEYS),
-            ).all()
+            for r in self.db.query(PlatformSetting)
+            .filter(PlatformSetting.key.in_(MANAGEABLE_API_KEYS))
+            .all()
         }
         keys: list[ApiKeyEntry] = []
-        for key in MANAGEABLE_API_KEYS:
-            stored = rows.get(key)
-            if stored:
-                keys.append(
-                    ApiKeyEntry(
-                        key=key,
-                        value=mask_secret(decrypt_secret(stored)),
-                        hasOverride=True,
-                        source="tenant",
-                    )
-                )
+        for meta in MANAGEABLE_API_KEY_META:
+            key = str(meta["key"])
+            scope = str(meta.get("scope") or "tenant")
+            stored: str | None = None
+            has_override = False
+            if scope == "platform":
+                stored = platform_rows.get(key)
+                has_override = stored is not None
+                if stored is not None:
+                    try:
+                        stored = decrypt_secret(stored)
+                    except Exception:  # noqa: BLE001
+                        logger.warning("Platform secret %s undecryptable; falling back to env", key)
+                        stored = None
+                if stored is None:
+                    stored = getattr(app_settings, key, "") or ""
+                keys.append(self._entry_from_value(meta, stored, has_override))
             else:
-                env_value = getattr(app_settings, key, "") or ""
-                keys.append(
-                    ApiKeyEntry(
-                        key=key,
-                        value=mask_secret(env_value) if env_value else "",
-                        hasOverride=False,
-                        source="platform",
-                    )
-                )
+                stored = tenant_rows.get(key)
+                has_override = stored is not None
+                if stored is not None:
+                    try:
+                        stored = decrypt_secret(stored)
+                    except Exception:  # noqa: BLE001
+                        logger.warning("Tenant secret %s undecryptable; falling back to env", key)
+                        stored = None
+                if stored is None:
+                    stored = getattr(app_settings, key, "") or ""
+                    if stored:
+                        keys.append(
+                            self._entry_from_value(meta, stored, False)
+                        )
+                    else:
+                        keys.append(
+                            ApiKeyEntry(
+                                key=key,
+                                value="",
+                                hasOverride=False,
+                                source="platform",
+                                scope="tenant",
+                                isSecret=True,
+                            )
+                        )
+                else:
+                    keys.append(self._entry_from_value(meta, stored, True))
         return ApiKeysResponse(keys=keys)
 
-    def update_api_keys(self, tenant_id: int, entries: list[SettingEntry]) -> ApiKeysResponse:
+    def update_api_keys(self, tenant_id: int | None, entries: list[SettingEntry]) -> ApiKeysResponse:
         for entry in entries:
             if entry.key not in MANAGEABLE_API_KEYS:
                 raise ValueError(f"Key not manageable: {entry.key}")
+            meta = self._api_key_meta(entry.key)
+            scope = str(meta.get("scope") or "tenant")
+            value = (entry.value or "").strip()
+
+            if scope == "platform":
+                existing = self._platform_row(entry.key)
+                if not value:
+                    if existing:
+                        self.db.delete(existing)
+                    continue
+                encrypted = encrypt_secret(value)
+                if existing:
+                    existing.value = encrypted
+                else:
+                    self.db.add(PlatformSetting(key=entry.key, value=encrypted))
+                continue
+
+            if tenant_id is None:
+                raise ValueError(f"Key requires a tenant: {entry.key}")
             existing = self.db.query(TenantSetting).filter(
                 TenantSetting.tenant_id == tenant_id,
                 TenantSetting.key == entry.key,
             ).first()
-            value = (entry.value or "").strip()
             if not value:
                 if existing:
                     self.db.delete(existing)
@@ -112,7 +190,7 @@ class SettingsService:
             else:
                 self.db.add(TenantSetting(tenant_id=tenant_id, key=entry.key, value=encrypted))
         self.db.commit()
-        logger.info("Updated %d API key(s) for tenant_id=%d", len(entries), tenant_id)
+        logger.info("Updated %d API key(s) (tenant_id=%s)", len(entries), tenant_id)
         return self.get_api_keys(tenant_id)
 
     # ── AI screening settings (per tenant, JSON payload) ──────────────────

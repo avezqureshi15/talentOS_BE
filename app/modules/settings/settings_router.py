@@ -83,13 +83,12 @@ def get_manageable_api_keys(
 
 @router.get("/api-keys", response_model=ApiKeysResponse)
 def get_api_keys(
-    tenant_id: int | None = Query(None, description="Required for superadmin"),
+    tenant_id: int | None = Query(None, description="Required for superadmin to see tenant overrides; platform keys always included"),
     db: Session = Depends(get_db),
     current_user: UserInfo = Depends(require_permission(Permission.SETTINGS_VIEW)),
 ):
     _require_superadmin(current_user)
-    tid = _resolve_tenant(current_user, tenant_id)
-    return SettingsService(db).get_api_keys(tid)
+    return SettingsService(db).get_api_keys(tenant_id)
 
 
 @router.patch("/api-keys", response_model=ApiKeysResponse)
@@ -99,9 +98,8 @@ def update_api_keys(
     current_user: UserInfo = Depends(require_permission(Permission.SETTINGS_EDIT)),
 ):
     _require_superadmin(current_user)
-    tid = _resolve_tenant(current_user, body.tenant_id)
     try:
-        return SettingsService(db).update_api_keys(tid, body.keys)
+        return SettingsService(db).update_api_keys(body.tenant_id, body.keys)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
