@@ -6,10 +6,9 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.constants import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
-from app.core.frontend import build_frontend_link
 from app.core.logger import get_logger
 from app.core.security import hash_password
-from app.common.services.email_service import EmailService
+from app.common.services.invite_email import send_invite_email
 from app.db.session import get_db
 from app.core.authorization import require_permission
 from app.core.permissions import Permission
@@ -30,45 +29,6 @@ from app.modules.users.user_schema import (
 )
 
 logger = get_logger(__name__)
-
-
-def _send_invite_email(email: str, token: str) -> None:
-    if not settings.SMTP_USERNAME or not settings.SMTP_PASSWORD:
-        logger.warning("SMTP not configured — skipping invite email to %s", email)
-        return
-    try:
-        service = EmailService(
-            smtp_host=settings.SMTP_HOST,
-            smtp_port=settings.SMTP_PORT,
-            username=settings.SMTP_USERNAME,
-            password=settings.SMTP_PASSWORD,
-            use_tls=settings.SMTP_USE_TLS,
-        )
-        link = build_frontend_link(f"/auth/invite/{token}")
-        subject = "You're invited to join TalentOS"
-        body = f"""Hello,
-
-You have been invited to join TalentOS. Click the link below to set up your account:
-
-{link}
-
-This invite expires in 7 days.
-
-If you did not expect this invitation, you can ignore this email.
-
-Best,
-The TalentOS Team"""
-        html = f"""<p>Hello,</p>
-<p>You have been invited to join <strong>TalentOS</strong>. Click the button below to set up your account:</p>
-<p style="text-align:center;margin:24px 0">
-  <a href="{link}" style="display:inline-block;padding:12px 24px;background:#ffffff;color:#000000;text-decoration:none;border-radius:8px;font-weight:600">Accept Invite</a>
-</p>
-<p>This invite expires in 7 days.</p>
-<p>If you did not expect this invitation, you can ignore this email.</p>
-<p>Best,<br>The TalentOS Team</p>"""
-        service.send(to_email=email, subject=subject, body=body, html=html)
-    except Exception as exc:
-        logger.warning("Failed to send invite email to %s: %s", email, exc)
 
 
 router = APIRouter(
@@ -313,7 +273,7 @@ def create_invite(
     db.commit()
     db.refresh(invite)
     logger.info("Admin created invite: email=%s tenant_id=%d", body.email, tid)
-    _send_invite_email(body.email, invite.token)
+    send_invite_email(body.email, invite.token)
     return InviteResponse(
         id=invite.id,
         email=invite.email,
@@ -378,7 +338,7 @@ def resend_invite(
     db.commit()
     db.refresh(invite)
     logger.info("Admin resent invite: email=%s tenant_id=%d", body.email, tid)
-    _send_invite_email(body.email, invite.token)
+    send_invite_email(body.email, invite.token)
     return InviteResponse(
         id=invite.id,
         email=invite.email,
