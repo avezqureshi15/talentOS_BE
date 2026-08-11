@@ -1,7 +1,8 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import and_, func, or_
+from sqlalchemy import cast, or_, String
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session
 
 from app.core.job_access import scope_job_query
@@ -55,7 +56,7 @@ class HiringRequestRepository:
                 or_(
                     HiringRequest.title.ilike(term),
                     HiringRequest.department.ilike(term),
-                    HiringRequest.location.ilike(term),
+                    cast(HiringRequest.location, String).ilike(term),
                 ),
             )
 
@@ -63,7 +64,7 @@ class HiringRequestRepository:
             query = query.filter(HiringRequest.department.ilike(department))
 
         if location:
-            query = query.filter(HiringRequest.location.ilike(location))
+            query = query.filter(cast(HiringRequest.location, JSONB).contains([location]))
 
         if type:
             query = query.filter(HiringRequest.type.ilike(type))
@@ -104,7 +105,15 @@ class HiringRequestRepository:
         query = self.db.query(HiringRequest.location).filter(HiringRequest.deleted_at.is_(None))
         if user is not None:
             query = scope_job_query(query, user)
-        return [r[0] for r in query.distinct().order_by(HiringRequest.location.asc()).all()]
+        seen: set[str] = set()
+        for (raw,) in query.all():
+            if isinstance(raw, list):
+                for item in raw:
+                    if isinstance(item, str) and item.strip():
+                        seen.add(item.strip())
+            elif isinstance(raw, str) and raw.strip():
+                seen.add(raw.strip())
+        return sorted(seen)
 
     def get_distinct_departments(self, user: UserInfo | None = None) -> list[str]:
         query = self.db.query(HiringRequest.department).filter(HiringRequest.deleted_at.is_(None))

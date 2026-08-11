@@ -10,6 +10,7 @@ from app.common.pdf.models import (
     DocumentSpec,
 )
 from app.modules.hiring_requests.hiring_request_model import HiringRequest
+from app.modules.hiring_requests.location_utils import format_locations
 from app.modules.interview_designs.pdf.constants import DOC_SUBTITLE, EMPTY_CHAPTER_SUMMARY
 from app.modules.interview_designs.pdf.kinds import (
     ExportKind,
@@ -100,7 +101,7 @@ def build_document_spec(
     if hiring_request.department:
         meta.append(("Department", str(hiring_request.department)))
     if hiring_request.location:
-        meta.append(("Location", str(hiring_request.location)))
+        meta.append(("Location", format_locations(hiring_request.location)))
     if hiring_request.type:
         meta.append(("Type", str(hiring_request.type)))
     meta.append(("Generated", generated.strftime("%Y-%m-%d %H:%M UTC")))

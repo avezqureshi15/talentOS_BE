@@ -112,6 +112,7 @@ class RoundDetailService:
             status=self._resolve_status(slot, reviews),
             candidate=candidate.candidate_name if candidate else None,
             candidate_id=round_obj.candidate_id,
+            resume_url=candidate.resume_url if candidate else None,
             role=jd.title if jd else None,
             jd_label=jd.description if jd else None,
             interviewer=interviewer,

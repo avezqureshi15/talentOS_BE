@@ -11,6 +11,7 @@ from app.core.authorization import require_permission
 from app.core.permissions import Permission
 from app.db.session import get_db
 from app.modules.hiring_requests.hiring_request_model import HiringRequest
+from app.modules.hiring_requests.location_utils import format_locations
 from app.modules.evaluations.evaluation_model import Candidate
 from app.modules.events.event_schema import EventCreate
 from app.modules.events.event_service import EventService
@@ -54,7 +55,7 @@ async def _get_or_create_rh_job(hiring_request_id: str, db: Session) -> str:
         title=hr.title,
         description=hr.description,
         required_skills=hr.requirements,
-        location=hr.location,
+        location=format_locations(hr.location),
         department=hr.department,
         employment_type=hr.type,
         external_job_id=str(hr.id),

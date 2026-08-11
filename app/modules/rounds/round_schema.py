@@ -63,6 +63,7 @@ class RoundDetailResponse(BaseModel):
     status: str | None = None
     candidate: str | None = None
     candidate_id: int | None = None
+    resume_url: str | None = None
     role: str | None = None
     jd_label: str | None = None
     interviewer: str | None = None

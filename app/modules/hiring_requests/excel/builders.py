@@ -5,6 +5,7 @@ from app.modules.hiring_requests.excel.stage_config import (
     HIRING_REQUEST_SHEET_TITLE,
 )
 from app.modules.hiring_requests.excel.styles import auto_width, style_body_cells, style_header_row
+from app.modules.hiring_requests.location_utils import format_locations
 
 
 def build_hiring_request_sheet(wb: Workbook, job: dict) -> None:
@@ -14,7 +15,7 @@ def build_hiring_request_sheet(wb: Workbook, job: dict) -> None:
     fields = [
         ("Title", job.get("title", "")),
         ("Department", job.get("department", "")),
-        ("Location", job.get("location", "")),
+        ("Location", format_locations(job.get("location"))),
         ("Type", job.get("type", "")),
         ("Description", job.get("description", "")),
         ("Requirements", ", ".join(job.get("requirements", []) or [])),

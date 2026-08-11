@@ -18,7 +18,7 @@ class HiringRequest(Base):
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     department: Mapped[str] = mapped_column(String(255), nullable=False)
-    location: Mapped[str] = mapped_column(String(255), nullable=False)
+    location: Mapped[list[str]] = mapped_column(JSON, nullable=False)
     type: Mapped[str] = mapped_column(String(100), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     requirements: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)

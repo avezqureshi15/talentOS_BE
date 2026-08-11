@@ -16,6 +16,7 @@ from app.core.permissions import Permission
 from app.modules.auth.auth_schema import UserInfo
 from app.modules.auth.invite_model import TenantInvite
 from app.modules.auth.invite_schema import CreateInviteRequest, InviteResponse, PaginatedInviteResponse, ResendInviteRequest
+from app.modules.employees.employee_lookup import ensure_employee_for_user
 from app.modules.hiring_requests.hiring_request_model import HiringRequest
 from app.modules.job_teams.job_team_model import JobTeamMember
 from app.modules.roles.role_service import RoleService
@@ -157,6 +158,8 @@ def create_user(
         status="active",
     )
     db.add(user)
+    db.flush()
+    ensure_employee_for_user(db, user)
     db.commit()
     db.refresh(user)
     logger.info("Admin created user: email=%s id=%d tenant_id=%d", body.email, user.id, tid)
@@ -178,6 +181,9 @@ def update_user(
 
     if body.name is not None:
         user.name = body.name
+        employee = ensure_employee_for_user(db, user)
+        if employee is not None:
+            employee.name = body.name
     role_changed = body.role is not None and body.role != user.role
     if body.role is not None:
         user.role = body.role

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.common.clients.ai_client import AIClient, AIClientError
 from app.core.ai_recruitment_client import AiRecruitmentClient
 from app.modules.hiring_requests.hiring_request_model import HiringRequest
+from app.modules.hiring_requests.location_utils import format_locations
 from app.modules.interview_designs.interview_design_model import InterviewDesign
 from app.modules.interview_designs.interview_design_schema import (
     InterviewDesignGenerate,
@@ -294,7 +295,7 @@ def _job_input_data(hiring_request: HiringRequest) -> dict[str, Any]:
         "job_title": hiring_request.title,
         "job_description": hiring_request.description,
         "requirements": hiring_request.requirements,
-        "location": hiring_request.location,
+        "location": format_locations(hiring_request.location),
         "department": hiring_request.department,
         "employment_type": hiring_request.type,
     }
@@ -507,7 +508,7 @@ async def _resolve_rh_job(hiring_request: HiringRequest, db: Session) -> str:
         title=hiring_request.title,
         description=hiring_request.description,
         required_skills=hiring_request.requirements,
-        location=hiring_request.location,
+        location=format_locations(hiring_request.location),
         department=hiring_request.department,
         employment_type=hiring_request.type,
     )

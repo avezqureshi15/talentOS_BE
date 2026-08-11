@@ -23,6 +23,7 @@ from app.modules.hiring_requests.hiring_request_schema import (
     HiringRequestResponse,
     HiringRequestUpdate,
 )
+from app.modules.hiring_requests.location_utils import format_locations
 from app.modules.jobs.job_schema import JobCreate, JobUpdate
 from app.modules.jobs.job_service import JobService
 from app.modules.job_teams.job_team_repository import JobTeamRepository
@@ -45,7 +46,7 @@ def _sync_rh_job(hr_id: str) -> None:
                 title=hr.title,
                 description=hr.description,
                 required_skills=hr.requirements,
-                location=hr.location,
+                location=format_locations(hr.location),
                 department=hr.department,
                 employment_type=hr.type,
                 external_job_id=str(hr.id),
@@ -122,7 +123,9 @@ class HiringRequestService:
         prefixed = f"#{serial} {data.title}"
         logger.info("Creating hiring request: title=%s tenant_id=%s", prefixed, tenant_id)
         data.title = prefixed
-        job_payload = JobCreate(**data.model_dump(exclude={"custom_evaluation_criteria", "tenant_id"}))
+        job_dump = data.model_dump(exclude={"custom_evaluation_criteria", "tenant_id"})
+        job_dump["location"] = format_locations(job_dump.get("location"))
+        job_payload = JobCreate(**job_dump)
         job_response = self.job_service.create_job(job_payload)
         external_job_id = job_response.get("data", {}).get("id")
 
@@ -223,7 +226,10 @@ class HiringRequestService:
             raise HiringRequestNotFoundException(str(hiring_request_id))
 
         if record.external_job_id:
-            job_payload = JobUpdate(**data.model_dump(exclude={"custom_evaluation_criteria"}, exclude_unset=True))
+            job_dump = data.model_dump(exclude={"custom_evaluation_criteria"}, exclude_unset=True)
+            if "location" in job_dump:
+                job_dump["location"] = format_locations(job_dump.get("location"))
+            job_payload = JobUpdate(**job_dump)
             self.job_service.update_job(record.external_job_id, job_payload)
 
         try:
