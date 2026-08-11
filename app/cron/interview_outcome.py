@@ -68,7 +68,6 @@ async def _sweep_once(db) -> int:
     if not candidates:
         return 0
 
-    client = AiRecruitmentClient()
     processed = 0
     for candidate in candidates:
         if not candidate.current_round_id or not candidate.rh_external_candidate_id:
@@ -85,12 +84,18 @@ async def _sweep_once(db) -> int:
             )
             .first()
         )
-        if hr is None or not hr.rh_external_job_id:
+        if hr is None:
+            continue
+        from app.modules.hiring_requests.rh_job_resolver import resolve_or_create_rh_job
+
+        rh_job_id = await resolve_or_create_rh_job(db, hr)
+        if not rh_job_id:
             continue
 
+        client = AiRecruitmentClient(tenant_id=hr.tenant_id)
         try:
             interviews = await client.list_interviews(
-                str(hr.rh_external_job_id), candidate.rh_external_candidate_id
+                rh_job_id, candidate.rh_external_candidate_id
             )
         except Exception as exc:
             logger.warning(
@@ -111,7 +116,7 @@ async def _sweep_once(db) -> int:
         interview_id = str(latest.get("id"))
         try:
             detail = await client.get_interview_detail(
-                str(hr.rh_external_job_id),
+                rh_job_id,
                 candidate.rh_external_candidate_id,
                 interview_id,
             )

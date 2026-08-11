@@ -52,7 +52,7 @@ async def get_call_window(hiring_request_id: str, db: Session) -> CallWindowResp
     errors: list[str] = []
     try:
         rh_job_id = await _resolve_rh_job(hiring_request, db)
-        result = await AiRecruitmentClient().get_call_window(
+        result = await AiRecruitmentClient(tenant_id=hiring_request.tenant_id).get_call_window(
             rh_job_id,
             external_job_id=str(hiring_request.id),
         )
@@ -77,7 +77,7 @@ async def update_call_window(
     try:
         rh_job_id = await _resolve_rh_job(hiring_request, db)
         updates = body.model_dump(exclude_unset=True)
-        result = await AiRecruitmentClient().update_call_window(
+        result = await AiRecruitmentClient(tenant_id=hiring_request.tenant_id).update_call_window(
             rh_job_id,
             screening_call_from=_time_value(updates.get("screening_call_from")),
             screening_call_to=_time_value(updates.get("screening_call_to")),

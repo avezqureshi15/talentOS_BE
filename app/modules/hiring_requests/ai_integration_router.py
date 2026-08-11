@@ -11,7 +11,7 @@ from app.core.authorization import require_permission
 from app.core.permissions import Permission
 from app.db.session import get_db
 from app.modules.hiring_requests.hiring_request_model import HiringRequest
-from app.modules.hiring_requests.location_utils import format_locations
+from app.modules.hiring_requests.rh_job_resolver import resolve_or_create_rh_job
 from app.modules.evaluations.evaluation_model import Candidate
 from app.modules.events.event_schema import EventCreate
 from app.modules.events.event_service import EventService
@@ -47,25 +47,10 @@ async def _get_or_create_rh_job(hiring_request_id: str, db: Session) -> str:
     if not hr:
         raise HTTPException(status_code=404, detail="Hiring request not found")
 
-    if hr.rh_external_job_id:
-        return hr.rh_external_job_id
-
-    client = AiRecruitmentClient()
-    created = await client.create_job(
-        title=hr.title,
-        description=hr.description,
-        required_skills=hr.requirements,
-        location=format_locations(hr.location),
-        department=hr.department,
-        employment_type=hr.type,
-        external_job_id=str(hr.id),
-    )
-    if not created:
+    rh_job_id = await resolve_or_create_rh_job(db, hr)
+    if not rh_job_id:
         raise HTTPException(status_code=502, detail="Failed to create job in ai-recruitment-poc")
-
-    hr.rh_external_job_id = created["id"]
-    db.commit()
-    return created["id"]
+    return rh_job_id
 
 
 def _get_rh_candidate_id(candidate_id: int, db: Session) -> str:
@@ -73,6 +58,13 @@ def _get_rh_candidate_id(candidate_id: int, db: Session) -> str:
     if not candidate or not candidate.rh_external_candidate_id:
         raise HTTPException(status_code=404, detail="No linked ai-recruitment-poc candidate found")
     return candidate.rh_external_candidate_id
+
+
+def _get_hr_tenant_id(hiring_request_id: str, db: Session) -> int | None:
+    hr = db.query(HiringRequest).filter(HiringRequest.id == hiring_request_id).first()
+    if not hr:
+        raise HTTPException(status_code=404, detail="Hiring request not found")
+    return hr.tenant_id
 
 
 @router.get("/screening/{candidate_id}")
@@ -87,7 +79,7 @@ async def get_screening_result(
 
     rh_job_id = await _get_or_create_rh_job(hiring_request_id, db)
     rh_candidate_id = _get_rh_candidate_id(candidate_id, db)
-    client = AiRecruitmentClient()
+    client = AiRecruitmentClient(tenant_id=_get_hr_tenant_id(hiring_request_id, db))
     result = await client.get_screening_result(rh_job_id, rh_candidate_id)
     if result is None:
         raise HTTPException(status_code=404, detail="Screening result not found")
@@ -108,7 +100,7 @@ async def list_interviews(
 ):
     rh_job_id = await _get_or_create_rh_job(hiring_request_id, db)
     rh_candidate_id = _get_rh_candidate_id(candidate_id, db)
-    client = AiRecruitmentClient()
+    client = AiRecruitmentClient(tenant_id=_get_hr_tenant_id(hiring_request_id, db))
     result = await client.list_interviews(rh_job_id, rh_candidate_id)
     if result is None:
         return []
@@ -124,7 +116,7 @@ async def get_interview_detail(
 ):
     rh_job_id = await _get_or_create_rh_job(hiring_request_id, db)
     rh_candidate_id = _get_rh_candidate_id(candidate_id, db)
-    client = AiRecruitmentClient()
+    client = AiRecruitmentClient(tenant_id=_get_hr_tenant_id(hiring_request_id, db))
     result = await client.get_interview_detail(rh_job_id, rh_candidate_id, interview_id)
     if result is None:
         raise HTTPException(status_code=404, detail="Interview not found")
@@ -156,7 +148,7 @@ async def get_interview_template(
 
     rh_job_id = await _get_or_create_rh_job(hiring_request_id, db)
     rh_candidate_id = _get_rh_candidate_id(candidate_id, db)
-    client = AiRecruitmentClient()
+    client = AiRecruitmentClient(tenant_id=hr.tenant_id)
     detail = await client.get_interview_detail(rh_job_id, rh_candidate_id, interview_id)
     if detail is None:
         raise HTTPException(status_code=404, detail="Interview not found")
@@ -189,7 +181,7 @@ async def list_ai_candidates(
     db: Session = Depends(get_db),
 ):
     rh_job_id = await _get_or_create_rh_job(hiring_request_id, db)
-    client = AiRecruitmentClient()
+    client = AiRecruitmentClient(tenant_id=_get_hr_tenant_id(hiring_request_id, db))
     result = await client.list_candidates(rh_job_id)
     if result is None:
         return []
@@ -235,11 +227,11 @@ async def schedule_ai_interview(
     rh_candidate_id = _get_rh_candidate_id(candidate_id, db)
     timezone = body.timezone or "Asia/Kolkata"
     if not body.timezone:
-        window = await AiRecruitmentClient().get_call_window(rh_job_id)
+        window = await AiRecruitmentClient(tenant_id=_get_hr_tenant_id(hiring_request_id, db)).get_call_window(rh_job_id)
         if window and window.get("screening_timezone"):
             timezone = window["screening_timezone"]
 
-    result = await AiRecruitmentClient().schedule_interview(
+    result = await AiRecruitmentClient(tenant_id=_get_hr_tenant_id(hiring_request_id, db)).schedule_interview(
         rh_job_id, rh_candidate_id, body.scheduled_date, body.scheduled_time, timezone
     )
     if result is None:
@@ -313,7 +305,7 @@ async def unschedule_ai_interview(
 
     rh_job_id = await _get_or_create_rh_job(hiring_request_id, db)
     rh_candidate_id = _get_rh_candidate_id(candidate_id, db)
-    result = await AiRecruitmentClient().clear_interview_schedule(rh_job_id, rh_candidate_id)
+    result = await AiRecruitmentClient(tenant_id=_get_hr_tenant_id(hiring_request_id, db)).clear_interview_schedule(rh_job_id, rh_candidate_id)
     if result is None:
         raise HTTPException(
             status_code=502,
@@ -362,7 +354,7 @@ async def move_to_ai_screening(
         raise HTTPException(status_code=404, detail="Candidate not found")
 
     try:
-        client = AiRecruitmentClient()
+        client = AiRecruitmentClient(tenant_id=hr.tenant_id)
         result = await client.create_candidate_with_screening(
             external_job_id=str(hr.id),
             name=candidate.candidate_name or "Unknown",
@@ -447,7 +439,7 @@ async def move_to_ai_interview(
         raise HTTPException(status_code=404, detail="Candidate not found")
 
     try:
-        client = AiRecruitmentClient()
+        client = AiRecruitmentClient(tenant_id=hr.tenant_id)
         result = await client.create_candidate_with_interview(
             external_job_id=str(hr.id),
             name=candidate.candidate_name or "Unknown",
@@ -587,7 +579,7 @@ async def trigger_ai_screening(
 
     rh_job_id = await _get_or_create_rh_job(hiring_request_id, db)
     rh_candidate_id = _get_rh_candidate_id(candidate_id, db)
-    client = AiRecruitmentClient()
+    client = AiRecruitmentClient(tenant_id=_get_hr_tenant_id(hiring_request_id, db))
     try:
         result = await client.trigger_screening(rh_job_id, rh_candidate_id)
     except AiRecruitmentConflict:
@@ -625,7 +617,7 @@ async def retry_ai_screening(
 
     rh_job_id = await _get_or_create_rh_job(hiring_request_id, db)
     rh_candidate_id = _get_rh_candidate_id(candidate_id, db)
-    client = AiRecruitmentClient()
+    client = AiRecruitmentClient(tenant_id=_get_hr_tenant_id(hiring_request_id, db))
     result = await client.get_screening_result(rh_job_id, rh_candidate_id)
     if result is None:
         raise HTTPException(
@@ -660,7 +652,7 @@ async def retry_ai_interview(
 
     rh_job_id = await _get_or_create_rh_job(hiring_request_id, db)
     rh_candidate_id = _get_rh_candidate_id(candidate_id, db)
-    client = AiRecruitmentClient()
+    client = AiRecruitmentClient(tenant_id=_get_hr_tenant_id(hiring_request_id, db))
     interviews = await client.list_interviews(rh_job_id, rh_candidate_id)
     if not interviews:
         raise HTTPException(
@@ -709,7 +701,7 @@ async def get_interview_recording_url(
     """Fetch a fresh presigned URL for the interview recording from the POC."""
     rh_job_id = await _get_or_create_rh_job(hiring_request_id, db)
     rh_candidate_id = _get_rh_candidate_id(candidate_id, db)
-    client = AiRecruitmentClient()
+    client = AiRecruitmentClient(tenant_id=_get_hr_tenant_id(hiring_request_id, db))
     url = await client.get_interview_recording_url(rh_job_id, rh_candidate_id, interview_id)
     return {"recording_url": url}
 

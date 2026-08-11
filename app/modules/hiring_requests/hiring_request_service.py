@@ -32,33 +32,17 @@ logger = get_logger(__name__)
 
 
 def _sync_rh_job(hr_id: str) -> None:
-    from app.core.ai_recruitment_client import AiRecruitmentClient
+    from app.modules.hiring_requests.rh_job_resolver import resolve_or_create_rh_job
 
     db = SessionLocal()
     try:
         hr = db.query(HiringRequest).filter(HiringRequest.id == hr_id).first()
-        if not hr or hr.rh_external_job_id:
+        if not hr:
             return
 
-        client = AiRecruitmentClient()
-        created = asyncio.run(
-            client.create_job(
-                title=hr.title,
-                description=hr.description,
-                required_skills=hr.requirements,
-                location=format_locations(hr.location),
-                department=hr.department,
-                employment_type=hr.type,
-                external_job_id=str(hr.id),
-            )
-        )
-        if not created or not created.get("id"):
-            logger.warning("RH job sync failed for hiring request %s", hr_id)
-            return
-
-        hr.rh_external_job_id = created["id"]
-        db.commit()
-        logger.info("RH job created for hiring request %s: rh_job_id=%s", hr_id, created["id"])
+        rh_job_id = asyncio.run(resolve_or_create_rh_job(db, hr))
+        if rh_job_id:
+            logger.info("RH job resolved for hiring request %s: rh_job_id=%s", hr_id, rh_job_id)
     except Exception:
         logger.exception("RH job sync failed for hiring request %s", hr_id)
     finally:

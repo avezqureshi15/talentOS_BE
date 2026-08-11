@@ -104,8 +104,7 @@ class EmployeeDirectoryRepository:
 
     def update(self, employee: Employee, **fields: Any) -> Employee:
         for key, value in fields.items():
-            if value is not None:
-                setattr(employee, key, value)
+            setattr(employee, key, value)
         self.db.commit()
         self.db.refresh(employee)
         return employee

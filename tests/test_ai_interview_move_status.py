@@ -16,7 +16,12 @@ from app.modules.rounds.round_model import Round
 def _build_context():
     hr_id = "b7590364-0000-0000-0000-000000000000"
     cand_id = 123
-    hr = SimpleNamespace(id=hr_id, title="Backend Engineer", rh_external_job_id=None)
+    hr = SimpleNamespace(
+        id=hr_id,
+        title="Backend Engineer",
+        tenant_id=7,
+        rh_external_job_id=None,
+    )
     candidate = SimpleNamespace(
         id=cand_id,
         candidate_name="Ada",

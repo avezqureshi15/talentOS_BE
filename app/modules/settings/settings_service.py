@@ -225,7 +225,7 @@ class SettingsService:
         # No tenant override yet — seed from the POC so the UI never contradicts
         # what the screening pipeline actually enforces.
         try:
-            poc = await AiRecruitmentClient().get_settings()
+            poc = await AiRecruitmentClient(tenant_id=tenant_id).get_settings()
             if isinstance(poc, dict):
                 return AiScreeningSettings(
                     enforce_phone_geography=bool(poc.get("enforce_phone_geography")),
@@ -295,7 +295,7 @@ class SettingsService:
 
         # Best-effort sync to the POC so its pipeline enforces the same config.
         try:
-            await AiRecruitmentClient().update_settings(
+            await AiRecruitmentClient(tenant_id=tenant_id).update_settings(
                 {k: data[k] for k in AI_SCREENING_DEFAULTS}
             )
         except Exception as exc:  # noqa: BLE001

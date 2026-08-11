@@ -208,7 +208,11 @@ def update_employee(
     if current_user.role != "superadmin" and employee.tenant_id != current_user.tenant_id:
         raise HTTPException(status_code=403, detail="No access to this employee")
 
-    updated = repo.update(employee, **body.model_dump(exclude_unset=True))
+    update_data = {
+        k: v for k, v in body.model_dump(exclude_unset=True).items()
+        if v is not None or k not in ("name", "email", "emp_id")
+    }
+    updated = repo.update(employee, **update_data)
     return _to_response(updated, _user_id_map(db, [updated.id]).get(updated.id))
 
 

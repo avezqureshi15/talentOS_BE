@@ -189,7 +189,7 @@ def _utterances_from_segments(segments: Any) -> list[dict[str, Any]]:
             continue
         raw_speaker = str(seg.get("speaker") or seg.get("role") or "").strip().lower()
         speaker = "INTERVIEWER" if raw_speaker in ("interviewer", "assistant", "ai", "bot") else "CANDIDATE"
-        ts_raw = seg.get("timestamp") if "timestamp" in seg else seg.get("time")
+        ts_raw = seg.get("timestamp") or seg.get("time") or seg.get("start_sec")
         secs, ts_display = _normalize_timestamp(ts_raw)
         out.append({
             "id": f"utt-{idx}",

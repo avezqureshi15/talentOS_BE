@@ -30,11 +30,12 @@ class AiRecruitmentConflict(AiRecruitmentError):
 
 
 class AiRecruitmentClient:
-    def __init__(self) -> None:
+    def __init__(self, tenant_id: int | None = None) -> None:
         self.base_url = get_secret("RH_SERVICE_URL")
+        self.tenant_id = tenant_id
 
     def _headers(self) -> dict[str, str]:
-        rh_api_key = get_secret("RH_API_KEY")
+        rh_api_key = get_secret("RH_API_KEY", tenant_id=self.tenant_id)
         if rh_api_key:
             return {"Authorization": f"Bearer {rh_api_key}"}
         return {"Authorization": f"Bearer {create_service_token()}"}
@@ -96,6 +97,20 @@ class AiRecruitmentClient:
 
         if resp.status_code == 204 or not resp.content:
             return None
+
+        content_type = (resp.headers.get("content-type") or "").lower()
+        if "application/json" not in content_type and not resp.content.startswith(
+            (b"{", b"[")
+        ):
+            logger.error(
+                "ai-recruitment-poc non-json response method=%s path=%s ctx=%s "
+                "status=%s content_type=%s body=%s",
+                method, path, ctx, resp.status_code, content_type, resp.text[:500],
+            )
+            raise AiRecruitmentUnavailable(
+                f"upstream returned non-JSON (status={resp.status_code})"
+            )
+
         return resp.json()
 
     async def create_job(
@@ -245,7 +260,7 @@ class AiRecruitmentClient:
         try:
             data = await self._request(
                 "GET",
-                f"/internal/talentos/jobs/{job_id}/candidates/{candidate_id}/interviews/{interview_id}/recording-url",
+                f"/api/candidates/{candidate_id}/report",
                 timeout=10.0,
                 context={"job_id": job_id, "candidate_id": candidate_id, "interview_id": interview_id},
             )

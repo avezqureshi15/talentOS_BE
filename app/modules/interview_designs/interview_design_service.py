@@ -457,7 +457,7 @@ async def generate_design(
     if not is_review:
         try:
             rh_job_id = await _resolve_rh_job(hiring_request, db)
-            client = AiRecruitmentClient()
+            client = AiRecruitmentClient(tenant_id=hiring_request.tenant_id)
             result = await client.update_job_questions(
                 rh_job_id,
                 screening_questions=(
@@ -500,24 +500,12 @@ def _to_response(
 
 
 async def _resolve_rh_job(hiring_request: HiringRequest, db: Session) -> str:
-    if hiring_request.rh_external_job_id:
-        return hiring_request.rh_external_job_id
+    from app.modules.hiring_requests.rh_job_resolver import resolve_or_create_rh_job
 
-    client = AiRecruitmentClient()
-    created = await client.create_job(
-        title=hiring_request.title,
-        description=hiring_request.description,
-        required_skills=hiring_request.requirements,
-        location=format_locations(hiring_request.location),
-        department=hiring_request.department,
-        employment_type=hiring_request.type,
-    )
-    if not created:
+    rh_job_id = await resolve_or_create_rh_job(db, hiring_request)
+    if not rh_job_id:
         raise HTTPException(status_code=502, detail=_POC_JOB_CREATE_ERROR)
-
-    hiring_request.rh_external_job_id = created["id"]
-    db.commit()
-    return created["id"]
+    return rh_job_id
 
 
 async def get_or_seed_design(hiring_request_id: str, db: Session) -> InterviewDesignResponse:
@@ -536,7 +524,7 @@ async def get_or_seed_design(hiring_request_id: str, db: Session) -> InterviewDe
     screening_sections = _build_default_screening_sections()
     interview_sections: list[dict] = []
     if hiring_request.rh_external_job_id:
-        client = AiRecruitmentClient()
+        client = AiRecruitmentClient(tenant_id=hiring_request.tenant_id)
         result = await client.get_job_questions(
             hiring_request.rh_external_job_id,
             external_job_id=str(hiring_request.id),
@@ -607,7 +595,7 @@ async def update_design(
     if body.screening_sections is not None or body.interview_sections is not None:
         try:
             rh_job_id = await _resolve_rh_job(hiring_request, db)
-            client = AiRecruitmentClient()
+            client = AiRecruitmentClient(tenant_id=hiring_request.tenant_id)
             result = await client.update_job_questions(
                 rh_job_id,
                 screening_questions=(
