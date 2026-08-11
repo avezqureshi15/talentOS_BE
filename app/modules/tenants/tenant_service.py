@@ -76,7 +76,13 @@ class TenantService:
         self.db.commit()
 
         try:
-            send_invite_email(admin_email, invite.token)
+            inviter = self.db.query(User).filter(User.id == invited_by_user_id).first()
+            send_invite_email(
+                admin_email,
+                invite.token,
+                organization_name=tenant.name,
+                inviter_name=inviter.name if inviter else None,
+            )
         except Exception as exc:
             logger.warning("Failed to send tenant invite email to %s: %s", admin_email, exc)
 

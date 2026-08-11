@@ -9,10 +9,8 @@ from zoneinfo import ZoneInfo
 from app.common.services.email_service import EmailService
 from app.core.config import settings
 from app.core.logger import get_logger
-from app.modules.hiring_requests.ai_interview_mail_templates import (
-    render_interview_invite_email,
-    render_interview_slot_email,
-)
+from app.db.session import SessionLocal
+from app.modules.email.email_template_service import render as render_email_template
 
 logger = get_logger(__name__)
 
@@ -83,11 +81,19 @@ def send_interview_invite_email(
         logger.warning("Interview invite skipped: SMTP not configured")
         return False
 
-    subject, body, html = render_interview_invite_email(
-        candidate_name=(candidate_name or "there").strip(),
-        role_title=(role_title or "the role").strip(),
-        interview_url=interview_url,
-    )
+    db = SessionLocal()
+    try:
+        subject, body, html = render_email_template(
+            db,
+            "interview_invite",
+            {
+                "candidate_name": (candidate_name or "there").strip(),
+                "role_title": (role_title or "the role").strip(),
+                "interview_url": interview_url,
+            },
+        )
+    finally:
+        db.close()
     return _send_interview_mail(candidate_email, subject, body, html)
 
 
@@ -127,10 +133,18 @@ def send_interview_slot_email(
         logger.warning("Interview slot email skipped: SMTP not configured")
         return False
 
-    subject, body, html = render_interview_slot_email(
-        candidate_name=(candidate_name or "there").strip(),
-        role_title=(role_title or "the role").strip(),
-        interview_url=interview_url,
-        scheduled_at_label=scheduled_at_label,
-    )
+    db = SessionLocal()
+    try:
+        subject, body, html = render_email_template(
+            db,
+            "interview_slot",
+            {
+                "candidate_name": (candidate_name or "there").strip(),
+                "role_title": (role_title or "the role").strip(),
+                "interview_url": interview_url,
+                "scheduled_at_label": scheduled_at_label,
+            },
+        )
+    finally:
+        db.close()
     return _send_interview_mail(candidate_email, subject, body, html)

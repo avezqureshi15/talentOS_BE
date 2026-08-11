@@ -1,5 +1,4 @@
 from app.core.config import settings
-from app.common.services.email_templates import block_text, render_talentos_email
 
 _SUBJECT = "Submit your interview feedback"
 _REMINDER_SUBJECT = "Reminder: Submit your interview feedback"
@@ -17,30 +16,43 @@ _BODY_REMINDER_INTRO = (
 )
 _EXPIRY_NOTE = f"This link expires in {settings.FORM_EXPIRY_HOURS} hours."
 
+_PARA_STYLE = "font-size:14px;line-height:1.7;color:rgba(255,255,255,0.6);margin:0 0 16px;"
 
-def render_review_form_email(*, recipient_name: str, candidate_name: str, form_url: str, is_reminder: bool = False) -> tuple[str, str, str]:
+
+def _para(text: str) -> str:
+    return f'<p style="{_PARA_STYLE}">{text}</p>'
+
+
+def render_review_form_email(
+    *,
+    recipient_name: str,
+    candidate_name: str,
+    form_url: str,
+    round_name: str | None = None,
+    scheduled_at_label: str | None = None,
+    is_reminder: bool = False,
+) -> tuple[str, str, str]:
     subject = _REMINDER_SUBJECT if is_reminder else _SUBJECT
     intro = _BODY_REMINDER_INTRO if is_reminder else _BODY_INTRO
 
-    body_html = block_text(intro) + block_text(_EXPIRY_NOTE)
-
-    html = render_talentos_email(
-        subject=subject,
-        preheader=_PREHEADER,
-        recipient_name=recipient_name,
-        body_html=body_html,
-        cta_url=form_url,
-        cta_text=_CTA_TEXT,
-        footer_note=_FOOTER_NOTE,
-    )
+    body_html = _para(intro)
+    body_html += f'<p style="{_PARA_STYLE}"><strong>Candidate:</strong> {candidate_name}</p>'
+    if round_name:
+        body_html += f'<p style="{_PARA_STYLE}"><strong>Round:</strong> {round_name}</p>'
+    if scheduled_at_label:
+        body_html += f'<p style="{_PARA_STYLE}"><strong>Interview time:</strong> {scheduled_at_label}</p>'
+    body_html += _para(_EXPIRY_NOTE)
 
     prefix = "This is a reminder. " if is_reminder else ""
+    details = f"\nRound: {round_name}" if round_name else ""
+    if scheduled_at_label:
+        details += f"\nInterview time: {scheduled_at_label}"
     plain = (
         f"Hi {recipient_name},\n\n"
-        f"{prefix}Please submit your feedback for {candidate_name}.\n\n"
+        f"{prefix}Please submit your feedback for {candidate_name}.{details}\n\n"
         f"{form_url}\n\n"
         f"{_EXPIRY_NOTE}\n\n"
         "Regards,\nTalentOS"
     )
 
-    return subject, plain, html
+    return subject, plain, body_html

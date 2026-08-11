@@ -24,6 +24,7 @@ from app.modules.auth.auth_router import router as auth_router
 from app.modules.chat.chat_router import router as chat_router
 from app.modules.designation import router as designation_router
 from app.modules.email.email_router import router as email_router
+from app.modules.email.email_template_router import router as email_template_router
 from app.modules.events import router as events_router
 from app.modules.employees import router as employees_router
 from app.modules.evaluations import candidates_router as evaluation_candidates_router
@@ -150,6 +151,7 @@ app.include_router(evaluation_webhook_router)
 app.include_router(evaluations_router)
 app.include_router(evaluation_candidates_router)
 app.include_router(email_router)
+app.include_router(email_template_router)
 app.include_router(user_admin_router)
 app.include_router(settings_router)
 app.include_router(tenant_router)

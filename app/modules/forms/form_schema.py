@@ -8,6 +8,7 @@ class AskFormRequest(BaseModel):
     type: Literal["SLOTS", "REVIEW"] = "SLOTS"
     round_id: UUID | None = None
     candidate_id: int | None = None
+    requester_name: str | None = Field(default=None, max_length=255)
 
 
 class AskFormResultItem(BaseModel):
@@ -40,6 +41,7 @@ class NotifyFormRequest(BaseModel):
     user_id: int
     type: Literal["SLOTS", "REVIEW"] = "SLOTS"
     reminder: bool = True
+    requester_name: str | None = Field(default=None, max_length=255)
 
 
 class NotifyFormResponse(BaseModel):
