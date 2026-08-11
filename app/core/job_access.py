@@ -180,9 +180,9 @@ def scope_job_query(query: Query, user: UserInfo) -> Query:
 def can_create_job(db: Session, user: UserInfo) -> bool:
     """Whether the caller may create hiring requests.
 
-    superadmin/account_admin always; otherwise anyone whose org role carries
-    hiring_request.create.
+    superadmin/account_admin/job_owner always; otherwise anyone whose org role
+    carries hiring_request.create.
     """
-    if user.role in ("superadmin", "account_admin"):
+    if user.role in ("superadmin", "account_admin", "job_owner"):
         return True
     return Permission.HIRING_REQUEST_CREATE.value in user.permissions
