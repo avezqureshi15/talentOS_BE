@@ -100,6 +100,18 @@ class JobTeamService:
 
         employee = self._get_employee_or_raise(employee_id)
         self._assert_same_tenant(hr, employee)
+
+        linked_user = (
+            self.db.query(User)
+            .filter(User.employee_id == employee_id, User.is_active == True)
+            .first()
+        )
+        if linked_user is None or not linked_user.role:
+            raise HTTPException(
+                status_code=422,
+                detail="Cannot assign job to a user without an active, role-bearing account",
+            )
+
         if body.is_owner:
             self._assert_owner_assignment_allowed(current_user)
 

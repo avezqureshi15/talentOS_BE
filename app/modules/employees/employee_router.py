@@ -139,6 +139,7 @@ def list_employees(
     page: int = Query(1, ge=1),
     per_page: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
     slotsInfo: bool = Query(False, description="Include slot availability info and sort by slot count"),
+    authorized_only: bool = Query(False, description="Only return employees with an active, role-bearing user account"),
     db: Session = Depends(get_db),
     current_user: UserInfo = Depends(require_permission(Permission.EMPLOYEE_VIEW)),
 ):
@@ -154,6 +155,7 @@ def list_employees(
         per_page=per_page,
         slots_info=slotsInfo,
         tenant_id=tenant_id,
+        authorized_only=authorized_only,
     )
 
     employees: list[Employee] = (

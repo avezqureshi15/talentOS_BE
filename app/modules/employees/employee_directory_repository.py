@@ -34,11 +34,24 @@ class EmployeeDirectoryRepository:
         per_page: int = 20,
         slots_info: bool = False,
         tenant_id: int | None = None,
+        authorized_only: bool = False,
     ) -> tuple[list[Employee] | list[tuple[Employee, int]], int]:
         base_query = self.db.query(Employee)
 
         if tenant_id is not None:
             base_query = base_query.filter(Employee.tenant_id == tenant_id)
+
+        if authorized_only:
+            from app.modules.users.user_model import User
+            base_query = (
+                base_query
+                .join(User, User.employee_id == Employee.id)
+                .filter(
+                    User.is_active == True,
+                    User.role.isnot(None),
+                    User.role != "",
+                )
+            )
 
         if query:
             base_query = base_query.filter(
