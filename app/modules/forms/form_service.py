@@ -53,7 +53,7 @@ class FormService:
         self.employees = EmployeeDirectoryRepository(db)
         self.notification_service = NotificationService(db)
 
-    def _resolve_ask_action(self, emp_id: str, form_type: str) -> tuple[Form, str]:
+    def _resolve_ask_action(self, emp_id: str, form_type: str, requester_name: str | None = None) -> tuple[Form, str]:
         employee = self.employees.get_by_emp_id(emp_id)
         if not employee:
             raise ValueError(f"Employee not found for emp_id={emp_id}")
@@ -68,7 +68,12 @@ class FormService:
         if latest and latest.status == FormStatus.SENT.value and is_form_expired(latest):
             self.repository.mark_expired(latest)
 
-        form = self.repository.create(employee_id=employee.id, form_type=form_type, last_sent_at=now)
+        form = self.repository.create(
+            employee_id=employee.id,
+            form_type=form_type,
+            last_sent_at=now,
+            requested_by_name=requester_name,
+        )
         return form, DETAIL_NEW_LINK
 
     def generate_review_form(
@@ -80,10 +85,15 @@ class FormService:
         round_name: str,
         interviewer_name: str,
         interviewer_email: str,
+        requester_name: str | None = None,
+        scheduled_at_label: str | None = None,
     ) -> Form:
         employee = self.employees.get_by_emp_id(emp_id)
         if not employee:
             raise ValueError(f"Employee not found for emp_id={emp_id}")
+
+        if not scheduled_at_label:
+            scheduled_at_label = self._scheduled_at_label_for_round(round_id)
 
         now = datetime.now(timezone.utc)
         active = self.repository.get_active_sent_by_employee_and_round(employee.id, round_id)
@@ -92,7 +102,10 @@ class FormService:
             self.db.commit()
             self._notify_form_sent(active)
             self.db.commit()
-            send_review_mail_task(employee.id, active.id, candidate_name, round_name, interviewer_name)
+            send_review_mail_task(
+                employee.id, active.id, candidate_name, round_name, interviewer_name,
+                scheduled_at_label=scheduled_at_label,
+            )
             return active
 
         latest = self.repository.get_latest(emp_id, FormType.REVIEW.value)
@@ -105,14 +118,18 @@ class FormService:
             last_sent_at=now,
             round_id=round_id,
             candidate_id=candidate_id,
+            requested_by_name=requester_name,
         )
         self.db.commit()
         self._notify_form_sent(form)
         self.db.commit()
-        send_review_mail_task(employee.id, form.id, candidate_name, round_name, interviewer_name)
+        send_review_mail_task(
+            employee.id, form.id, candidate_name, round_name, interviewer_name,
+            scheduled_at_label=scheduled_at_label,
+        )
         return form
 
-    def ask_form_batch(self, emp_ids: list[str], form_type: str) -> tuple[AskFormResponse, list[PendingMailTask]]:
+    def ask_form_batch(self, emp_ids: list[str], form_type: str, requester_name: str | None = None) -> tuple[AskFormResponse, list[PendingMailTask]]:
         results: list[AskFormResultItem] = []
         mail_tasks: list[PendingMailTask] = []
         success_display_names: list[str] = []
@@ -151,7 +168,7 @@ class FormService:
                 continue
 
             try:
-                form, detail = self._resolve_ask_action(emp_id, form_type)
+                form, detail = self._resolve_ask_action(emp_id, form_type, requester_name)
                 self.db.flush()
                 results.append(
                     AskFormResultItem(
@@ -238,7 +255,7 @@ class FormService:
             review_questions=review_questions,
         )
 
-    def notify_form(self, user_id: int, form_type: str, is_reminder: bool = True) -> tuple[Form, str]:
+    def notify_form(self, user_id: int, form_type: str, is_reminder: bool = True, requester_name: str | None = None) -> tuple[Form, str]:
         # ``user_id`` is wire-name legacy; value is a real ``employees.id``.
         employee_id = user_id
         now = datetime.now(timezone.utc)
@@ -271,6 +288,7 @@ class FormService:
                         last_sent_at=now,
                         round_id=latest.round_id,
                         candidate_id=latest.candidate_id,
+                        requested_by_name=requester_name,
                     )
                 else:
                     raise ValueError("No existing review form found for this employee.")
@@ -288,6 +306,7 @@ class FormService:
                     employee_id=employee_id,
                     form_type=form_type,
                     last_sent_at=now,
+                    requested_by_name=requester_name,
                 )
                 detail = DETAIL_NEW_LINK
 
@@ -521,7 +540,12 @@ class FormService:
         if not form:
             raise ValueError(f"Form not found: form_id={form_id}")
         # notify_form's wire-name ``user_id`` is now semantically an employee_id.
-        return self.notify_form(user_id=form.employee_id, form_type=form.type, is_reminder=True)
+        return self.notify_form(
+            user_id=form.employee_id,
+            form_type=form.type,
+            is_reminder=True,
+            requester_name=form.requested_by_name,
+        )
 
     def _resolve_job_id_for_candidate(self, candidate_id: int):
         from app.modules.evaluations.evaluation_model import Candidate
@@ -545,9 +569,37 @@ class FormService:
 
     def _send_form_mail(self, form: Form, is_reminder: bool = False) -> None:
         if form.type == FormType.REVIEW.value:
-            send_review_mail_task(form.employee_id, form.id, None, None, None, is_reminder=is_reminder)
+            candidate_name, round_name = self._review_form_details(form)
+            send_review_mail_task(
+                form.employee_id,
+                form.id,
+                candidate_name,
+                round_name,
+                None,
+                is_reminder=is_reminder,
+                scheduled_at_label=self._scheduled_at_label_for_round(form.round_id),
+            )
         else:
             send_slot_mail_task(form.employee_id, form.id, is_reminder=is_reminder)
+
+    @staticmethod
+    def _review_form_details(form: Form) -> tuple[str | None, str | None]:
+        from app.modules.evaluations.evaluation_model import Candidate
+        from app.modules.rounds.round_model import Round
+
+        candidate_name: str | None = None
+        round_name: str | None = None
+        if form.candidate_id:
+            candidate = (
+                Session.object_session(form).query(Candidate).filter(Candidate.id == form.candidate_id).first()
+            )
+            candidate_name = candidate.candidate_name if candidate else None
+        if form.round_id:
+            round_obj = (
+                Session.object_session(form).query(Round).filter(Round.id == form.round_id).first()
+            )
+            round_name = round_obj.name if round_obj else None
+        return candidate_name, round_name
 
     def run_reminder_job(self) -> int:
         if not is_smtp_configured():
@@ -681,3 +733,21 @@ class FormService:
         if updated:
             self.db.commit()
         return updated
+
+    def _scheduled_at_label_for_round(self, round_id: UUID) -> str | None:
+        from app.modules.hiring_requests.ai_interview_mail import format_scheduled_slot_label
+        from app.modules.rounds.round_model import Round
+
+        if not round_id:
+            return None
+        try:
+            round_obj = self.db.query(Round).filter(Round.id == round_id).first()
+        except Exception:
+            return None
+        if not round_obj or not round_obj.scheduled_date or not round_obj.scheduled_time:
+            return None
+        return format_scheduled_slot_label(
+            round_obj.scheduled_date.isoformat(),
+            round_obj.scheduled_time.strftime("%H:%M:%S"),
+            round_obj.scheduled_timezone,
+        ) or None

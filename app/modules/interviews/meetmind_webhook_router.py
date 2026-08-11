@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.constants import InterviewStatus
 from app.core.logger import get_logger
+from app.core.secrets import get_secret
 from app.db.session import get_db
 from app.modules.interviews.interview_repository import InterviewRepository
 from app.modules.interviews.review_questions_service import ReviewQuestionsService
@@ -27,7 +28,7 @@ class MeetMindTranscriptPayload(BaseModel):
 
 
 def _verify_signature(raw_body: bytes, signature_header: str | None) -> None:
-    secret = (settings.MEETMIND_WEBHOOK_SECRET or "").encode("utf-8")
+    secret = (get_secret("MEETMIND_WEBHOOK_SECRET") or "").encode("utf-8")
     if not secret:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

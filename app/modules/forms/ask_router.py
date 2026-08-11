@@ -23,9 +23,11 @@ def ask_form(
         return _generate_review_forms(data, db)
 
     service = FormService(db)
-    response, mail_tasks = service.ask_form_batch(data.emp_ids, data.type)
+    response, mail_tasks = service.ask_form_batch(data.emp_ids, data.type, requester_name=data.requester_name)
     for task in mail_tasks:
-        background_tasks.add_task(send_slot_mail_task, task.user_id, task.form_id)
+        background_tasks.add_task(
+            send_slot_mail_task, task.user_id, task.form_id, requester_name=data.requester_name
+        )
     return response
 
 
@@ -61,6 +63,7 @@ def _generate_review_forms(data: AskFormRequest, db: Session) -> AskFormResponse
                 round_name=round_detail.round or "Interview",
                 interviewer_name=employee.name or emp_id,
                 interviewer_email=employee.email or "",
+                requester_name=data.requester_name,
             )
             results.append(AskFormResultItem(emp_id=emp_id, status="SUCCESS", message="Review form sent"))
         except ValueError as exc:

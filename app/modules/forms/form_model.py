@@ -32,6 +32,7 @@ class Form(Base):
     )
     last_sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     reminded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    requested_by_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

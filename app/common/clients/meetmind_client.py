@@ -7,7 +7,6 @@ Schedule body: meetUrl, platform, title, participantEmails, external.
 """
 
 from app.common.clients.base_client import BaseClient, ClientError
-from app.core.config import settings
 from app.core.constants import ErrorCode
 from app.core.logger import get_logger
 from app.core.secrets import get_secret
@@ -24,7 +23,7 @@ class MeetMindClient(BaseClient):
 
     def __init__(self) -> None:
         super().__init__(
-            base_url=settings.MEETMIND_BASE_URL,
+            base_url=get_secret("MEETMIND_BASE_URL"),
             timeout=30,
             max_retries=2,
         )
@@ -43,7 +42,7 @@ class MeetMindClient(BaseClient):
 
         Does not raise to callers for booking-path best-effort use — logs and returns False.
         """
-        if not settings.MEETMIND_BASE_URL:
+        if not get_secret("MEETMIND_BASE_URL"):
             logger.warning("MeetMind schedule skipped | MEETMIND_BASE_URL unset")
             return False
         api_token = get_secret("MEETMIND_API_TOKEN")
@@ -59,7 +58,7 @@ class MeetMindClient(BaseClient):
             "platform": "google-meet",
             "title": title,
             "participantEmails": participant_emails,
-            "external": settings.MEETMIND_EXTERNAL,
+            "external": get_secret("MEETMIND_EXTERNAL") or "talentos.ai",
         }
         headers = {"X-API-Key": api_token}
         try:

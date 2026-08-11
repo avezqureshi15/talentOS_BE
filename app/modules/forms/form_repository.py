@@ -101,7 +101,7 @@ class FormRepository:
             .first()
         )
 
-    def create(self, employee_id: int, form_type: str, last_sent_at: datetime, round_id: UUID | None = None, candidate_id: int | None = None) -> Form:
+    def create(self, employee_id: int, form_type: str, last_sent_at: datetime, round_id: UUID | None = None, candidate_id: int | None = None, requested_by_name: str | None = None) -> Form:
         form = Form(
             employee_id=employee_id,
             type=form_type,
@@ -109,6 +109,7 @@ class FormRepository:
             last_sent_at=last_sent_at,
             round_id=round_id,
             candidate_id=candidate_id,
+            requested_by_name=requested_by_name,
         )
         self.db.add(form)
         self.db.flush()

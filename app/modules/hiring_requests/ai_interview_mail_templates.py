@@ -20,31 +20,22 @@ BODY_TEXT_TEMPLATE = (
 )
 
 BODY_HTML_TEMPLATE = """
-<div style="font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; color: #1f2937; line-height: 1.55;">
-  <p>Hi {candidate_name},</p>
-  <p>
+  <p style="font-size:14px;line-height:1.7;color:rgba(255,255,255,0.6);margin:0;">
     Your AI interview for the <strong>{role_title}</strong> role is ready.
     Use the button below to start whenever you are prepared — you can take it
     at your own convenience within the interview window.
   </p>
-  <p style="margin: 24px 0;">
-    <a href="{interview_url}"
-       style="background: #4f46e5; color: #ffffff; padding: 12px 20px;
-              text-decoration: none; border-radius: 6px; font-weight: 600; display: inline-block;">
-      Start AI Interview
-    </a>
+  <p style="font-size:14px;line-height:1.7;color:rgba(255,255,255,0.6);margin:20px 0 0;">
+    Or copy this link into your browser:<br/>
+    <a href="{interview_url}" style="color:#818CF8;word-break:break-all;">{interview_url}</a>
   </p>
-  <p>Or copy this link into your browser:<br/>
-    <a href="{interview_url}">{interview_url}</a>
-  </p>
-  <ul>
+  <ul style="margin:16px 0 0;padding-left:20px;font-size:14px;line-height:1.7;color:rgba(255,255,255,0.6);">
     <li>Use a laptop/desktop with a stable internet connection.</li>
     <li>Allow microphone access when prompted.</li>
     <li>Find a quiet space; the interview typically takes 20-30 minutes.</li>
   </ul>
-  <p>If you have any trouble, reply to this email.</p>
-  <p>Best,<br/>The Hiring Team</p>
-</div>
+  <p style="font-size:14px;line-height:1.7;color:rgba(255,255,255,0.6);margin:20px 0 0;">If you have any trouble, reply to this email.</p>
+  <p style="font-size:14px;line-height:1.7;color:rgba(255,255,255,0.6);margin:16px 0 0;">Best,<br/>The Hiring Team</p>
 """
 
 
@@ -82,34 +73,25 @@ BODY_SLOT_TEXT_TEMPLATE = (
 )
 
 BODY_SLOT_HTML_TEMPLATE = """
-<div style="font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; color: #1f2937; line-height: 1.55;">
-  <p>Hi {candidate_name},</p>
-  <p>
+  <p style="font-size:14px;line-height:1.7;color:rgba(255,255,255,0.6);margin:0;">
     Your AI interview for the <strong>{role_title}</strong> role is scheduled for
     <strong>{scheduled_at_label}</strong>.
   </p>
-  <p>
+  <p style="font-size:14px;line-height:1.7;color:rgba(255,255,255,0.6);margin:16px 0 0;">
     The interview link opens at the scheduled time — please join a few minutes early
     to check your microphone and camera.
   </p>
-  <p style="margin: 24px 0;">
-    <a href="{interview_url}"
-       style="background: #4f46e5; color: #ffffff; padding: 12px 20px;
-              text-decoration: none; border-radius: 6px; font-weight: 600; display: inline-block;">
-      Start AI Interview
-    </a>
+  <p style="font-size:14px;line-height:1.7;color:rgba(255,255,255,0.6);margin:20px 0 0;">
+    Or copy this link into your browser:<br/>
+    <a href="{interview_url}" style="color:#818CF8;word-break:break-all;">{interview_url}</a>
   </p>
-  <p>Or copy this link into your browser:<br/>
-    <a href="{interview_url}">{interview_url}</a>
-  </p>
-  <ul>
+  <ul style="margin:16px 0 0;padding-left:20px;font-size:14px;line-height:1.7;color:rgba(255,255,255,0.6);">
     <li>Use a laptop/desktop with a stable internet connection.</li>
     <li>Allow microphone access when prompted.</li>
     <li>Find a quiet space; the interview typically takes 20-30 minutes.</li>
   </ul>
-  <p>If you have any trouble, reply to this email.</p>
-  <p>Best,<br/>The Hiring Team</p>
-</div>
+  <p style="font-size:14px;line-height:1.7;color:rgba(255,255,255,0.6);margin:20px 0 0;">If you have any trouble, reply to this email.</p>
+  <p style="font-size:14px;line-height:1.7;color:rgba(255,255,255,0.6);margin:16px 0 0;">Best,<br/>The Hiring Team</p>
 """
 
 

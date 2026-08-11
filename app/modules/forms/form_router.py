@@ -41,6 +41,7 @@ def notify_form(
             user_id=data.user_id,
             form_type=data.type,
             is_reminder=data.reminder,
+            requester_name=data.requester_name,
         )
     except ValueError as exc:
         raise HTTPException(status_code=429, detail=str(exc))
@@ -51,11 +52,13 @@ def notify_form(
             background_tasks.add_task(
                 send_review_mail_task, data.user_id, form.id,
                 None, None, None, is_reminder=data.reminder,
+                requester_name=form.requested_by_name,
             )
         else:
             background_tasks.add_task(
                 send_slot_mail_task, data.user_id, form.id,
                 is_reminder=data.reminder,
+                requester_name=form.requested_by_name,
             )
         db.commit()
     except sa_exc.SQLAlchemyError:
@@ -86,11 +89,13 @@ def remind_form(
             background_tasks.add_task(
                 send_review_mail_task, form.employee_id, form.id,
                 None, None, None, is_reminder=True,
+                requester_name=form.requested_by_name,
             )
         else:
             background_tasks.add_task(
                 send_slot_mail_task, form.employee_id, form.id,
                 is_reminder=True,
+                requester_name=form.requested_by_name,
             )
         db.commit()
     except sa_exc.SQLAlchemyError:

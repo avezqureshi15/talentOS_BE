@@ -2,12 +2,12 @@ import re
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from app.common.email_templates import render_review_form_email, render_slot_form_email
 from app.common.services.email_service import EmailService
 from app.core.config import settings
 from app.core.frontend import build_frontend_link
 from app.core.logger import get_logger
 from app.db.session import SessionLocal
+from app.modules.email.email_template_service import render as render_email_template
 from app.modules.employees.employee_model import Employee
 from app.modules.forms.form_model import Form
 
@@ -61,7 +61,12 @@ def build_ask_summary_message(success_labels: list[str]) -> str:
     return f"Slot selection mails are being sent to {joined}."
 
 
-def send_slot_mail_task(employee_id: int, form_id: UUID, is_reminder: bool = False) -> None:
+def send_slot_mail_task(
+    employee_id: int,
+    form_id: UUID,
+    is_reminder: bool = False,
+    requester_name: str | None = None,
+) -> None:
     """Background mail task keyed by employees.id — the directory identity.
     Fetches the Employee row (not User) so HR-only employees also work."""
     if not is_smtp_configured():
@@ -90,10 +95,14 @@ def send_slot_mail_task(employee_id: int, form_id: UUID, is_reminder: bool = Fal
             password=settings.SMTP_PASSWORD,
             use_tls=settings.SMTP_USE_TLS,
         )
-        subject, body, html = render_slot_form_email(
-            recipient_name=display_name,
-            form_url=link,
-            is_reminder=is_reminder,
+        subject, body, html = render_email_template(
+            db,
+            "slot_form_reminder" if is_reminder else "slot_form",
+            {
+                "recipient_name": display_name,
+                "requester_name": requester_name,
+                "form_url": link,
+            },
         )
         email_service.send(to_email=employee.email.strip(), subject=subject, body=body, html=html)
     except Exception as exc:
@@ -109,6 +118,8 @@ def send_review_mail_task(
     round_name: str | None = None,
     interviewer_name: str | None = None,
     is_reminder: bool = False,
+    requester_name: str | None = None,
+    scheduled_at_label: str | None = None,
 ) -> None:
     if not is_smtp_configured():
         logger.warning("Background review mail skipped for employee_id=%s: SMTP not configured", employee_id)
@@ -136,11 +147,16 @@ def send_review_mail_task(
             password=settings.SMTP_PASSWORD,
             use_tls=settings.SMTP_USE_TLS,
         )
-        subject, body, html = render_review_form_email(
-            recipient_name=display_name,
-            candidate_name=candidate_name or "the candidate",
-            form_url=link,
-            is_reminder=is_reminder,
+        subject, body, html = render_email_template(
+            db,
+            "review_form_reminder" if is_reminder else "review_form",
+            {
+                "recipient_name": display_name,
+                "candidate_name": candidate_name or "the candidate",
+                "round_name": round_name,
+                "scheduled_at_label": scheduled_at_label,
+                "form_url": link,
+            },
         )
         email_service.send(to_email=employee.email.strip(), subject=subject, body=body, html=html)
     except Exception as exc:

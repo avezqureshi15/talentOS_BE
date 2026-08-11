@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 
 from app.core.logger import get_logger
 from app.core.constants import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
+from app.common.services.invite_email import send_invite_email
 from app.modules.tenants.tenant_model import Tenant
 from app.modules.tenants.tenant_repository import TenantRepository
 from app.modules.tenants.tenant_schema import TenantResponse, PaginatedTenantResponse, TenantAdminDetails
@@ -73,6 +74,17 @@ class TenantService:
         )
 
         self.db.commit()
+
+        try:
+            inviter = self.db.query(User).filter(User.id == invited_by_user_id).first()
+            send_invite_email(
+                admin_email,
+                invite.token,
+                organization_name=tenant.name,
+                inviter_name=inviter.name if inviter else None,
+            )
+        except Exception as exc:
+            logger.warning("Failed to send tenant invite email to %s: %s", admin_email, exc)
 
         return TenantAdminDetails(
             tenant_id=tenant.id,

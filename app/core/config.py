@@ -104,7 +104,7 @@ class Settings(BaseSettings):
     SMTP_USERNAME: str = ""
     SMTP_PASSWORD: str = ""
     SMTP_USE_TLS: bool = True
-    FRONTEND_BASE_URL: str = "http://localhost:5173"
+    FRONTEND_BASE_URL: str = ""
 
     # Form timing — prod defaults; overridden for dev via model_validator
     FORM_REMINDER_HOURS: float = 2
