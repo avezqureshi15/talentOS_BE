@@ -58,6 +58,16 @@ class UpdateUserRequest(BaseModel):
     password: str | None = None
     tenant_id: int | None = None
 
+    @field_validator("name")
+    @classmethod
+    def name_not_blank(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        trimmed = v.strip()
+        if not trimmed:
+            raise ValueError("Name is required")
+        return trimmed
+
     @field_validator("password")
     @classmethod
     def password_min_length(cls, v: str | None) -> str | None:

@@ -46,7 +46,22 @@ def update_organization(
         raise HTTPException(status_code=400, detail="Admin user has no tenant")
 
     service = TenantService(db)
-    data = body.model_dump(exclude_none=True)
+    tenant = service.repo.get_by_id(tenant_id)
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+
+    data = body.model_dump(exclude_unset=True)
+    for key in ("phone", "address_line1"):
+        if key in data and isinstance(data[key], str):
+            data[key] = data[key].strip() or None
+
+    final_phone = data["phone"] if "phone" in data else tenant.phone
+    final_address = data["address_line1"] if "address_line1" in data else tenant.address_line1
+    if not (final_phone or "").strip():
+        raise HTTPException(status_code=422, detail="Phone is required")
+    if not (final_address or "").strip():
+        raise HTTPException(status_code=422, detail="Address Line 1 is required")
+
     try:
         return service.update_tenant(tenant_id, data)
     except TenantError as e:
