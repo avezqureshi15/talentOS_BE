@@ -3,8 +3,8 @@
 Converts scalar location strings into JSON arrays so a job can have
 multiple locations (Bug_010).
 
-Revision ID: 0084
-Revises: 0083
+Revision ID: 0088
+Revises: 0087
 Create Date: 2026-08-11
 
 """
@@ -12,8 +12,8 @@ from typing import ClassVar
 
 from alembic import op
 
-revision: str = "0084"
-down_revision: str | None = "0083"
+revision: str = "0088"
+down_revision: str | None = "0087"
 branch_labels: ClassVar[list[str] | None] = None
 depends_on: ClassVar[list[str] | None] = None
 

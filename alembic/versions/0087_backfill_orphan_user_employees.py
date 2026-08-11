@@ -4,8 +4,8 @@ Admin create_user historically inserted users without calling
 ensure_employee_for_user. This migration creates/links employee rows for
 any remaining orphans (Bug_012).
 
-Revision ID: 0083
-Revises: 0082
+Revision ID: 0087
+Revises: 0086
 Create Date: 2026-08-11
 
 """
@@ -13,8 +13,8 @@ from typing import ClassVar
 
 from alembic import op
 
-revision: str = "0083"
-down_revision: str | None = "0082"
+revision: str = "0087"
+down_revision: str | None = "0086"
 branch_labels: ClassVar[list[str] | None] = None
 depends_on: ClassVar[list[str] | None] = None
 
