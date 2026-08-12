@@ -1,6 +1,8 @@
+import io
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -18,6 +20,7 @@ from app.modules.rounds.round_service import RoundService
 from app.modules.reviews.review_schema import ReviewUpdateByRound
 from app.modules.reviews.review_service import ReviewService
 from app.modules.evaluations.evaluation_model import Candidate
+from app.common.clients.resume_client import ResumeClient, ResumeClientError
 
 router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/rounds", tags=["rounds"])
 
@@ -47,6 +50,26 @@ def get_round_by_id(round_id: UUID, db: Session = Depends(get_db)):
     if not result:
         raise HTTPException(status_code=404, detail="Round not found")
     return result
+
+
+@router.get("/{round_id}/resume")
+def download_round_resume(round_id: UUID, db: Session = Depends(get_db)):
+    service = RoundService(db)
+    result = service.get_round_detail(round_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Round not found")
+    resume_url = getattr(result, "resume_url", None)
+    if not resume_url:
+        raise HTTPException(status_code=404, detail="No resume available for this candidate")
+    try:
+        content = ResumeClient().download_bytes(resume_url)
+    except ResumeClientError as exc:
+        raise HTTPException(status_code=502, detail="Could not retrieve resume") from exc
+    return StreamingResponse(
+        io.BytesIO(content),
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'attachment; filename="resume.pdf"'},
+    )
 
 
 @router.get("/candidate/{candidate_id}", response_model=list[RoundResponse], dependencies=[Depends(require_permission(Permission.APPLICATION_VIEW))])
