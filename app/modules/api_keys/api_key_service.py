@@ -36,15 +36,19 @@ def _generate_api_key() -> tuple[str, str, str]:
 
 
 def _validate_permission_codes(db: Session, codes: list[str]) -> list[str]:
-    """Return the input codes filtered to those known to `PermissionModel`.
+    """Return the input codes filtered to those that are known.
 
-    Raises 400 with the unknown codes if any are rejected. Duplicates in the
-    input are collapsed. Order is not preserved (permissions are unordered).
+    A code is known if it exists in the static ``PERMISSION_META`` catalog
+    (single source of truth) **or** in the ``permissions`` table. Falling back
+    to the static catalog keeps assignment working even when the permissions
+    table is missing or not fully seeded. Raises 400 with any true unknowns.
+    Duplicates in the input are collapsed. Order is not preserved.
     """
     unique = list(dict.fromkeys(codes))
     if not unique:
         return []
-    known = set(
+    known = set(PERMISSION_META.keys())
+    known.update(
         db.execute(
             select(PermissionModel.code).where(PermissionModel.code.in_(unique))
         ).scalars().all()
@@ -128,6 +132,12 @@ class ApiKeyService:
         default_perms = self.db.execute(
             select(PermissionModel.code).where(PermissionModel.is_default == True)
         ).scalars().all()
+
+        # Default a new key to EVERY code in the static PERMISSION_META catalog.
+        # This guarantees the key works out-of-the-box with full access even when
+        # the `permissions` table is missing/empty (e.g. an unseeded UAT DB),
+        # where the is_default-based query would otherwise return nothing.
+        default_perms = sorted(set(default_perms) | set(PERMISSION_META.keys()))
 
         if default_perms:
             for code in default_perms:
