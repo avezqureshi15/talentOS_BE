@@ -1,12 +1,14 @@
 import uuid
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.session import get_db
 from app.core.authorization import require_permission
-from app.core.permissions import Permission
+from app.core.permissions import Permission, mark_enforced
+from app.modules.auth.auth_dependencies import get_current_user
+from app.modules.auth.auth_schema import UserInfo
 from app.modules.events.event_schema import EventCreate
 from app.modules.events.event_service import EventService
 from app.modules.reviews.review_schema import ReviewCreate, ReviewResponse, ReviewUpdateByRound
@@ -27,8 +29,31 @@ def get_reviews_by_round(round_id: str, db: Session = Depends(get_db)):
     return service.get_reviews_by_round(round_id)
 
 
+def _require_hr_verdict_permission(verdict: str | None, current_user: UserInfo) -> None:
+    if verdict == "rejected":
+        required = Permission.APPLICATION_REJECT
+    else:
+        required = Permission.APPLICATION_EVALUATE
+    if required.value not in current_user.permissions:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Missing required permission: {required.value}",
+        )
+
+
+mark_enforced(Permission.APPLICATION_EVALUATE, Permission.APPLICATION_REJECT)
+
+
 @router.put("/round/{round_id}", response_model=ReviewResponse)
-def update_review_by_round(round_id: uuid.UUID, data: ReviewUpdateByRound, db: Session = Depends(get_db)):
+def update_review_by_round(
+    round_id: uuid.UUID,
+    data: ReviewUpdateByRound,
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(get_current_user),
+):
+    if data.entity_type == "hr":
+        _require_hr_verdict_permission(data.verdict, current_user)
+
     service = ReviewService(db)
     result = service.upsert_review(round_id, data)
 

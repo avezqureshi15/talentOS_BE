@@ -87,7 +87,7 @@ def _guard_candidate_finalized(candidate_id: int, db: Session) -> None:
         )
 
 
-@router.post("/{round_id}/shortlist", dependencies=[Depends(require_permission(Permission.APPLICATION_VIEW))])
+@router.post("/{round_id}/shortlist", dependencies=[Depends(require_permission(Permission.APPLICATION_EVALUATE))])
 def shortlist_round(round_id: UUID, data: RoundVerdictRequest, db: Session = Depends(get_db)):
     from app.modules.rounds.round_model import Round as _Round
     round_obj = db.query(_Round).filter(_Round.id == round_id).first()
@@ -127,6 +127,6 @@ def shortlist_round(round_id: UUID, data: RoundVerdictRequest, db: Session = Dep
     )
 
 
-@router.post("/{round_id}/reject", dependencies=[Depends(require_permission(Permission.APPLICATION_VIEW))])
+@router.post("/{round_id}/reject", dependencies=[Depends(require_permission(Permission.APPLICATION_REJECT))])
 def reject_round(round_id: UUID, data: RoundVerdictRequest, db: Session = Depends(get_db)):
     return shortlist_round(round_id, RoundVerdictRequest(verdict="rejected", remark=data.remark), db)

@@ -90,8 +90,6 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, set[Permission]] = {
     },
     "reviewer": {
         Permission.APPLICATION_VIEW,
-        Permission.APPLICATION_EVALUATE,
-        Permission.APPLICATION_REJECT,
         Permission.HIRING_REQUEST_VIEW,
         Permission.REPORT_EXPORT,
         Permission.SETTINGS_VIEW,

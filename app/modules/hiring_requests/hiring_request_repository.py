@@ -29,6 +29,17 @@ class HiringRequestRepository:
             (HiringRequest.id == identifier) | (HiringRequest.external_job_id == identifier)
         ).first()
 
+    def get_custom_evaluation_criteria(self, job_id: str | UUID) -> str:
+        """Return stored ATS criteria for a hiring request / external job id, or empty string."""
+        try:
+            identifier = job_id if isinstance(job_id, UUID) else UUID(str(job_id))
+        except (TypeError, ValueError):
+            return ""
+        record = self.resolve_to_external_job_id(identifier)
+        if record is None or not record.custom_evaluation_criteria:
+            return ""
+        return record.custom_evaluation_criteria.strip()
+
     def get_all(
         self,
         search: str | None = None,

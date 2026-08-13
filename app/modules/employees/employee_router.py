@@ -208,6 +208,11 @@ def update_employee(
     if current_user.role != "superadmin" and employee.tenant_id != current_user.tenant_id:
         raise HTTPException(status_code=403, detail="No access to this employee")
 
+    if body.email is not None:
+        existing_email = repo.get_by_email(body.email)
+        if existing_email and existing_email.id != employee.id:
+            raise HTTPException(status_code=409, detail="Employee with this email already exists")
+
     update_data = {
         k: v for k, v in body.model_dump(exclude_unset=True).items()
         if v is not None or k not in ("name", "email", "emp_id")

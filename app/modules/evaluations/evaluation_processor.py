@@ -20,6 +20,7 @@ from app.core.constants import EvaluationStatus
 from app.core.logger import get_logger
 from app.modules.evaluations.evaluation_repository import EvaluationRepository
 from app.modules.evaluations.evaluation_schema import EvaluationMessage
+from app.modules.hiring_requests.hiring_request_repository import HiringRequestRepository
 
 logger = get_logger(__name__)
 
@@ -101,11 +102,15 @@ class EvaluationProcessor:
         except Exception as exc:
             raise TransientEvaluationError(f"JD fetch failed: {exc}") from exc
 
+        custom_evaluation_criteria = HiringRequestRepository(self.db).get_custom_evaluation_criteria(
+            message.job_id
+        )
+
         try:
             ai_result = self.ai.evaluate_resume(
                 resume_txt=resume_text,
                 jd_details=jd_details,
-                custom_evaluation_criteria="",
+                custom_evaluation_criteria=custom_evaluation_criteria,
             )
         except ClientError as exc:
             raise TransientEvaluationError(str(exc)) from exc

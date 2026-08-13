@@ -1,4 +1,7 @@
+import threading
+
 from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_MISSED, EVENT_JOB_MAX_INSTANCES
+from apscheduler.executors.pool import ThreadPoolExecutor
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.schedulers.background import BackgroundScheduler
 from sqlalchemy.exc import OperationalError
@@ -8,6 +11,33 @@ from app.db.session import engine
 
 _scheduler: BackgroundScheduler | None = None
 logger = get_logger(__name__)
+
+SCHEDULER_SHUTDOWN_TIMEOUT = 30
+
+
+class ShutdownSafeThreadPoolExecutor(ThreadPoolExecutor):
+    """ThreadPoolExecutor that tolerates the APScheduler shutdown race.
+
+    ``BaseScheduler.shutdown()`` stops the executor pool *before* the scheduler
+    thread finishes its current ``_process_jobs()`` pass, so a due job can still
+    be submitted to an already-shut-down ``concurrent.futures`` pool. That raises
+    ``RuntimeError: cannot schedule new futures after shutdown``, which APScheduler
+    re-logs as an ERROR. This executor swallows exactly that race (a job being
+    submitted from a pool mid-shutdown), keeping shutdown logs clean.
+    """
+
+    def _do_submit_job(self, job, run_times):
+        try:
+            return super()._do_submit_job(job, run_times)
+        except RuntimeError as exc:
+            if "shutdown" not in getattr(exc, "args", (str(exc),))[0]:
+                raise
+            logger.debug(
+                "Skipping job submission during scheduler shutdown | name=%s error=%s",
+                getattr(job, "id", job),
+                exc,
+            )
+            return None
 
 
 class ResilientSQLAlchemyJobStore(SQLAlchemyJobStore):
@@ -107,6 +137,7 @@ def init_scheduler() -> BackgroundScheduler:
     jobstore = ResilientSQLAlchemyJobStore(engine=engine)
     _scheduler = BackgroundScheduler(
         jobstores={"default": jobstore},
+        executors={"default": ShutdownSafeThreadPoolExecutor()},
         timezone="UTC",
         job_defaults={
             "coalesce": True,
@@ -150,8 +181,32 @@ def _ensure_failed_jobs_table() -> None:
 
 def shutdown_scheduler() -> None:
     global _scheduler
-    if _scheduler:
-        jobs = _scheduler.get_jobs()
-        _scheduler.shutdown(wait=False)
+    if not _scheduler:
+        return
+    sched = _scheduler
+    jobs = sched.get_jobs()
+    try:
+        sched.pause()
+    except Exception as exc:
+        logger.warning("Could not pause scheduler before shutdown: %s", exc)
+
+    def _graceful_shutdown() -> None:
+        try:
+            sched.shutdown(wait=True)
+        except BaseException:
+            logger.exception("Scheduler graceful shutdown failed")
+
+    shutdown_thread = threading.Thread(
+        target=_graceful_shutdown, name="scheduler-shutdown", daemon=True
+    )
+    shutdown_thread.start()
+    shutdown_thread.join(timeout=SCHEDULER_SHUTDOWN_TIMEOUT)
+    if shutdown_thread.is_alive():
+        logger.warning(
+            "Scheduler jobs still running after %ds — forcing teardown | pending_jobs=%d",
+            SCHEDULER_SHUTDOWN_TIMEOUT,
+            len(jobs),
+        )
+    else:
         logger.info("Scheduler shut down | pending_jobs=%d", len(jobs))
-        _scheduler = None
+    _scheduler = None

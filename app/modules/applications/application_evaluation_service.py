@@ -9,6 +9,7 @@ from app.core.logger import get_logger
 from app.common.schemas.evaluation import AIEvaluationResponse
 from app.modules.applications.application_repository import ApplicationRepository
 from app.modules.evaluations.evaluation_schema import WebhookRecord
+from app.modules.hiring_requests.hiring_request_repository import HiringRequestRepository
 from app.modules.reviews.review_schema import ReviewCreate
 from app.modules.reviews.review_service import ReviewService
 from app.modules.events.event_schema import EventCreate
@@ -126,8 +127,13 @@ class ApplicationEvaluationService:
         if candidate_meta_parts:
             resume_text += "\n\n--- Candidate Details ---\n" + "\n".join(candidate_meta_parts)
         jd_details = self.supabase.fetch_jd_details(job_id)
+        custom_evaluation_criteria = HiringRequestRepository(self.db).get_custom_evaluation_criteria(job_id)
         try:
-            ai_result = self.ai.evaluate_resume(resume_txt=resume_text, jd_details=jd_details, custom_evaluation_criteria="")
+            ai_result = self.ai.evaluate_resume(
+                resume_txt=resume_text,
+                jd_details=jd_details,
+                custom_evaluation_criteria=custom_evaluation_criteria,
+            )
         except ClientError:
             logger.warning("AI service failed — using mock evaluation")
             ai_result = self._mock_evaluation_fallback(candidate, jd_details)

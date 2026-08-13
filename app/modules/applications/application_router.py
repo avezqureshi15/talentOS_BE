@@ -4,7 +4,9 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.session import get_db
 from app.core.authorization import require_permission
-from app.core.permissions import Permission
+from app.core.permissions import Permission, mark_enforced
+from app.modules.auth.auth_dependencies import get_current_user
+from app.modules.auth.auth_schema import UserInfo
 from app.modules.applications.application_schema import (
     ApplicationCreate,
     ArchiveUpdate,
@@ -17,6 +19,8 @@ from app.modules.applications.application_service import ApplicationService
 from app.modules.evaluations.evaluation_schema import EvaluationResponse
 
 router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/applications", tags=["applications"], dependencies=[Depends(require_permission(Permission.APPLICATION_VIEW))])
+
+mark_enforced(Permission.APPLICATION_EVALUATE, Permission.APPLICATION_REJECT)
 
 
 @router.get("/final-verdicts", response_model=PaginatedEvaluatedCandidatesResponse)
@@ -99,7 +103,18 @@ def update_final_verdict(
     candidate_id: int,
     data: FinalVerdictUpdate,
     db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(get_current_user),
 ):
+    required = (
+        Permission.APPLICATION_REJECT
+        if data.verdict == "REJECTED"
+        else Permission.APPLICATION_EVALUATE
+    )
+    if required.value not in current_user.permissions:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Missing required permission: {required.value}",
+        )
     service = ApplicationService(db)
     return service.set_final_verdict(candidate_id, data.verdict)
 

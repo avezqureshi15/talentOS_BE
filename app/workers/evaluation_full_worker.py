@@ -36,6 +36,7 @@ from app.modules.applications.application_repository import ApplicationRepositor
 from app.modules.evaluations.evaluation_schema import AsyncEvaluationMessage
 from app.modules.events.event_schema import EventCreate
 from app.modules.events.event_service import EventService
+from app.modules.hiring_requests.hiring_request_repository import HiringRequestRepository
 from app.modules.notifications.notification_model import NotificationType
 from app.modules.notifications.notification_service import NotificationService
 from app.modules.reviews.review_schema import ReviewCreate
@@ -190,12 +191,13 @@ def _evaluate_full(message: AsyncEvaluationMessage) -> None:
             resume_text += "\n\n--- Candidate Details ---\n" + "\n".join(candidate_meta_parts)
 
         jd_details = SupabaseClient().fetch_jd_details(job_id)
+        custom_evaluation_criteria = HiringRequestRepository(db).get_custom_evaluation_criteria(job_id)
 
         try:
             ai_result = AIClient().evaluate_resume(
                 resume_txt=resume_text,
                 jd_details=jd_details,
-                custom_evaluation_criteria="",
+                custom_evaluation_criteria=custom_evaluation_criteria,
             )
         except ClientError:
             logger.warning("AI service failed — using mock evaluation for candidate_id=%s", candidate.id)
