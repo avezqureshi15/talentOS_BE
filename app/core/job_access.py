@@ -103,6 +103,15 @@ def resolve_job_access(db: Session, user: UserInfo, hiring_request_id: uuid.UUID
             return JobAccessContext(user=user, job=job)
         raise HTTPException(status_code=403, detail="No access to this hiring request")
 
+    # API keys cannot be job-team members, so a tenant-scoped key gets
+    # org-level access within its tenant regardless of the role preset
+    # (account_admin / job_owner / recruiter / reviewer) — the role still
+    # controls which permission bits are granted.
+    if user.is_api_key and user.tenant_id is not None:
+        if job.tenant_id is not None and job.tenant_id == user.tenant_id:
+            return JobAccessContext(user=user, job=job)
+        raise HTTPException(status_code=403, detail="No access to this hiring request")
+
     member = db.scalar(
         select(JobTeamMember).where(
             JobTeamMember.hiring_request_id == job.id,
@@ -164,6 +173,8 @@ def scope_job_query(query: Query, user: UserInfo) -> Query:
     if user.role == "superadmin":
         return query
     if user.role == "account_admin":
+        return query.filter(HiringRequest.tenant_id == user.tenant_id)
+    if user.is_api_key and user.tenant_id is not None:
         return query.filter(HiringRequest.tenant_id == user.tenant_id)
     predicate = _membership_predicate(query.session, user)
     member_jobs = (

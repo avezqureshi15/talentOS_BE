@@ -43,6 +43,7 @@ def create_app(
         description=body.description,
         created_by_user_id=None if current_user.is_api_key else current_user.id,
         tenant_id=_own_tenant_id(current_user),
+        role=body.role,
         expires_at=body.expires_at,
     )
     return result
@@ -86,6 +87,7 @@ def update_app(
         name=body.name,
         description=body.description,
         tenant_id=_own_tenant_id(current_user),
+        role=body.role,
         expires_at=body.expires_at,
     )
     if not result:
@@ -105,6 +107,20 @@ def revoke_app(
     if not ok:
         raise HTTPException(status_code=404, detail="App not found")
     return {"message": "App revoked successfully"}
+
+
+@router.delete("/{app_id}/permanent", response_model=dict[str, str])
+def delete_app_permanently(
+    app_id: int,
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(require_permission(Permission.API_KEY_MANAGE)),
+):
+    """Hard-delete: permanently removes the app and its permission grants (irreversible)."""
+    service = ApiKeyService(db)
+    ok = service.delete_app(app_id, tenant_id=_own_tenant_id(current_user))
+    if not ok:
+        raise HTTPException(status_code=404, detail="App not found")
+    return {"message": "App deleted permanently"}
 
 
 @router.post("/{app_id}/rotate", response_model=ApiKeyCreatedResponse)

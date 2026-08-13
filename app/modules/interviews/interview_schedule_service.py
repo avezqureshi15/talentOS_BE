@@ -58,6 +58,12 @@ class InterviewScheduleService:
         self.repository = repo or InterviewRepository(db)
         self.event_service = event_service
 
+    def _resolve_round_tenant(self, round_obj) -> int | None:
+        if round_obj is None or not round_obj.jd_id:
+            return None
+        hr = self.repository.get_hiring_request_by_id(round_obj.jd_id)
+        return hr.tenant_id if hr else None
+
     def schedule_interview(
         self,
         round_id: uuid.UUID,
@@ -128,7 +134,7 @@ class InterviewScheduleService:
             self.db.refresh(created)
 
         if result.meet_link:
-            MeetMindClient().schedule_meeting(
+            MeetMindClient(tenant_id=self._resolve_round_tenant(round_obj)).schedule_meeting(
                 meet_url=result.meet_link,
                 title=title,
                 participant_emails=attendees,
@@ -201,7 +207,7 @@ class InterviewScheduleService:
         if interview.meet_link:
             attendees = self.repository.get_interviewer_emails_for_round(interview.round_id)
             title = round_obj.name if round_obj else "Interview"
-            MeetMindClient().schedule_meeting(
+            MeetMindClient(tenant_id=self._resolve_round_tenant(round_obj)).schedule_meeting(
                 meet_url=interview.meet_link,
                 title=title or "Interview",
                 participant_emails=attendees,

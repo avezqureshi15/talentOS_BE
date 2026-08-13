@@ -7,12 +7,14 @@ class CreateAppRequest(BaseModel):
     name: str
     description: str | None = None
     tenant_id: int | None = None
+    role: str | None = None
     expires_at: datetime | None = None
 
 
 class UpdateAppRequest(BaseModel):
     name: str | None = None
     description: str | None = None
+    role: str | None = None
     expires_at: datetime | None = None
 
 
@@ -29,6 +31,7 @@ class ApiKeyResponse(BaseModel):
     key_prefix: str
     tenant_id: int | None = None
     tenant_name: str | None = None
+    role: str | None = None
     is_active: bool
     expires_at: datetime | None = None
     last_used_at: datetime | None = None

@@ -7,7 +7,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.core.logger import get_logger
-from app.core.permissions import PERMISSION_META
+from app.core.permissions import DEFAULT_ROLE_PERMISSIONS, PERMISSION_META
 from app.modules.api_keys.api_key_model import ApiKey, ApiKeyPermission
 from app.modules.api_keys.api_key_schema import (
     ApiKeyCreatedResponse,
@@ -18,13 +18,53 @@ from app.modules.api_keys.api_key_schema import (
     PermissionInfo,
 )
 from app.modules.tenants.tenant_model import Tenant
-from app.modules.users.permission_model import PermissionModel
+from app.modules.users.permission_model import PermissionModel, RolePermission
 from app.modules.users.user_model import User
 
 logger = get_logger(__name__)
 
 API_KEY_PREFIX = "tal_"
 KEY_BYTES = 48
+
+# Roles an API key may be assigned. Keys are scoped to a single tenant, so the
+# superadmin role is intentionally excluded (prevents privilege escalation).
+API_KEY_ROLES: frozenset[str] = frozenset(
+    {"account_admin", "job_owner", "recruiter", "reviewer"}
+)
+
+
+def _role_permission_codes(db: Session, role: str | None) -> list[str]:
+    """Resolve a role's permission codes.
+
+    Custom roles resolve from the ``role_permissions`` table; system roles
+    fall back to the static ``DEFAULT_ROLE_PERMISSIONS`` presets so they work
+    even against an unseeded ``permissions`` table.
+    """
+    if not role:
+        return []
+    rows = db.execute(
+        select(RolePermission.permission_code).where(
+            RolePermission.role_name == role
+        )
+    ).scalars().all()
+    if rows:
+        return sorted(set(rows))
+    static = DEFAULT_ROLE_PERMISSIONS.get(role)
+    if static:
+        return sorted(p.value for p in static)
+    return []
+
+
+def _validate_api_key_role(db: Session, role: str | None) -> None:
+    """Raise a 400 unless *role* is a known, key-assignable tenant role."""
+    if role is None:
+        return
+    if role not in API_KEY_ROLES:
+        known = ", ".join(sorted(API_KEY_ROLES))
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown api key role: {role}. Allowed roles: {known}",
+        )
 
 
 def _generate_api_key() -> tuple[str, str, str]:
@@ -97,6 +137,7 @@ class ApiKeyService:
             key_prefix=key.key_prefix,
             tenant_id=key.tenant_id,
             tenant_name=tenant_names.get(key.tenant_id) if key.tenant_id is not None else None,
+            role=key.role,
             is_active=key.is_active,
             expires_at=key.expires_at,
             last_used_at=key.last_used_at,
@@ -110,8 +151,11 @@ class ApiKeyService:
         description: str | None,
         created_by_user_id: int | None,
         tenant_id: int | None,
+        role: str | None = None,
         expires_at: datetime | None = None,
     ) -> ApiKeyCreatedResponse:
+        _validate_api_key_role(self.db, role)
+
         full_key, key_hash, key_prefix = _generate_api_key()
         now = datetime.now(timezone.utc)
         api_key = ApiKey(
@@ -121,6 +165,7 @@ class ApiKeyService:
             key_prefix=key_prefix,
             created_by_user_id=created_by_user_id,
             tenant_id=tenant_id,
+            role=role,
             is_active=True,
             expires_at=expires_at,
             created_at=now,
@@ -129,25 +174,16 @@ class ApiKeyService:
         self.db.add(api_key)
         self.db.flush()
 
-        default_perms = self.db.execute(
-            select(PermissionModel.code).where(PermissionModel.is_default == True)
-        ).scalars().all()
+        # A key with an explicit role materializes that role's permission
+        # preset. Role-less keys default to EVERY code in the static catalog —
+        # required because an unseeded `permissions` table (e.g. UAT) would
+        # otherwise leave is_default-based grants empty.
+        permission_codes = _role_permission_codes(self.db, role)
+        if not permission_codes:
+            permission_codes = sorted(set(PERMISSION_META.keys()))
 
-        # Default a new key to EVERY code in the static PERMISSION_META catalog.
-        # This guarantees the key works out-of-the-box with full access even when
-        # the `permissions` table is missing/empty (e.g. an unseeded UAT DB),
-        # where the is_default-based query would otherwise return nothing.
-        default_perms = sorted(set(default_perms) | set(PERMISSION_META.keys()))
-
-        if default_perms:
-            for code in default_perms:
-                self.db.add(ApiKeyPermission(api_key_id=api_key.id, permission_code=code))
-        else:
-            logger.warning(
-                "No default permissions found in DB — API key id=%d created with zero permissions. "
-                "Assign explicit permissions via the update-permissions endpoint before use.",
-                api_key.id,
-            )
+        for code in permission_codes:
+            self.db.add(ApiKeyPermission(api_key_id=api_key.id, permission_code=code))
 
         self.db.commit()
         self.db.refresh(api_key)
@@ -239,12 +275,24 @@ class ApiKeyService:
         name: str | None,
         description: str | None,
         tenant_id: int | None = None,
+        role: str | None = None,
         expires_at: datetime | None = None,
         clear_expiry: bool = False,
     ) -> ApiKeyResponse | None:
         api_key = self._get_scoped(app_id, tenant_id)
         if not api_key:
             return None
+
+        if role is not None:
+            _validate_api_key_role(self.db, role)
+            api_key.role = role
+            # Re-materialize the permission preset on a role change. Individual
+            # overrides applied afterwards via update_permissions still win.
+            self.db.execute(
+                delete(ApiKeyPermission).where(ApiKeyPermission.api_key_id == app_id)
+            )
+            for code in _role_permission_codes(self.db, role):
+                self.db.add(ApiKeyPermission(api_key_id=app_id, permission_code=code))
 
         if name is not None:
             api_key.name = name
@@ -270,6 +318,19 @@ class ApiKeyService:
         api_key.updated_at = datetime.now(timezone.utc)
         self.db.commit()
         logger.info("Revoked API app: id=%d", app_id)
+        return True
+
+    def delete_app(self, app_id: int, tenant_id: int | None = None) -> bool:
+        """Permanently delete an API app and all its permission grants."""
+        api_key = self._get_scoped(app_id, tenant_id)
+        if not api_key:
+            return False
+        self.db.execute(
+            delete(ApiKeyPermission).where(ApiKeyPermission.api_key_id == app_id)
+        )
+        self.db.delete(api_key)
+        self.db.commit()
+        logger.info("Permanently deleted API app: id=%d", app_id)
         return True
 
     def rotate_key(self, app_id: int, tenant_id: int | None = None) -> ApiKeyCreatedResponse | None:

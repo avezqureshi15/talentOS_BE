@@ -89,7 +89,7 @@ class SettingsService:
             isSecret=is_secret,
         )
 
-    def get_api_keys(self, tenant_id: int | None) -> ApiKeysResponse:
+    def get_api_keys(self, tenant_id: int | None, tenant_scope_only: bool = False) -> ApiKeysResponse:
         tenant_rows: dict[str, str] = {}
         if tenant_id is not None:
             tenant_rows = {
@@ -109,6 +109,8 @@ class SettingsService:
         for meta in MANAGEABLE_API_KEY_META:
             key = str(meta["key"])
             scope = str(meta.get("scope") or "tenant")
+            if tenant_scope_only and scope == "platform":
+                continue
             stored: str | None = None
             has_override = False
             if scope == "platform":
@@ -139,26 +141,19 @@ class SettingsService:
                             self._entry_from_value(meta, stored, False)
                         )
                     else:
-                        keys.append(
-                            ApiKeyEntry(
-                                key=key,
-                                value="",
-                                hasOverride=False,
-                                source="platform",
-                                scope="tenant",
-                                isSecret=True,
-                            )
-                        )
+                        keys.append(self._entry_from_value(meta, "", False))
                 else:
                     keys.append(self._entry_from_value(meta, stored, True))
         return ApiKeysResponse(keys=keys)
 
-    def update_api_keys(self, tenant_id: int | None, entries: list[SettingEntry]) -> ApiKeysResponse:
+    def update_api_keys(self, tenant_id: int | None, entries: list[SettingEntry], tenant_scope_only: bool = False) -> ApiKeysResponse:
         for entry in entries:
             if entry.key not in MANAGEABLE_API_KEYS:
                 raise ValueError(f"Key not manageable: {entry.key}")
             meta = self._api_key_meta(entry.key)
             scope = str(meta.get("scope") or "tenant")
+            if tenant_scope_only and scope == "platform":
+                raise ValueError(f"Key requires superadmin access: {entry.key}")
             value = (entry.value or "").strip()
 
             if scope == "platform":
@@ -191,7 +186,7 @@ class SettingsService:
                 self.db.add(TenantSetting(tenant_id=tenant_id, key=entry.key, value=encrypted))
         self.db.commit()
         logger.info("Updated %d API key(s) (tenant_id=%s)", len(entries), tenant_id)
-        return self.get_api_keys(tenant_id)
+        return self.get_api_keys(tenant_id, tenant_scope_only=tenant_scope_only)
 
     # ── AI screening settings (per tenant, JSON payload) ──────────────────
 

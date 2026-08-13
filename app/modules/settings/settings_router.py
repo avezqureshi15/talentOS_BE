@@ -36,11 +36,6 @@ def _resolve_tenant(current_user: UserInfo, tenant_id_override: int | None = Non
     return current_user.tenant_id
 
 
-def _require_superadmin(current_user: UserInfo) -> None:
-    if current_user.role != "superadmin":
-        raise HTTPException(status_code=403, detail="Superadmin access required")
-
-
 @router.get("", response_model=SettingsResponse)
 def get_settings(
     tenant_id: int | None = Query(None, description="Required for superadmin"),
@@ -63,7 +58,11 @@ def update_settings(
     return service.update_settings(tid, body.settings)
 
 
-# ── API keys (superadmin only) ────────────────────────────────────────────
+# ── API keys (superadmin: all scopes; tenant admin: own tenant-scope keys) ─
+
+
+def _is_superadmin(current_user: UserInfo) -> bool:
+    return current_user.role == "superadmin"
 
 
 @router.get("/api-keys/manageable", response_model=ManageableApiKeysResponse)
@@ -73,12 +72,12 @@ def get_manageable_api_keys(
     """Return the catalogue of API keys an admin may set (labels/icons/hints).
 
     The FE uses this to render the settings section without hardcoding the list.
-    Superadmin-only, same as the value endpoints below.
+    Superadmin sees all scopes; a tenant admin sees only tenant-scope keys.
     """
-    _require_superadmin(current_user)
-    return ManageableApiKeysResponse(
-        keys=[ManageableApiKeyMeta(**meta) for meta in MANAGEABLE_API_KEY_META]
-    )
+    metas = MANAGEABLE_API_KEY_META
+    if not _is_superadmin(current_user):
+        metas = [m for m in metas if m.get("scope") != "platform"]
+    return ManageableApiKeysResponse(keys=[ManageableApiKeyMeta(**meta) for meta in metas])
 
 
 @router.get("/api-keys", response_model=ApiKeysResponse)
@@ -87,8 +86,11 @@ def get_api_keys(
     db: Session = Depends(get_db),
     current_user: UserInfo = Depends(require_permission(Permission.SETTINGS_VIEW)),
 ):
-    _require_superadmin(current_user)
-    return SettingsService(db).get_api_keys(tenant_id)
+    if _is_superadmin(current_user):
+        return SettingsService(db).get_api_keys(tenant_id)
+    if current_user.tenant_id is None:
+        raise HTTPException(status_code=400, detail="Admin user has no tenant")
+    return SettingsService(db).get_api_keys(current_user.tenant_id, tenant_scope_only=True)
 
 
 @router.patch("/api-keys", response_model=ApiKeysResponse)
@@ -97,9 +99,14 @@ def update_api_keys(
     db: Session = Depends(get_db),
     current_user: UserInfo = Depends(require_permission(Permission.SETTINGS_EDIT)),
 ):
-    _require_superadmin(current_user)
     try:
-        return SettingsService(db).update_api_keys(body.tenant_id, body.keys)
+        if _is_superadmin(current_user):
+            return SettingsService(db).update_api_keys(body.tenant_id, body.keys)
+        if current_user.tenant_id is None:
+            raise ValueError("Admin user has no tenant")
+        return SettingsService(db).update_api_keys(
+            current_user.tenant_id, body.keys, tenant_scope_only=True
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 

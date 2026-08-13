@@ -31,7 +31,7 @@ class AiRecruitmentConflict(AiRecruitmentError):
 
 class AiRecruitmentClient:
     def __init__(self, tenant_id: int | None = None) -> None:
-        self.base_url = get_secret("RH_SERVICE_URL")
+        self.base_url = get_secret("RH_SERVICE_URL", tenant_id=tenant_id)
         self.tenant_id = tenant_id
 
     def _headers(self) -> dict[str, str]:

@@ -21,9 +21,10 @@ class MeetMindClientError(ClientError):
 class MeetMindClient(BaseClient):
     """Client for MeetMind POST /api/integrations/schedule."""
 
-    def __init__(self) -> None:
+    def __init__(self, tenant_id: int | None = None) -> None:
+        self.tenant_id = tenant_id
         super().__init__(
-            base_url=get_secret("MEETMIND_BASE_URL"),
+            base_url=get_secret("MEETMIND_BASE_URL", tenant_id=tenant_id),
             timeout=30,
             max_retries=2,
         )
@@ -42,10 +43,10 @@ class MeetMindClient(BaseClient):
 
         Does not raise to callers for booking-path best-effort use — logs and returns False.
         """
-        if not get_secret("MEETMIND_BASE_URL"):
+        if not get_secret("MEETMIND_BASE_URL", tenant_id=self.tenant_id):
             logger.warning("MeetMind schedule skipped | MEETMIND_BASE_URL unset")
             return False
-        api_token = get_secret("MEETMIND_API_TOKEN")
+        api_token = get_secret("MEETMIND_API_TOKEN", tenant_id=self.tenant_id)
         if not api_token:
             logger.warning("MeetMind schedule skipped | MEETMIND_API_TOKEN unset")
             return False
@@ -58,7 +59,7 @@ class MeetMindClient(BaseClient):
             "platform": "google-meet",
             "title": title,
             "participantEmails": participant_emails,
-            "external": get_secret("MEETMIND_EXTERNAL") or "talentos.ai",
+            "external": get_secret("MEETMIND_EXTERNAL", tenant_id=self.tenant_id) or "talentos.ai",
         }
         headers = {"X-API-Key": api_token}
         try:

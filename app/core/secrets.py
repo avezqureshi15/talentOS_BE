@@ -37,7 +37,7 @@ MANAGEABLE_API_KEY_META: list[dict[str, str | bool]] = [
         "label": "Recruitment hub base URL",
         "icon": "bx bx-link",
         "hint": "Base URL of the Recruitment hub (ai-recruitment-poc) service used by all BE -> RH calls.",
-        "scope": "platform",
+        "scope": "tenant",
         "is_secret": False,
     },
     {
@@ -61,7 +61,7 @@ MANAGEABLE_API_KEY_META: list[dict[str, str | bool]] = [
         "label": "MeetMind base URL",
         "icon": "bx bx-link",
         "hint": "Base URL used when registering Google Meet interview schedules with MeetMind.",
-        "scope": "platform",
+        "scope": "tenant",
         "is_secret": False,
     },
     {
@@ -85,7 +85,7 @@ MANAGEABLE_API_KEY_META: list[dict[str, str | bool]] = [
         "label": "MeetMind external domain",
         "icon": "bx bx-globe",
         "hint": "External identifier sent in the MeetMind schedule payload (defaults to talentos.ai).",
-        "scope": "platform",
+        "scope": "tenant",
         "is_secret": False,
     },
 ]

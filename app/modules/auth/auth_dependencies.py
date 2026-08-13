@@ -23,11 +23,15 @@ def get_current_user(
 
         permissions = ApiKeyService.get_permissions_for_key(api_key.id, db)
         is_tenant_scoped = api_key.tenant_id is not None
+        # A key's stored role (account_admin / job_owner / recruiter / reviewer)
+        # drives its identity; legacy keys without a role keep the previous
+        # behavior (account_admin for tenant-scoped, superadmin otherwise).
+        role = api_key.role or ("account_admin" if is_tenant_scoped else "superadmin")
         return UserInfo(
             id=-api_key.id,
             email=api_key.name,
             name=api_key.name,
-            role="account_admin" if is_tenant_scoped else "superadmin",
+            role=role,
             tenant_id=api_key.tenant_id,
             auth_provider="api_key",
             is_active=True,
