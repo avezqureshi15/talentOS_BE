@@ -354,8 +354,10 @@ async def move_to_ai_screening(
         raise HTTPException(status_code=404, detail="Candidate not found")
 
     try:
+        rh_job_id = await _get_or_create_rh_job(hiring_request_id, db)
         client = AiRecruitmentClient(tenant_id=hr.tenant_id)
         result = await client.create_candidate_with_screening(
+            job_id=rh_job_id,
             external_job_id=str(hr.id),
             name=candidate.candidate_name or "Unknown",
             email=candidate.candidate_email or "",
@@ -439,8 +441,10 @@ async def move_to_ai_interview(
         raise HTTPException(status_code=404, detail="Candidate not found")
 
     try:
+        rh_job_id = await _get_or_create_rh_job(hiring_request_id, db)
         client = AiRecruitmentClient(tenant_id=hr.tenant_id)
         result = await client.create_candidate_with_interview(
+            job_id=rh_job_id,
             external_job_id=str(hr.id),
             name=candidate.candidate_name or "Unknown",
             email=candidate.candidate_email or "",

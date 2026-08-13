@@ -276,12 +276,14 @@ class AiRecruitmentClient:
         phone: str | None = None,
         external_candidate_id: str | None = None,
         force: bool = False,
+        job_id: str | None = None,
     ) -> dict | None:
         DUMMY_UUID = "00000000-0000-0000-0000-000000000000"
+        target_job_id = job_id or DUMMY_UUID
         try:
             return await self._request(
                 "POST",
-                f"/internal/talentos/jobs/{DUMMY_UUID}/candidates/with-screening",
+                f"/internal/talentos/jobs/{target_job_id}/candidates/with-screening",
                 timeout=30.0,
                 json={
                     "name": name,
@@ -305,12 +307,14 @@ class AiRecruitmentClient:
         external_candidate_id: str | None = None,
         force: bool = False,
         interview_type: str | None = "AI_INTERVIEW",
+        job_id: str | None = None,
     ) -> dict | None:
         DUMMY_UUID = "00000000-0000-0000-0000-000000000000"
+        target_job_id = job_id or DUMMY_UUID
         try:
             return await self._request(
                 "POST",
-                f"/internal/talentos/jobs/{DUMMY_UUID}/candidates/with-interview",
+                f"/internal/talentos/jobs/{target_job_id}/candidates/with-interview",
                 timeout=30.0,
                 json={
                     "name": name,
