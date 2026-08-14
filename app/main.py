@@ -15,6 +15,7 @@ from app.core.logger import get_logger, setup_logging
 from app.db.session import engine
 from app.cron.hourly_jobs import setup_form_jobs
 from app.cron.interview_outcome import setup_interview_jobs
+from app.cron.link_reconciler import setup_link_reconciler
 from app.cron.screening_outcome import setup_screening_jobs
 from app.middleware import OriginCaptureMiddleware, RequestLoggingMiddleware, TenantContextMiddleware
 from app.scheduler import init_scheduler, start_scheduler, shutdown_scheduler
@@ -37,6 +38,7 @@ from app.modules.hiring_requests.hiring_request_export_router import router as h
 from app.modules.hiring_requests.hiring_request_import_router import router as hiring_requests_import_router
 from app.modules.hiring_requests.ai_integration_router import router as ai_integration_router
 from app.modules.talentos_integration.talentos_webhook_router import router as talentos_webhook_router
+from app.modules.talentos_integration.connections_internal_router import router as talentos_connections_router
 from app.modules.ai.ai_generate_router import router as ai_generate_router
 from app.modules.interview_designs.interview_design_router import router as interview_designs_router
 from app.modules.call_windows.call_window_router import router as call_windows_router
@@ -95,6 +97,7 @@ async def lifespan(app: FastAPI):
     setup_form_jobs(scheduler)
     setup_screening_jobs(scheduler)
     setup_interview_jobs(scheduler)
+    setup_link_reconciler(scheduler)
     start_scheduler()
 
     try:
@@ -168,6 +171,7 @@ app.include_router(interview_designs_router)
 app.include_router(call_windows_router)
 app.include_router(internal_router)
 app.include_router(talentos_webhook_router)
+app.include_router(talentos_connections_router)
 
 
 @app.get("/health", tags=["health"])

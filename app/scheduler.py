@@ -4,7 +4,6 @@ from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_MISSED, EVENT_JOB_MAX_
 from apscheduler.executors.pool import ThreadPoolExecutor
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.schedulers.background import BackgroundScheduler
-from sqlalchemy.exc import OperationalError
 
 from app.core.logger import get_logger
 from app.db.session import engine
@@ -55,9 +54,13 @@ class ResilientSQLAlchemyJobStore(SQLAlchemyJobStore):
     def _run(self, fn, default, *args, **kwargs):
         try:
             return fn(*args, **kwargs)
-        except OperationalError:
+        except Exception as exc:
+            # Any DB error (OperationalError, InterfaceError, pooler timeouts,
+            # etc.) must never escape into APScheduler's _process_jobs, or the
+            # whole cron thread dies and every scheduled job stops firing.
             logger.warning(
-                "Jobstore DB error — disposing pool and retrying | op=%s", getattr(fn, "__name__", fn),
+                "Jobstore DB error — disposing pool and retrying | op=%s err=%s",
+                getattr(fn, "__name__", fn), exc,
             )
             try:
                 self.engine.dispose()
@@ -65,9 +68,10 @@ class ResilientSQLAlchemyJobStore(SQLAlchemyJobStore):
                 pass
             try:
                 return fn(*args, **kwargs)
-            except OperationalError:
+            except Exception as exc2:
                 logger.error(
-                    "Jobstore DB still unavailable — degrading | op=%s", getattr(fn, "__name__", fn),
+                    "Jobstore DB still unavailable — degrading | op=%s err=%s",
+                    getattr(fn, "__name__", fn), exc2,
                 )
                 return default
 

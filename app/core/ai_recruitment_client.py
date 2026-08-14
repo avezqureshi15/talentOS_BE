@@ -49,6 +49,7 @@ class AiRecruitmentClient:
         json: dict | None = None,
         params: dict | None = None,
         context: dict[str, Any] | None = None,
+        headers_override: dict[str, str] | None = None,
     ) -> Any:
         if not self.base_url:
             logger.warning("ai-recruitment-poc call skipped: RH_SERVICE_URL not set (path=%s)", path)
@@ -56,10 +57,13 @@ class AiRecruitmentClient:
 
         url = f"{self.base_url}{path}"
         ctx = context or {}
+        headers = self._headers()
+        if headers_override:
+            headers.update(headers_override)
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
                 resp = await client.request(
-                    method, url, json=json, params=params, headers=self._headers()
+                    method, url, json=json, params=params, headers=headers
                 )
         except httpx.HTTPError as exc:
             logger.error(
@@ -461,6 +465,34 @@ class AiRecruitmentClient:
                 timeout=15.0,
                 json=None,
                 context={"job_id": job_id, "candidate_id": candidate_id},
+            )
+        except AiRecruitmentError:
+            return None
+
+    async def ping_connection(
+        self,
+        rhub_raw: str,
+        flow_id: str,
+        timeout: float = 10.0,
+    ) -> dict | None:
+        """Ping the POC during the connect handshake to prove the rhub_ binding.
+
+        Sends the peer ``rhub_`` key as Bearer (not the configured RH_API_KEY,
+        which does not exist yet for a machine-provisioned tenant) plus an
+        ``X-Flow-Id`` header. The POC's mirror endpoint echoes its own link
+        binding; the reconciler cross-checks the proof. Returns ``None`` on any
+        transport/auth failure (treated as retryable).
+        """
+        try:
+            return await self._request(
+                "GET",
+                "/internal/talentos/connections/ping",
+                timeout=timeout,
+                context={"path": "connect-ping", "flow_id": flow_id},
+                headers_override={
+                    "Authorization": f"Bearer {rhub_raw}",
+                    "X-Flow-Id": flow_id,
+                },
             )
         except AiRecruitmentError:
             return None
