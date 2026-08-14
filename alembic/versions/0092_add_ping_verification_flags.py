@@ -52,6 +52,7 @@ def upgrade() -> None:
         )
         added = True
     if not added:
+        # nothing to change; still run through the OP so the revision is stamped
         bind: Connection = op.get_bind()
         bind.exec_driver_sql("SELECT 1")
 
