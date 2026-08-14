@@ -83,3 +83,9 @@ class AuthRepository:
             delete(RefreshToken).where(RefreshToken.token_hash == token_hash),
         )
         self.db.commit()
+
+    def revoke_all_refresh_tokens(self, user_id: int) -> None:
+        self.db.execute(
+            delete(RefreshToken).where(RefreshToken.user_id == user_id),
+        )
+        self.db.commit()

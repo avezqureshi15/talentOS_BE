@@ -253,7 +253,7 @@ class AuthService:
 
     # ── JWT token management ──────────────────────────────────────────────
 
-    def _create_access_token(self, user_id: int, user_role: str = "recruiter", user_tenant_id: int | None = None, auth_provider: str = "google", permissions: list[str] | None = None) -> tuple[str, int]:
+    def _create_access_token(self, user_id: int, user_role: str = "recruiter", user_tenant_id: int | None = None, auth_provider: str = "google", permissions: list[str] | None = None, token_version: int = 0) -> tuple[str, int]:
         expires_in = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
         expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
         payload = {
@@ -262,6 +262,7 @@ class AuthService:
             "tenant_id": user_tenant_id,
             "auth_provider": auth_provider,
             "perms": permissions or [],
+            "ver": token_version,
             "exp": expire,
             "type": "access",
         }
@@ -285,6 +286,7 @@ class AuthService:
             user_tenant_id=user.tenant_id,
             auth_provider=user.auth_provider,
             permissions=permissions,
+            token_version=user.token_version,
         )
         refresh_token = self._create_refresh_token(user_id)
         return access_token, refresh_token, expires_in
@@ -303,6 +305,7 @@ class AuthService:
             user_tenant_id=user.tenant_id if user else None,
             auth_provider=user.auth_provider if user else "google",
             permissions=permissions,
+            token_version=user.token_version if user else 0,
         )
         return access_token, expires_in
 
@@ -322,6 +325,12 @@ class AuthService:
         user = self.repo.get_user_by_id(user_id)
         if not user:
             raise AuthError("User not found")
+
+        if not user.is_active:
+            raise AuthError("Your account has been deactivated.", status_code=423)
+
+        if payload.get("ver", 0) != user.token_version:
+            raise AuthError("Session expired. Please sign in again.")
 
         user_info = self._build_user_info(user)
         jwt_perms = payload.get("perms", [])

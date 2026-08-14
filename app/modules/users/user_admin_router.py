@@ -161,6 +161,10 @@ def update_user(
         user.password_hash = hash_password(body.password)
 
     if role_changed:
+        user.token_version += 1
+        from app.modules.auth.auth_repository import AuthRepository
+
+        AuthRepository(db).revoke_all_refresh_tokens(user.id)
         from app.modules.notifications.notification_model import NotificationType
         from app.modules.notifications.notification_service import NotificationService
 
