@@ -7,9 +7,13 @@ from sqlalchemy import engine_from_config, pool
 
 load_dotenv()
 
+# app.core.config resolves DATABASE_URL from OpenBao when configured
+# (see app/core/config.py), so migrations use the same URL as the app.
+from app.core.config import settings
+
 config = context.config
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///dev.db")
+DATABASE_URL = settings.DATABASE_URL or os.getenv("DATABASE_URL", "sqlite:///dev.db")
 config.set_main_option("sqlalchemy.url", DATABASE_URL)
 
 if config.config_file_name is not None:

@@ -48,6 +48,20 @@ def get_current_user(
         raise HTTPException(status_code=401, detail=str(exc))
 
 
+def get_current_user_optional(
+    authorization: str | None = Header(default=None, alias="Authorization"),
+    db: Session = Depends(get_db),
+) -> UserInfo | None:
+    """Return the authenticated user, or None when no Authorization header is sent.
+
+    Use on endpoints that must work for unauthenticated callers (e.g. public
+    link-based flows) while still honoring the token when one is present.
+    """
+    if not authorization:
+        return None
+    return get_current_user(authorization=authorization, db=db)
+
+
 def require_roles(*roles: str):
     def checker(current_user: UserInfo = Depends(get_current_user)):
         if current_user.role not in roles:

@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.common.handlers import register_exception_handlers
 from google.auth.transport import requests as google_requests
 
+from app.core import openbao as openbao_client
 from app.core.config import settings
 from app.core.kafka import ensure_topics
 from app.core.logger import get_logger, setup_logging
@@ -176,4 +177,9 @@ app.include_router(talentos_connections_router)
 
 @app.get("/health", tags=["health"])
 def health_check():
-    return {"status": "ok", "app": settings.APP_NAME, "version": settings.APP_VERSION}
+    return {
+        "status": "ok",
+        "app": settings.APP_NAME,
+        "version": settings.APP_VERSION,
+        "secretsSource": openbao_client.source,
+    }

@@ -1,5 +1,19 @@
+import logging
+
 from pydantic import model_validator
 from pydantic_settings import BaseSettings
+
+logger = logging.getLogger(__name__)
+
+# Settings fields the app pulls from OpenBao at startup (comma-separated).
+# Override with BAO_SECRET_KEYS. OpenBao values win over .env.
+_DEFAULT_BAO_KEYS = (
+    "JWT_SECRET,SECRETS_ENCRYPTION_KEY,DATABASE_URL,RESEND_API_KEY,"
+    "SMTP_USERNAME,SMTP_PASSWORD,GOOGLE_CLIENT_SECRET,"
+    "GOOGLE_SERVICE_ACCOUNT_JSON,GOOGLE_IMPERSONATION_EMAIL,"
+    "MEETMIND_API_TOKEN,MEETMIND_WEBHOOK_SECRET,"
+    "SUPABASE_SERVICE_ROLE_KEY,SUPABASE_WEBHOOK_SECRET"
+)
 
 _DEV_TIMING = {
     "FORM_REMINDER_HOURS": 0.002778,
@@ -98,6 +112,18 @@ class Settings(BaseSettings):
     # Falls back to JWT_SECRET when unset.
     SECRETS_ENCRYPTION_KEY: str = ""
 
+    # OpenBao (central secrets manager). When BAO_ADDR + a token are present,
+    # the _DEFAULT_BAO_KEYS secrets are fetched from OpenBao at startup and
+    # override the .env values. In local dev leave BAO_ADDR empty to fall back
+    # to environment values.
+    BAO_ADDR: str = ""
+    BAO_TOKEN: str = ""
+    BAO_TOKEN_FILE: str = ""
+    BAO_KV_MOUNT: str = "secret"
+    BAO_KV_PATH: str = "talentos"
+    BAO_REQUIRED: bool = False
+    BAO_SECRET_KEYS: str = ""
+
     # SMTP / Email
     SMTP_HOST: str = "smtp.gmail.com"
     SMTP_PORT: int = 587
@@ -137,3 +163,37 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def _apply_openbao_secrets(s: Settings) -> None:
+    """Pull secrets from OpenBao and override matching settings fields.
+
+    Runs during module import so every importer of ``settings`` sees the
+    resolved values (including ``app.db.session``'s engine URL).
+    """
+    if not s.BAO_ADDR:
+        return
+
+    # Local import: avoids a circular import (config -> openbao -> logger -> config).
+    from app.core.openbao import fetch_secrets
+
+    keys = [
+        k.strip()
+        for k in (s.BAO_SECRET_KEYS or _DEFAULT_BAO_KEYS).split(",")
+        if k.strip()
+    ]
+    fetched = fetch_secrets(keys)
+    if not fetched and s.BAO_REQUIRED:
+        raise RuntimeError(
+            f"OpenBao is required (BAO_REQUIRED=true) but no secrets could be fetched from {s.BAO_ADDR}"
+        )
+    for key, value in fetched.items():
+        if hasattr(s, key):
+            setattr(s, key, value)
+    if fetched:
+        logger.info("Loaded %d/%d secrets from OpenBao at %s", len(fetched), len(keys), s.BAO_ADDR)
+    else:
+        logger.warning("No secrets loaded from OpenBao at %s — using environment values", s.BAO_ADDR)
+
+
+_apply_openbao_secrets(settings)

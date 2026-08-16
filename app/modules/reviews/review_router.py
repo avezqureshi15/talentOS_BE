@@ -7,7 +7,7 @@ from app.core.config import settings
 from app.db.session import get_db
 from app.core.authorization import require_permission
 from app.core.permissions import Permission, mark_enforced
-from app.modules.auth.auth_dependencies import get_current_user
+from app.modules.auth.auth_dependencies import get_current_user, get_current_user_optional
 from app.modules.auth.auth_schema import UserInfo
 from app.modules.events.event_schema import EventCreate
 from app.modules.events.event_service import EventService
@@ -49,9 +49,14 @@ def update_review_by_round(
     round_id: uuid.UUID,
     data: ReviewUpdateByRound,
     db: Session = Depends(get_db),
-    current_user: UserInfo = Depends(get_current_user),
+    current_user: UserInfo | None = Depends(get_current_user_optional),
 ):
     if data.entity_type == "hr":
+        if current_user is None:
+            raise HTTPException(
+                status_code=401,
+                detail="HR verdict requires authentication",
+            )
         _require_hr_verdict_permission(data.verdict, current_user)
 
     service = ReviewService(db)
