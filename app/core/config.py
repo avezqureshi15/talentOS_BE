@@ -1,5 +1,7 @@
 import logging
+import os
 
+from dotenv import load_dotenv
 from pydantic import model_validator
 from pydantic_settings import BaseSettings
 
@@ -12,7 +14,8 @@ _DEFAULT_BAO_KEYS = (
     "SMTP_USERNAME,SMTP_PASSWORD,GOOGLE_CLIENT_SECRET,"
     "GOOGLE_SERVICE_ACCOUNT_JSON,GOOGLE_IMPERSONATION_EMAIL,"
     "MEETMIND_API_TOKEN,MEETMIND_WEBHOOK_SECRET,"
-    "SUPABASE_SERVICE_ROLE_KEY,SUPABASE_WEBHOOK_SECRET"
+    "SUPABASE_SERVICE_ROLE_KEY,SUPABASE_WEBHOOK_SECRET,"
+    "RH_API_KEY,SERVICE_API_KEY"
 )
 
 _DEV_TIMING = {
@@ -162,16 +165,20 @@ class Settings(BaseSettings):
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "case_sensitive": True}
 
 
-settings = Settings()
+# Load the local .env into the environment so the OpenBao bootstrap vars
+# (BAO_ADDR / BAO_TOKEN_FILE) are visible before Settings() is built.
+load_dotenv()
 
 
-def _apply_openbao_secrets(s: Settings) -> None:
-    """Pull secrets from OpenBao and override matching settings fields.
+def _inject_openbao_secrets() -> None:
+    """Fetch secrets from OpenBao and inject them into os.environ.
 
-    Runs during module import so every importer of ``settings`` sees the
-    resolved values (including ``app.db.session``'s engine URL).
+    Runs BEFORE ``Settings()`` is constructed so required fields with no
+    default (e.g. DATABASE_URL) resolve from OpenBao exactly like env vars.
+    No-op when BAO_ADDR is empty (local dev without OpenBao).
     """
-    if not s.BAO_ADDR:
+    addr = os.environ.get("BAO_ADDR", "").strip()
+    if not addr:
         return
 
     # Local import: avoids a circular import (config -> openbao -> logger -> config).
@@ -179,21 +186,22 @@ def _apply_openbao_secrets(s: Settings) -> None:
 
     keys = [
         k.strip()
-        for k in (s.BAO_SECRET_KEYS or _DEFAULT_BAO_KEYS).split(",")
+        for k in os.environ.get("BAO_SECRET_KEYS", _DEFAULT_BAO_KEYS).split(",")
         if k.strip()
     ]
     fetched = fetch_secrets(keys)
-    if not fetched and s.BAO_REQUIRED:
+    if not fetched and os.environ.get("BAO_REQUIRED", "").lower() in ("1", "true", "yes"):
         raise RuntimeError(
-            f"OpenBao is required (BAO_REQUIRED=true) but no secrets could be fetched from {s.BAO_ADDR}"
+            f"OpenBao is required (BAO_REQUIRED=true) but no secrets could be fetched from {addr}"
         )
     for key, value in fetched.items():
-        if hasattr(s, key):
-            setattr(s, key, value)
+        os.environ[key] = value
     if fetched:
-        logger.info("Loaded %d/%d secrets from OpenBao at %s", len(fetched), len(keys), s.BAO_ADDR)
+        logger.info("Loaded %d/%d secrets from OpenBao at %s", len(fetched), len(keys), addr)
     else:
-        logger.warning("No secrets loaded from OpenBao at %s — using environment values", s.BAO_ADDR)
+        logger.warning("No secrets loaded from OpenBao at %s — using environment values", addr)
 
 
-_apply_openbao_secrets(settings)
+_inject_openbao_secrets()
+
+settings = Settings()

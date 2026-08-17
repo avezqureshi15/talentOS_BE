@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.modules.hiring_requests.ai_interview_template_constants import (
+    AI_PREFIXES,
     BELOW_BAR_LT,
     CANDIDATE_PREFIXES,
     CRITERIA_MET_GTE,
@@ -20,6 +21,7 @@ from app.modules.hiring_requests.ai_interview_template_constants import (
     INTERVIEWER_PREFIXES,
     MAX_RATING,
     MEETS_BAR_LT,
+    SCORE_SCALE_DIVISOR,
     TOTAL_CRITERIA,
     VERDICT_MAP,
 )
@@ -51,6 +53,17 @@ def build_interview_template_response(
         "transcriptSections": _transcript_sections(detail),
         "interviewUrl": detail.get("interview_url"),
         "recordingUrl": recording_url,
+        "hrDecision": (detail.get("hr_decision") or "").strip(),
+        "jdFit": (detail.get("jd_fit") or "").strip(),
+        "strengths": _coerce_str_list(detail.get("strengths")),
+        "weaknesses": _coerce_str_list(detail.get("weaknesses")),
+        "transcriptSummary": (detail.get("transcript_summary") or "").strip(),
+        "createdAt": _iso_timestamp(detail.get("created_at")),
+        "startedAt": _iso_timestamp(detail.get("started_at")),
+        "completedAt": _iso_timestamp(detail.get("completed_at")),
+        "expiresAt": _iso_timestamp(detail.get("expires_at")),
+        "questionScores": _question_scores(detail.get("question_scores")),
+        "rubricTotal": _int_or_none(detail.get("rubric_total")),
     }
 
 
@@ -72,10 +85,10 @@ def _score(raw: Any) -> float:
         value = float(raw)
     except (TypeError, ValueError):
         return 0.0
-    # POC assessment prompt uses 0..5 already; if a call ever emits 0..10 we
-    # divide by 2 here so the template's /5.0 badge stays truthful.
+    # POC stores scores on a 0-100 scale; normalise to 0..MAX_RATING
+    # (e.g. /5.0) so the template badge stays truthful.
     if value > MAX_RATING:
-        value = value / 2.0
+        value = value / SCORE_SCALE_DIVISOR
     return round(value, 1)
 
 
@@ -95,6 +108,63 @@ def _status_from_score(score: float | None) -> str:
     if score < MEETS_BAR_LT:
         return "MEETS_BAR"
     return "ABOVE_BAR"
+
+
+def _iso_timestamp(raw: Any) -> str:
+    if raw is None:
+        return ""
+    if isinstance(raw, str):
+        return raw.strip()
+    iso = getattr(raw, "isoformat", None)
+    if callable(iso):
+        return iso()
+    return str(raw)
+
+
+def _int_or_none(raw: Any) -> int | None:
+    if raw is None:
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def _question_scores(raw: Any) -> list[dict[str, Any]]:
+    """Passthrough of POC rubric question_scores into the FE camelCase shape.
+
+    Tolerant of partial/missing entries so the FE never crashes on a
+    malformed rubric payload.
+    """
+    if not isinstance(raw, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        coverage = entry.get("point_coverage")
+        coverage_out: list[dict[str, Any]] | None = None
+        if isinstance(coverage, list):
+            coverage_out = [
+                {
+                    "point": str(c.get("point") or ""),
+                    "covered": bool(c.get("covered")),
+                }
+                for c in coverage
+                if isinstance(c, dict)
+            ]
+        out.append({
+            "id": str(entry.get("id") or ""),
+            "question": str(entry.get("question") or ""),
+            "score": _int_or_none(entry.get("score")),
+            "earnedScore": _int_or_none(entry.get("earned_score")),
+            "notes": (entry.get("notes") or "").strip(),
+            "candidateAnswer": (entry.get("candidate_answer") or "").strip(),
+            "expectedPoints": _coerce_str_list(entry.get("expected_points")),
+            "candidatePoints": _coerce_str_list(entry.get("candidate_points")),
+            "pointCoverage": coverage_out,
+        })
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -188,7 +258,12 @@ def _utterances_from_segments(segments: Any) -> list[dict[str, Any]]:
         if not text:
             continue
         raw_speaker = str(seg.get("speaker") or seg.get("role") or "").strip().lower()
-        speaker = "INTERVIEWER" if raw_speaker in ("interviewer", "assistant", "ai", "bot") else "CANDIDATE"
+        if raw_speaker in ("ai", "assistant"):
+            speaker = "AI"
+        elif raw_speaker in ("interviewer", "bot"):
+            speaker = "INTERVIEWER"
+        else:
+            speaker = "CANDIDATE"
         ts_raw = seg.get("timestamp") or seg.get("time") or seg.get("start_sec")
         secs, ts_display = _normalize_timestamp(ts_raw)
         out.append({
@@ -213,17 +288,23 @@ def _utterances_from_raw(raw: Any) -> list[dict[str, Any]]:
         lower = line.lower()
         speaker = "CANDIDATE"
         body = line
-        for prefix in INTERVIEWER_PREFIXES:
+        for prefix in AI_PREFIXES:
             if lower.startswith(prefix):
-                speaker = "INTERVIEWER"
+                speaker = "AI"
                 body = line[len(prefix):].strip()
                 break
         else:
-            for prefix in CANDIDATE_PREFIXES:
+            for prefix in INTERVIEWER_PREFIXES:
                 if lower.startswith(prefix):
-                    speaker = "CANDIDATE"
+                    speaker = "INTERVIEWER"
                     body = line[len(prefix):].strip()
                     break
+            else:
+                for prefix in CANDIDATE_PREFIXES:
+                    if lower.startswith(prefix):
+                        speaker = "CANDIDATE"
+                        body = line[len(prefix):].strip()
+                        break
         if not body:
             continue
         out.append({

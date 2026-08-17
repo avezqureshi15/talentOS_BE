@@ -1,0 +1,45 @@
+﻿.\.venv\Scripts\python.exe : OpenBao read JWT_SECRET failed: [Errno 11001] getaddrinfo failed
+At line:1 char:27
++ $out = ".\verify_be.txt"; .\.venv\Scripts\python.exe -c "
++                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (OpenBao read JW...addrinfo failed:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+Secret JWT_SECRET not found in OpenBao ù will use env value
+OpenBao read SECRETS_ENCRYPTION_KEY failed: [Errno 11001] getaddrinfo failed
+Secret SECRETS_ENCRYPTION_KEY not found in OpenBao ù will use env value
+OpenBao read DATABASE_URL failed: [Errno 11001] getaddrinfo failed
+Secret DATABASE_URL not found in OpenBao ù will use env value
+OpenBao read RESEND_API_KEY failed: [Errno 11001] getaddrinfo failed
+Secret RESEND_API_KEY not found in OpenBao ù will use env value
+OpenBao read SMTP_USERNAME failed: [Errno 11001] getaddrinfo failed
+Secret SMTP_USERNAME not found in OpenBao ù will use env value
+OpenBao read SMTP_PASSWORD failed: [Errno 11001] getaddrinfo failed
+Secret SMTP_PASSWORD not found in OpenBao ù will use env value
+OpenBao read GOOGLE_CLIENT_SECRET failed: [Errno 11001] getaddrinfo failed
+Secret GOOGLE_CLIENT_SECRET not found in OpenBao ù will use env value
+OpenBao read GOOGLE_SERVICE_ACCOUNT_JSON failed: [Errno 11001] getaddrinfo failed
+Secret GOOGLE_SERVICE_ACCOUNT_JSON not found in OpenBao ù will use env value
+OpenBao read GOOGLE_IMPERSONATION_EMAIL failed: [Errno 11001] getaddrinfo failed
+Secret GOOGLE_IMPERSONATION_EMAIL not found in OpenBao ù will use env value
+OpenBao read MEETMIND_API_TOKEN failed: [Errno 11001] getaddrinfo failed
+Secret MEETMIND_API_TOKEN not found in OpenBao ù will use env value
+OpenBao read MEETMIND_WEBHOOK_SECRET failed: [Errno 11001] getaddrinfo failed
+Secret MEETMIND_WEBHOOK_SECRET not found in OpenBao ù will use env value
+OpenBao read SUPABASE_SERVICE_ROLE_KEY failed: [Errno 11001] getaddrinfo failed
+Secret SUPABASE_SERVICE_ROLE_KEY not found in OpenBao ù will use env value
+OpenBao read SUPABASE_WEBHOOK_SECRET failed: [Errno 11001] getaddrinfo failed
+Secret SUPABASE_WEBHOOK_SECRET not found in OpenBao ù will use env value
+OpenBao read RH_API_KEY failed: [Errno 11001] getaddrinfo failed
+Secret RH_API_KEY not found in OpenBao ù will use env value
+OpenBao read SERVICE_API_KEY failed: [Errno 11001] getaddrinfo failed
+Secret SERVICE_API_KEY not found in OpenBao ù will use env value
+Traceback (most recent call last):
+  File "<string>", line 2, in <module>
+  File "C:\Users\Avez Qureshi\Desktop\Github\talentos\talentOS_BE\app\core\config.py", line 205, in <module>
+    _inject_openbao_secrets()
+  File "C:\Users\Avez Qureshi\Desktop\Github\talentos\talentOS_BE\app\core\config.py", line 194, in 
+_inject_openbao_secrets
+    raise RuntimeError(
+RuntimeError: OpenBao is required (BAO_REQUIRED=true) but no secrets could be fetched from 
+https://talentos.webknot-dev.in

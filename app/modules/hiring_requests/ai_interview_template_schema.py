@@ -33,7 +33,7 @@ class EvaluationTopic(BaseModel):
 
 class TranscriptUtterance(BaseModel):
     id: str
-    speaker: Literal["INTERVIEWER", "CANDIDATE"]
+    speaker: Literal["INTERVIEWER", "CANDIDATE", "AI"]
     timestamp: str
     timeInSeconds: int
     text: str
@@ -43,6 +43,23 @@ class TranscriptSection(BaseModel):
     id: str
     title: str
     utterances: list[TranscriptUtterance]
+
+
+class PointCoverage(BaseModel):
+    point: str
+    covered: bool
+
+
+class QuestionScore(BaseModel):
+    id: str
+    question: str
+    score: Optional[int] = None
+    earnedScore: Optional[int] = None
+    notes: str = ""
+    candidateAnswer: str = ""
+    expectedPoints: list[str] = []
+    candidatePoints: list[str] = []
+    pointCoverage: Optional[list[PointCoverage]] = None
 
 
 class AiInterviewTemplateResponse(BaseModel):
@@ -61,3 +78,14 @@ class AiInterviewTemplateResponse(BaseModel):
     transcriptSections: list[TranscriptSection]
     interviewUrl: Optional[str] = None
     recordingUrl: Optional[str] = None
+    hrDecision: str = ""
+    jdFit: str = ""
+    strengths: list[str] = []
+    weaknesses: list[str] = []
+    transcriptSummary: str = ""
+    createdAt: str = ""
+    startedAt: str = ""
+    completedAt: str = ""
+    expiresAt: str = ""
+    questionScores: list[QuestionScore] = []
+    rubricTotal: Optional[int] = None

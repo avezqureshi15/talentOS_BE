@@ -1,0 +1,12 @@
+﻿.\.venv\Scripts\python.exe : OpenBao read SECRETS_ENCRYPTION_KEY -> HTTP 404
+At line:1 char:1
++ .\.venv\Scripts\python.exe -c "
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (OpenBao read SE...KEY -> HTTP 404:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+Secret SECRETS_ENCRYPTION_KEY not found in OpenBao ù will use env value
+OpenBao read RESEND_API_KEY -> HTTP 404
+Secret RESEND_API_KEY not found in OpenBao ù will use env value
+OpenBao read SUPABASE_WEBHOOK_SECRET -> HTTP 404
+Secret SUPABASE_WEBHOOK_SECRET not found in OpenBao ù will use env value

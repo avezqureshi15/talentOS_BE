@@ -15,7 +15,15 @@ MEETS_BAR_LT = 4.0
 CRITERIA_MET_GTE = 3.5
 
 # POC `final_recommendation` -> template `aiRecommendation` enum
+# (POC assessment prompt emits strong_hire | hire | hold | no_hire; legacy
+# shortlist paths used shortlisted/rejected/etc.)
 VERDICT_MAP: dict[str, str] = {
+    # POC interview rubric / legacy assessment
+    "strong_hire": "ADVANCE",
+    "hire": "ADVANCE",
+    "hold": "POTENTIAL_FIT",
+    "no_hire": "REJECT",
+    # Shortlist-era aliases kept for backward compatibility
     "shortlisted": "ADVANCE",
     "pass": "ADVANCE",
     "selected": "ADVANCE",
@@ -27,6 +35,10 @@ VERDICT_MAP: dict[str, str] = {
     "potential_fit": "POTENTIAL_FIT",
 }
 DEFAULT_VERDICT = "POTENTIAL_FIT"
+
+# POC stores scores on a 0-100 scale; template/FE display on 0..MAX_RATING.
+# Divide by SCORE_SCALE_DIVISOR to normalise (100 / 5 = 20).
+SCORE_SCALE_DIVISOR = 20
 
 # The five POC dimensions -> template topic titles + keyword sets used
 # to slice flat strengths[]/weaknesses[] into per-topic bullets.
@@ -73,5 +85,6 @@ DEFAULT_SUBCRITERIA_TITLE = "Overall assessment"
 DEFAULT_TRANSCRIPT_SECTION_TITLE = "Interview"
 
 # Regex prefixes used to attribute speaker in a raw transcript string.
-INTERVIEWER_PREFIXES = ("interviewer:", "assistant:", "ai:", "bot:", "recruiter:")
+AI_PREFIXES = ("ai:", "assistant:")
+INTERVIEWER_PREFIXES = ("interviewer:", "bot:", "recruiter:")
 CANDIDATE_PREFIXES = ("candidate:", "user:", "you:")
