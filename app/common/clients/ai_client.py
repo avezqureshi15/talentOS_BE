@@ -91,17 +91,30 @@ class AIClient(BaseClient):
 
     # ── streaming chat (async) ───────────────────────────────────
 
-    async def stream_chat(self, message: str, thread_id: str) -> AsyncGenerator[bytes, None]:
+    async def stream_chat(
+        self,
+        message: str,
+        thread_id: str,
+        authorization: str | None = None,
+    ) -> AsyncGenerator[bytes, None]:
         """Stream chat response from the AI service.
+
+        ``authorization`` is the validated caller's ``Authorization`` header
+        (e.g. ``"Bearer <jwt>"``) and is forwarded wholesale so the AI/MCP
+        layer can impersonate the end user on subsequent backend calls.
 
         Yields raw NDJSON bytes that the caller should parse.
         """
         url = f"{self._base_url}/api/v1/chat/stream"
+        headers: dict[str, str] = {}
+        if authorization:
+            headers["Authorization"] = authorization
         async with httpx.AsyncClient(timeout=httpx.Timeout(300.0)) as client:
             async with client.stream(
                 "POST",
                 url,
                 json={"message": message, "thread_id": thread_id},
+                headers=headers,
             ) as response:
                 response.raise_for_status()
                 async for chunk in response.aiter_bytes():

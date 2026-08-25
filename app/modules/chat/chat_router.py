@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -32,6 +32,7 @@ router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/chat", tags=["chat"])
 @router.post("/stream")
 async def chat_stream(
     body: ChatStreamRequest,
+    authorization: str = Header(alias="Authorization"),
     db: Session = Depends(get_db),
     current_user: UserInfo = Depends(require_human_user),
 ):
@@ -41,7 +42,7 @@ async def chat_stream(
     async def generate():
         accumulated = ""
 
-        async for chunk in stream_chat_to_ai(body.message, str(chat.id)):
+        async for chunk in stream_chat_to_ai(body.message, str(chat.id), authorization):
             yield chunk
             decoded = chunk.decode("utf-8", errors="replace")
             accumulated += _parse_ndjson_line(decoded)

@@ -41,9 +41,9 @@ def save_message(db: Session, chat_id: uuid.UUID, role: str, content: str) -> Me
     return ChatRepository(db).save_message(chat_id, role, content)
 
 
-async def stream_chat_to_ai(message: str, thread_id: str):
+async def stream_chat_to_ai(message: str, thread_id: str, authorization: str | None = None):
     client = AIClient()
-    async for chunk in client.stream_chat(message, thread_id):
+    async for chunk in client.stream_chat(message, thread_id, authorization=authorization):
         yield chunk
 
 
