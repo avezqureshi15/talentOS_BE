@@ -11,6 +11,7 @@ create a circular import.
 
 import logging
 import os
+import time
 
 import httpx
 
@@ -50,25 +51,48 @@ def _client() -> httpx.Client | None:
     )
 
 
+# Last non-200 status from read_secret; fetch_secrets uses 403 to abort early.
+_last_status = 0
+
+
 def _secret_path(key: str) -> str:
     mount = os.environ.get("BAO_KV_MOUNT", "secret").strip().strip("/")
     folder = os.environ.get("BAO_KV_PATH", "talentos").strip().strip("/")
     return f"/v1/{mount}/data/{folder}/{key}"
 
 
+def _status_hint(resp: httpx.Response) -> str:
+    """Short, secret-free hint so 403 nginx-deny vs Vault-deny is obvious."""
+    ctype = (resp.headers.get("content-type") or "").split(";")[0].strip()
+    body = (resp.text or "").strip().replace("\n", " ")[:80]
+    return f"{resp.status_code} {ctype} {body}".strip()
+
+
 def read_secret(client: httpx.Client, key: str) -> str | None:
     """Return the ``value`` field of ``secret/data/talentos/<key>`` or None."""
-    try:
-        resp = client.get(_secret_path(key))
-    except httpx.HTTPError as exc:
-        logger.warning("OpenBao read %s failed: %s", key, exc)
-        return None
-    if resp.status_code != 200:
-        logger.warning("OpenBao read %s -> HTTP %s", key, resp.status_code)
-        return None
-    data = resp.json().get("data", {}).get("data", {})
-    value = data.get("value")
-    return value if isinstance(value, str) else None
+    global _last_status
+    path = _secret_path(key)
+    last_hint = ""
+    _last_status = 0
+    for attempt in range(3):
+        try:
+            resp = client.get(path)
+        except httpx.HTTPError as exc:
+            logger.warning("OpenBao read %s failed: %s", key, exc)
+            return None
+        _last_status = resp.status_code
+        if resp.status_code == 200:
+            data = resp.json().get("data", {}).get("data", {})
+            value = data.get("value")
+            return value if isinstance(value, str) else None
+        last_hint = _status_hint(resp)
+        # 403 is commonly nginx IP-deny or a brief burst from --reload.
+        if resp.status_code == 403 and attempt < 2:
+            time.sleep(0.4 * (attempt + 1))
+            continue
+        break
+    logger.warning("OpenBao read %s -> HTTP %s", key, last_hint)
+    return None
 
 
 def fetch_secrets(keys: list[str]) -> dict[str, str]:
@@ -87,8 +111,11 @@ def fetch_secrets(keys: list[str]) -> dict[str, str]:
             value = read_secret(client, key)
             if value is not None:
                 found[key] = value
-            else:
-                logger.warning("Secret %s not found in OpenBao — will use env value", key)
+                continue
+            logger.warning("Secret %s not found in OpenBao — will use env value", key)
+            if _last_status == 403:
+                logger.warning("OpenBao returned 403 — skipping remaining secret reads")
+                break
         if found:
             source = "openbao"
         return found

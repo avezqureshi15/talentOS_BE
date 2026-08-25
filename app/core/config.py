@@ -170,12 +170,19 @@ class Settings(BaseSettings):
 load_dotenv()
 
 
+_BAO_LOADED_FLAG = "BAO_SECRETS_LOADED"
+
+
 def _inject_openbao_secrets() -> None:
     """Fetch secrets from OpenBao and inject them into os.environ.
 
     Runs BEFORE ``Settings()`` is constructed so required fields with no
     default (e.g. DATABASE_URL) resolve from OpenBao exactly like env vars.
     No-op when BAO_ADDR is empty (local dev without OpenBao).
+
+    ``uvicorn --reload`` (especially on Windows spawn) imports this module
+    twice: the parent fetch can succeed, then the worker fetch gets 403 and
+    would otherwise crash despite secrets already sitting in ``os.environ``.
     """
     addr = os.environ.get("BAO_ADDR", "").strip()
     if not addr:
@@ -189,14 +196,31 @@ def _inject_openbao_secrets() -> None:
         for k in os.environ.get("BAO_SECRET_KEYS", _DEFAULT_BAO_KEYS).split(",")
         if k.strip()
     ]
+    # DATABASE_URL is required and only comes from OpenBao in local-dev .env,
+    # so it is a reliable signal that a parent --reload process already injected.
+    injected = bool(os.environ.get("DATABASE_URL", "").strip())
+    if os.environ.get(_BAO_LOADED_FLAG, "").lower() in ("1", "true", "yes") and injected:
+        logger.info("Skipping OpenBao fetch; secrets already loaded in this process env")
+        return
+
     fetched = fetch_secrets(keys)
     if not fetched and os.environ.get("BAO_REQUIRED", "").lower() in ("1", "true", "yes"):
-        raise RuntimeError(
-            f"OpenBao is required (BAO_REQUIRED=true) but no secrets could be fetched from {addr}"
-        )
+        if injected:
+            logger.warning(
+                "OpenBao fetch from %s returned nothing; reusing secrets already in env "
+                "(typical with uvicorn --reload)",
+                addr,
+            )
+        else:
+            raise RuntimeError(
+                f"OpenBao is required (BAO_REQUIRED=true) but no secrets could be fetched from {addr}. "
+                "HTTP 403 usually means this machine's public IP is not in BAO_TOKEN_ALLOWED_IPS "
+                "on the server; HTTP 404 means the KV path (BAO_KV_PATH) has no such key."
+            )
     for key, value in fetched.items():
         os.environ[key] = value
     if fetched:
+        os.environ[_BAO_LOADED_FLAG] = "1"
         logger.info("Loaded %d/%d secrets from OpenBao at %s", len(fetched), len(keys), addr)
     else:
         logger.warning("No secrets loaded from OpenBao at %s — using environment values", addr)
