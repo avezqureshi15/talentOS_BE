@@ -11,11 +11,13 @@ logger = logging.getLogger(__name__)
 # Override with BAO_SECRET_KEYS. OpenBao values win over .env.
 _DEFAULT_BAO_KEYS = (
     "JWT_SECRET,SECRETS_ENCRYPTION_KEY,DATABASE_URL,RESEND_API_KEY,"
-    "SMTP_USERNAME,SMTP_PASSWORD,GOOGLE_CLIENT_SECRET,"
+    "SMTP_USERNAME,SMTP_PASSWORD,SMTP_HOST,SMTP_PORT,SMTP_USE_TLS,"
+    "GOOGLE_CLIENT_ID,GOOGLE_CLIENT_SECRET,"
     "GOOGLE_SERVICE_ACCOUNT_JSON,GOOGLE_IMPERSONATION_EMAIL,"
-    "MEETMIND_API_TOKEN,MEETMIND_WEBHOOK_SECRET,"
+    "MEETMIND_API_TOKEN,MEETMIND_WEBHOOK_SECRET,MEETMIND_BASE_URL,"
     "SUPABASE_SERVICE_ROLE_KEY,SUPABASE_WEBHOOK_SECRET,"
-    "RH_API_KEY,SERVICE_API_KEY"
+    "RH_API_KEY,SERVICE_API_KEY,RH_SERVICE_URL,"
+    "CORS_ALLOW_ORIGINS,FRONTEND_BASE_URL,APP_ENV,GOOGLE_CALENDAR_TIMEZONE"
 )
 
 _DEV_TIMING = {
@@ -162,12 +164,19 @@ class Settings(BaseSettings):
                 setattr(self, key, value)
         return self
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "case_sensitive": True}
+    model_config = {
+        "env_file": None
+        if os.environ.get("BAO_REQUIRED", "").lower() in ("1", "true", "yes")
+        else ".env",
+        "env_file_encoding": "utf-8",
+        "case_sensitive": True,
+    }
 
 
-# Load the local .env into the environment so the OpenBao bootstrap vars
-# (BAO_ADDR / BAO_TOKEN_FILE) are visible before Settings() is built.
-load_dotenv()
+# Local dev only: load .env so BAO_ADDR is visible. Containers with BAO_REQUIRED
+# skip this — runtime values come from OpenBao.
+if os.environ.get("BAO_REQUIRED", "").lower() not in ("1", "true", "yes"):
+    load_dotenv()
 
 
 _BAO_LOADED_FLAG = "BAO_SECRETS_LOADED"
