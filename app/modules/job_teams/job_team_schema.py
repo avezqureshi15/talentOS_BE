@@ -9,7 +9,7 @@ class JobTeamMemberResponse(BaseModel):
     email: str
     designation: str | None = None
     is_owner: bool
-    role: str = Field(..., description="The member's global org role (superadmin | account_admin | job_owner | recruiter | reviewer)")
+    role: str = Field(..., description="The member's global org role (superadmin | account_admin | job_owner | reviewer)")
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -93,7 +93,7 @@ def get_types(
 def toggle_hiring_request_status(
     hiring_request_id: UUID,
     db: Session = Depends(get_db),
-    _: object = Depends(require_job_access(min_role="recruiter")),
+    _: object = Depends(require_job_access(min_role="job_owner")),
 ):
     service = HiringRequestService(db)
     return service.toggle_hiring_request_status(hiring_request_id)
@@ -114,7 +114,7 @@ def update_hiring_request(
     hiring_request_id: UUID,
     data: HiringRequestUpdate,
     db: Session = Depends(get_db),
-    _: object = Depends(require_job_access(min_role="recruiter")),
+    _: object = Depends(require_job_access(min_role="job_owner")),
 ):
     service = HiringRequestService(db)
     return service.update_hiring_request(hiring_request_id, data)

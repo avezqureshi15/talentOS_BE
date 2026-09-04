@@ -12,7 +12,7 @@ roles see only the jobs they are assigned to.
   semantics.
 - ``min_role`` floors in ``require_job_access`` are checked against the
   caller's global role rank (superadmin > account_admin > job_owner >
-  recruiter > reviewer).
+  reviewer).
 """
 from __future__ import annotations
 
@@ -35,7 +35,6 @@ GLOBAL_ROLE_RANK: dict[str, int] = {
     "superadmin": 4,
     "account_admin": 3,
     "job_owner": 2,
-    "recruiter": 1,
     "reviewer": 0,
 }
 
@@ -105,7 +104,7 @@ def resolve_job_access(db: Session, user: UserInfo, hiring_request_id: uuid.UUID
 
     # API keys cannot be job-team members, so a tenant-scoped key gets
     # org-level access within its tenant regardless of the role preset
-    # (account_admin / job_owner / recruiter / reviewer) — the role still
+    # (account_admin / job_owner / reviewer) — the role still
     # controls which permission bits are granted.
     if user.is_api_key and user.tenant_id is not None:
         if job.tenant_id is not None and job.tenant_id == user.tenant_id:

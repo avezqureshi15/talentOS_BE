@@ -117,7 +117,7 @@ class JobTeamService:
 
         self.repo.add_member(hiring_request_id, employee_id, is_owner=body.is_owner)
         self._notify_job_assignment(
-            employee_id, hiring_request_id, hr.title, "job_owner" if body.is_owner else "recruiter"
+            employee_id, hiring_request_id, hr.title, "job_owner" if body.is_owner else "team member"
         )
         logger.info(
             "Job team member added: hiring_request_id=%s employee_id=%d is_owner=%s",
@@ -173,7 +173,7 @@ class JobTeamService:
             final_role = body.role
             if body.is_owner is True or body.role == "job_owner":
                 final_role = "job_owner"
-            self._notify_job_assignment(employee_id, hiring_request_id, hr.title, final_role or "recruiter")
+            self._notify_job_assignment(employee_id, hiring_request_id, hr.title, final_role or "team member")
         logger.info(
             "Job team member updated: hiring_request_id=%s employee_id=%d is_owner=%s",
             hiring_request_id, employee_id, body.is_owner,

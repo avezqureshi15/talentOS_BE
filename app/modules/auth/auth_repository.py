@@ -37,7 +37,7 @@ class AuthRepository:
     ) -> User:
         defaults = {
             "status": "active",
-            "role": "recruiter",
+            "role": "reviewer",
             "auth_provider": "google",
         }
         defaults.update(extra)

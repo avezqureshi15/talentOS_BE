@@ -434,7 +434,7 @@ class FormService:
     def _notify_form_sent(self, form: Form) -> int:
         """In-app notification when a review/slots form is sent (or resent).
 
-        REVIEW forms fan out to the job team (owner/recruiter/reviewer) and
+        REVIEW forms fan out to the job team (owner/members/reviewer) and
         the tenant admins, plus the reviewer themself. SLOTS forms have no
         job mapping, so they go to the tenant admins only. The shared
         ``dedupe_key`` keeps reminders and escalations from duplicating.
