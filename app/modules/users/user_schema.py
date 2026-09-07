@@ -40,7 +40,7 @@ class CreateUserRequest(BaseModel):
     name: str
     email: str
     password: str
-    role: str = "recruiter"
+    role: str = "reviewer"
     tenant_id: int | None = None
 
     @field_validator("password")

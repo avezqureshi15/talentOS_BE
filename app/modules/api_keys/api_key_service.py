@@ -29,7 +29,7 @@ KEY_BYTES = 48
 # Roles an API key may be assigned. Keys are scoped to a single tenant, so the
 # superadmin role is intentionally excluded (prevents privilege escalation).
 API_KEY_ROLES: frozenset[str] = frozenset(
-    {"account_admin", "job_owner", "recruiter", "reviewer"}
+    {"account_admin", "job_owner", "reviewer"}
 )
 
 
