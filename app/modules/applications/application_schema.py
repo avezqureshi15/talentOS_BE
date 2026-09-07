@@ -103,7 +103,9 @@ class FinalVerdictUpdate(BaseModel):
 class RoundStatusUpdate(BaseModel):
     stage: str
     status: str
-    current_round_id: str
+    # Empty/absent when the transition happens before a round exists yet
+    # (e.g. "Move to Next Round" ahead of scheduling) — see set_candidate_round_status.
+    current_round_id: str | None = None
     scheduled_at: str | None = None
 
 

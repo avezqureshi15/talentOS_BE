@@ -35,7 +35,6 @@ def main():
             db.flush()
             print(f"Created tenant: id={tenant.id}")
 
-        now = datetime.now(timezone.utc)
         user = User(
             emp_id=f"u_superadmin",
             email=EMAIL,
@@ -46,15 +45,6 @@ def main():
             role="superadmin",
             is_active=True,
             status="active",
-            user_type="employee",
-            designation="Super Admin",
-            department="Platform",
-            work_mode="remote",
-            delivery_status="active",
-            work_location_type="remote",
-            doj=now.date(),
-            date_of_birth=now.date(),
-            band="L1",
         )
         db.add(user)
         db.commit()

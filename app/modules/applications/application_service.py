@@ -223,14 +223,15 @@ class ApplicationService:
         prev_stage = candidate.stage
         prev_status = candidate.status
         prev_round_id = candidate.current_round_id
+        new_round_id = data.current_round_id or None
         candidate.stage = data.stage
         candidate.status = data.status
-        candidate.current_round_id = data.current_round_id
+        candidate.current_round_id = new_round_id
         if data.status == "INTERVIEW_CANCELLED":
-            self._cancel_active_interviews(candidate_id, data.current_round_id)
+            self._cancel_active_interviews(candidate_id, new_round_id)
         self.db.commit()
 
-        if (prev_status, prev_stage, prev_round_id) != (data.status, data.stage, data.current_round_id):
+        if (prev_status, prev_stage, str(prev_round_id) if prev_round_id else None) != (data.status, data.stage, new_round_id):
             EventService(self.db).create_event(EventCreate(
                 entity_type="CANDIDATE",
                 entity_id=str(candidate_id),

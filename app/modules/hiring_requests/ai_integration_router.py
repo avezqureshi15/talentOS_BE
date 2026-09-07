@@ -338,13 +338,20 @@ class MoveToAiScreeningRequest(BaseModel):
     round_type: str | None = None
 
 
-@router.post("/candidates/{candidate_id}/move-to-screening", status_code=status.HTTP_202_ACCEPTED)
-async def move_to_ai_screening(
+async def _start_ai_screening(
     hiring_request_id: str,
     candidate_id: int,
-    body: MoveToAiScreeningRequest,
-    db: Session = Depends(get_db),
-):
+    db: Session,
+    *,
+    force: bool = False,
+    round_name: str | None = None,
+    round_type: str | None = None,
+) -> dict:
+    """Onboard a candidate into the POC's AI screening and open the round.
+
+    Shared by ``move-to-screening`` and by ``screening/{id}/trigger``, which
+    falls back to this when the candidate has no screening round yet.
+    """
     hr = db.query(HiringRequest).filter(HiringRequest.id == hiring_request_id).first()
     if not hr:
         raise HTTPException(status_code=404, detail="Hiring request not found")
@@ -352,6 +359,8 @@ async def move_to_ai_screening(
     candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
     if not candidate:
         raise HTTPException(status_code=404, detail="Candidate not found")
+
+    body = MoveToAiScreeningRequest(force=force, round_name=round_name, round_type=round_type)
 
     try:
         rh_job_id = await _get_or_create_rh_job(hiring_request_id, db)
@@ -416,6 +425,23 @@ async def move_to_ai_screening(
         raise
 
     return result
+
+
+@router.post("/candidates/{candidate_id}/move-to-screening", status_code=status.HTTP_202_ACCEPTED)
+async def move_to_ai_screening(
+    hiring_request_id: str,
+    candidate_id: int,
+    body: MoveToAiScreeningRequest,
+    db: Session = Depends(get_db),
+):
+    return await _start_ai_screening(
+        hiring_request_id,
+        candidate_id,
+        db,
+        force=body.force,
+        round_name=body.round_name,
+        round_type=body.round_type,
+    )
 
 
 class MoveToAiInterviewRequest(BaseModel):
@@ -576,10 +602,19 @@ async def trigger_ai_screening(
     candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
     if not candidate:
         raise HTTPException(status_code=404, detail="Candidate not found")
-    if not candidate.current_round_id:
-        raise HTTPException(
-            status_code=409, detail="Candidate has no AI screening round to trigger"
+
+    # "Call now" is offered from the screening board for any callable candidate,
+    # including ones never moved into AI screening (no round, no POC candidate).
+    # Onboard them first — create_candidate_with_screening(force=True) dials
+    # immediately — instead of failing with "no AI screening round".
+    if not candidate.current_round_id or not candidate.rh_external_candidate_id:
+        result = await _start_ai_screening(
+            hiring_request_id, candidate_id, db, force=True
         )
+        return {
+            "screening_call_id": result.get("screening_call_id"),
+            "status": "triggered" if result.get("screening_initiated") else "queued",
+        }
 
     rh_job_id = await _get_or_create_rh_job(hiring_request_id, db)
     rh_candidate_id = _get_rh_candidate_id(candidate_id, db)
