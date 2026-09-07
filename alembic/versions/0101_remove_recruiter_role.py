@@ -6,16 +6,16 @@ subset of job_owner's, so this preserves their access rather than gutting
 it) instead of down to reviewer, which is the conservative default used for
 brand-new users going forward.
 
-Revision ID: 0097
-Revises: 0093
+Revision ID: 0101
+Revises: 0100
 Create Date: 2026-09-03
 
 """
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0097"
-down_revision = "0093"
+revision = "0101"
+down_revision = "0100"
 branch_labels = None
 depends_on = None
 
