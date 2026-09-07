@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta, timezone
+
 from sqlalchemy.orm import Session
 
 from app.core.logger import get_logger
@@ -9,6 +11,11 @@ from app.modules.tenants.tenant_schema import TenantResponse, PaginatedTenantRes
 from app.modules.users.user_model import User
 
 logger = get_logger(__name__)
+
+# A tenant shows as "inactive" on the tenant board once this many days have
+# passed since its most recent user login (or since creation, if no user has
+# ever logged in).
+TENANT_INACTIVITY_THRESHOLD_DAYS = 30
 
 
 class TenantError(Exception):
@@ -33,6 +40,11 @@ class TenantService:
         return slug
 
     def _tenant_to_response(self, tenant: Tenant) -> TenantResponse:
+        last_active_at = self.repo.get_last_login_at(tenant.id) or tenant.created_at
+        is_inactive = (
+            datetime.now(timezone.utc) - last_active_at
+            > timedelta(days=TENANT_INACTIVITY_THRESHOLD_DAYS)
+        )
         return TenantResponse(
             id=tenant.id,
             name=tenant.name,
@@ -54,6 +66,8 @@ class TenantService:
             gst_number=tenant.gst_number,
             created_at=tenant.created_at,
             updated_at=tenant.updated_at,
+            last_active_at=last_active_at,
+            is_inactive=is_inactive,
         )
 
     def create_tenant(

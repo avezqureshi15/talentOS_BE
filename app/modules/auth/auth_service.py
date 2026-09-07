@@ -253,7 +253,7 @@ class AuthService:
 
     # ── JWT token management ──────────────────────────────────────────────
 
-    def _create_access_token(self, user_id: int, user_role: str = "recruiter", user_tenant_id: int | None = None, auth_provider: str = "google", permissions: list[str] | None = None, token_version: int = 0) -> tuple[str, int]:
+    def _create_access_token(self, user_id: int, user_role: str = "reviewer", user_tenant_id: int | None = None, auth_provider: str = "google", permissions: list[str] | None = None, token_version: int = 0) -> tuple[str, int]:
         expires_in = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
         expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
         payload = {
@@ -289,6 +289,10 @@ class AuthService:
             token_version=user.token_version,
         )
         refresh_token = self._create_refresh_token(user_id)
+        # Login (not silent refresh) is the activity signal tenant-board
+        # inactivity is computed from — see TenantService._tenant_to_response.
+        user.last_login_at = datetime.now(timezone.utc)
+        self.db.commit()
         return access_token, refresh_token, expires_in
 
     def refresh_access_token(self, raw_refresh_token: str) -> tuple[str, int]:
@@ -298,10 +302,10 @@ class AuthService:
             raise AuthError("Invalid or expired refresh token")
         user = self.repo.get_user_by_id(record.user_id)
         perm_service = PermissionService(self.db)
-        permissions = perm_service.get_permissions_for_role(user.role if user else "recruiter")
+        permissions = perm_service.get_permissions_for_role(user.role if user else "reviewer")
         access_token, expires_in = self._create_access_token(
             record.user_id,
-            user_role=user.role if user else "recruiter",
+            user_role=user.role if user else "reviewer",
             user_tenant_id=user.tenant_id if user else None,
             auth_provider=user.auth_provider if user else "google",
             permissions=permissions,

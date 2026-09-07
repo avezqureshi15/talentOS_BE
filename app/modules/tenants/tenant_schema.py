@@ -36,6 +36,8 @@ class TenantResponse(BaseModel):
     gst_number: str | None = None
     created_at: datetime
     updated_at: datetime
+    last_active_at: datetime | None = None
+    is_inactive: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -124,3 +124,12 @@ class TenantRepository:
             .scalar()
             or 0
         )
+
+    def get_last_login_at(self, tenant_id: int) -> datetime | None:
+        from app.modules.users.user_model import User
+
+        return (
+            self.db.query(func.max(User.last_login_at))
+            .filter(User.tenant_id == tenant_id)
+            .scalar()
+        )

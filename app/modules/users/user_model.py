@@ -31,6 +31,7 @@ class User(Base):
         default=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # HR/directory fields (designation, department, doj, band, skills, etc.)
     # live on the linked Employee row. Access via ``user.employee``.
