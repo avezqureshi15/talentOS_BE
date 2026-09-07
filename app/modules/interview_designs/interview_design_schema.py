@@ -54,6 +54,12 @@ class InterviewDesignResponse(BaseModel):
     screening_sections: list[dict]
     interview_sections: list[dict]
     review_sections: list[dict]
+    # Whether each kind has real AI-generated (or, for interview, already
+    # poc-linked) content — the FE auto-fills a kind exactly once when its
+    # flag is false, and never re-fires once true.
+    screening_ai_generated: bool
+    interview_ai_generated: bool
+    review_ai_generated: bool
     updated_at: datetime
     sync_status: Literal["synced", "draft"]
     sync_errors: list[str] = Field(default_factory=list)

@@ -4,6 +4,7 @@ from typing import Any, Literal
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from app.common.clients.ai_client import AIClient, AIClientError
 from app.core.ai_recruitment_client import AiRecruitmentClient
@@ -164,8 +165,6 @@ def _flatten_sections(sections: list[dict]) -> list[dict]:
             flat.append(item)
     return flat
 
-
-_GENERATE_DEFAULT_COUNT = 8
 
 _INTERVIEW_GENERATE_PROMPT = """\
 You are a senior technical interviewer designing questions for a job listing.
@@ -392,7 +391,12 @@ async def generate_design(
         response_schema = _SCREENING_QUESTIONS_SCHEMA
 
     try:
-        result = AIClient().generate(
+        # AIClient.generate is a blocking sync HTTP call (up to
+        # AI_SERVICE_TIMEOUT seconds, x up to 3 attempts on retry) — run it in
+        # a worker thread so it doesn't freeze this process's event loop (and
+        # therefore every other in-flight request) for the duration.
+        result = await run_in_threadpool(
+            AIClient().generate,
             prompt=prompt,
             input_data=_job_input_data(hiring_request),
             response_schema=response_schema,
@@ -442,13 +446,16 @@ async def generate_design(
 
     if is_review:
         design.review_sections = generated_sections
+        design.review_ai_generated = True
     else:
         default_minutes = _DEFAULT_INTERVIEW_MINUTES if is_interview else _DEFAULT_SCREENING_MINUTES
         section = _build_seed_section(generated, default_minutes)
         if is_interview:
             design.interview_sections = section
+            design.interview_ai_generated = True
         else:
             design.screening_sections = section
+            design.screening_ai_generated = True
     db.commit()
     db.refresh(design)
 
@@ -493,6 +500,9 @@ def _to_response(
         screening_sections=design.screening_sections or [],
         interview_sections=design.interview_sections or [],
         review_sections=design.review_sections or [],
+        screening_ai_generated=design.screening_ai_generated,
+        interview_ai_generated=design.interview_ai_generated,
+        review_ai_generated=design.review_ai_generated,
         updated_at=design.updated_at,
         sync_status=sync_status,
         sync_errors=sync_errors or [],
@@ -521,41 +531,47 @@ async def get_or_seed_design(hiring_request_id: str, db: Session) -> InterviewDe
     if design:
         return _to_response(hiring_request.id, design)
 
+    # Fast, synchronous seed only — no AI call here. screening gets the
+    # static template (not "AI generated"); interview is restored from an
+    # already-linked ai-recruitment-poc job when one exists (that content
+    # counts as generated, since it's real job-specific data, not a
+    # placeholder); review has no non-AI seed, so it starts empty. The FE
+    # calls POST .../questions/generate per kind for whichever of these
+    # come back with *_ai_generated=false, right after this GET resolves —
+    # see use-auto-generate-design.ts. Keeping this handler AI-call-free
+    # keeps first page load fast and avoids blocking the whole process for
+    # every visitor to a brand-new hiring request's interview design.
     screening_sections = _build_default_screening_sections()
     interview_sections: list[dict] = []
+    interview_ai_generated = False
     if hiring_request.rh_external_job_id:
         client = AiRecruitmentClient(tenant_id=hiring_request.tenant_id)
         result = await client.get_job_questions(
             hiring_request.rh_external_job_id,
             external_job_id=str(hiring_request.id),
         )
-        if result:
+        # A truthy `result` only means the POC call succeeded — the linked
+        # job can still have zero interview questions saved on it (e.g. it
+        # was never populated, or was only ever used for screening). Only
+        # count this as "generated" when there's real content, otherwise the
+        # kind is stuck forever with an empty section and the FE's one-time
+        # auto-fill never gets a chance to actually generate it.
+        poc_questions = (result or {}).get("interview_questions") or []
+        if poc_questions:
             # Screening stays section-wise from the canonical defaults; the
             # POC copy is flat by design and only interview questions are
             # restored here for an already-linked job.
-            interview_sections = _build_seed_section(
-                result.get("interview_questions") or [],
-                _DEFAULT_INTERVIEW_MINUTES,
-            )
-
-    review_sections: list[dict] = []
-    try:
-        review_result = AIClient().generate(
-            prompt=_REVIEW_SECTIONS_GENERATE_PROMPT.format(count=_GENERATE_DEFAULT_COUNT),
-            input_data=_job_input_data(hiring_request),
-            response_schema=_REVIEW_SECTIONS_SCHEMA,
-        )
-        raw = review_result.result.get("sections") if isinstance(review_result.result, dict) else None
-        if isinstance(raw, list) and raw:
-            review_sections = _clean_generated_sections(raw)
-    except Exception:
-        pass  # leave review_sections as [] on any AI failure
+            interview_sections = _build_seed_section(poc_questions, _DEFAULT_INTERVIEW_MINUTES)
+            interview_ai_generated = True
 
     design = InterviewDesign(
         hiring_request_id=hiring_request.id,
         screening_sections=screening_sections,
         interview_sections=interview_sections,
-        review_sections=review_sections,
+        review_sections=[],
+        screening_ai_generated=False,
+        interview_ai_generated=interview_ai_generated,
+        review_ai_generated=False,
     )
     db.add(design)
     db.commit()
