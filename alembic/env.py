@@ -24,6 +24,7 @@ from app.modules.notifications.notification_model import Notification  # noqa: E
 from app.modules.api_keys.api_key_model import ApiKey, ApiKeyPermission  # noqa: E402, F401
 from app.modules.auth.auth_model import RefreshToken  # noqa: E402, F401
 from app.modules.auth.invite_model import TenantInvite  # noqa: E402, F401
+from app.modules.chat.chat_model import Chat, Message  # noqa: E402, F401
 from app.modules.designation.designation_model import Band, Designation, KpiDefinition  # noqa: E402, F401
 from app.modules.employees.employee_model import Employee  # noqa: E402, F401
 from app.modules.events.event_model import Event  # noqa: E402, F401
