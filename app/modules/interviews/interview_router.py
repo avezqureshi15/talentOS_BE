@@ -11,6 +11,7 @@ from app.modules.events.event_service import EventService
 from fastapi.responses import JSONResponse
 
 from app.modules.interviews.interview_schema import (
+    BookExternalInterviewRequest,
     BookInterviewRequest,
     CancelInterviewResponse,
     InterviewListItem,
@@ -96,3 +97,8 @@ def cancel_interview(
 @router.post("/booking", response_model=ScheduleInterviewResponse, status_code=status.HTTP_201_CREATED)
 def book_interview(data: BookInterviewRequest, db: Session = Depends(get_db)):
     return BookingService(db, event_service=EventService(db)).book_interview(data)
+
+
+@router.post("/booking/external", response_model=ScheduleInterviewResponse, status_code=status.HTTP_201_CREATED)
+def book_external_interview(data: BookExternalInterviewRequest, db: Session = Depends(get_db)):
+    return BookingService(db, event_service=EventService(db)).book_external_interview(data)

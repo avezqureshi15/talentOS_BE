@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, EmailStr
 
 
 class ScheduleMeetRequest(BaseModel):
@@ -73,6 +73,23 @@ class BookInterviewRequest(BaseModel):
     jd_id: str
     candidate_id: int
     interviewer_ids: list[int]
+    create_google_meet: bool = True
+
+
+class BookExternalInterviewRequest(BaseModel):
+    """Book a round for an interviewer who isn't an employee in the system.
+
+    No slot_id/interviewer_ids — the scheduler types an email and a time
+    window directly instead of picking from an employee's booked calendar.
+    """
+    round_name: str
+    round_type: str | None = None
+    jd_id: str
+    candidate_id: int
+    interviewer_email: EmailStr
+    interviewer_name: str | None = None
+    start_at: datetime
+    end_at: datetime
     create_google_meet: bool = True
 
 

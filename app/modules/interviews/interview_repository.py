@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 from typing import Protocol
 
 from sqlalchemy.orm import Session
@@ -11,7 +12,7 @@ from app.modules.hiring_requests.hiring_request_model import HiringRequest
 from app.modules.interviews.models.interview import Interview
 from app.modules.interviews.models.round_interviewer import RoundInterviewer
 from app.modules.rounds.round_model import Round
-from app.modules.slots.slot_model import Slot
+from app.modules.slots.slot_model import Slot, SlotStatus
 
 logger = get_logger(__name__)
 
@@ -30,8 +31,18 @@ class InterviewRepositoryProtocol(Protocol):
     def get_interviewer_emails_for_round(self, round_id: uuid.UUID) -> list[str]: ...
     def get_interviewer_employees_for_round(self, round_id: uuid.UUID) -> list[Employee]: ...
     def update_slot_status(self, slot_id: uuid.UUID | None, status: str) -> None: ...
-    def create_round(self, name: str, candidate_id: int, jd_id: uuid.UUID, slot_id: uuid.UUID, round_type: str | None = None) -> Round: ...
+    def create_round(
+        self,
+        name: str,
+        candidate_id: int,
+        jd_id: uuid.UUID,
+        slot_id: uuid.UUID,
+        round_type: str | None = None,
+        external_interviewer_email: str | None = None,
+        external_interviewer_name: str | None = None,
+    ) -> Round: ...
     def create_round_interviewer(self, round_id: uuid.UUID, employee_id: int) -> RoundInterviewer: ...
+    def create_ad_hoc_slot(self, start_at: datetime, end_at: datetime) -> Slot: ...
     def update_candidate_status(self, candidate_id: int, status: str) -> None: ...
     def save_review_questions(
         self,
@@ -129,6 +140,11 @@ class InterviewRepository:
             .all()
             if e.email
         ]
+        # A manually-entered interviewer has no employee/round_interviewers
+        # row — their email lives on the round itself (see create_round).
+        round_obj = self.db.query(Round).filter(Round.id == round_id).first()
+        if round_obj and round_obj.external_interviewer_email and round_obj.external_interviewer_email not in emails:
+            emails.append(round_obj.external_interviewer_email)
         logger.info("Found %d interviewer(s) for round_id=%s", len(emails), round_id)
         return emails
 
@@ -155,8 +171,21 @@ class InterviewRepository:
             self.db.query(Slot).filter(Slot.id == slot_id).update({"status": status})
             self.db.flush()
 
-    def create_round(self, name: str, candidate_id: int, jd_id: uuid.UUID, slot_id: uuid.UUID, round_type: str | None = None) -> Round:
-        r = Round(name=name, round_type=round_type, candidate_id=candidate_id, jd_id=jd_id, slot_id=slot_id)
+    def create_round(
+        self,
+        name: str,
+        candidate_id: int,
+        jd_id: uuid.UUID,
+        slot_id: uuid.UUID,
+        round_type: str | None = None,
+        external_interviewer_email: str | None = None,
+        external_interviewer_name: str | None = None,
+    ) -> Round:
+        r = Round(
+            name=name, round_type=round_type, candidate_id=candidate_id, jd_id=jd_id, slot_id=slot_id,
+            external_interviewer_email=external_interviewer_email,
+            external_interviewer_name=external_interviewer_name,
+        )
         self.db.add(r)
         self.db.flush()
         return r
@@ -168,6 +197,16 @@ class InterviewRepository:
         self.db.add(ri)
         self.db.flush()
         return ri
+
+    def create_ad_hoc_slot(self, start_at: datetime, end_at: datetime) -> Slot:
+        # No employee_id: this slot belongs to nobody's calendar, it exists
+        # only to carry the time window the scheduler picked for a manually
+        # entered interviewer. Created already BOOKED — it was never
+        # "available" for anyone to pick.
+        slot = Slot(employee_id=None, start_at=start_at, end_at=end_at, status=SlotStatus.BOOKED.value)
+        self.db.add(slot)
+        self.db.flush()
+        return slot
 
     def update_candidate_status(self, candidate_id: int, status: str) -> None:
         logger.info("Updating candidate status: id=%s | status=%s", candidate_id, status)

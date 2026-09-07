@@ -56,6 +56,8 @@ class InterviewQueryRepository:
                 Employee.emp_id,
                 Employee.name.label("interviewer_name"),
                 Employee.email.label("interviewer_email"),
+                Round.external_interviewer_name,
+                Round.external_interviewer_email,
                 Candidate.candidate_name,
                 Candidate.candidate_email,
                 Candidate.external_application_id,
@@ -63,8 +65,13 @@ class InterviewQueryRepository:
                 Round.name.label("round_name"),
             )
             .join(Round, Interview.round_id == Round.id)
-            .join(RoundInterviewer, RoundInterviewer.round_id == Round.id)
-            .join(Employee, _ri_to_employee_join())
+            # Outer: a round booked for a manually-entered (non-employee)
+            # interviewer has no round_interviewers row at all — its
+            # interviewer info lives on Round.external_interviewer_* instead
+            # (see _row_to_item). An inner join here would silently drop
+            # those interviews from the list.
+            .outerjoin(RoundInterviewer, RoundInterviewer.round_id == Round.id)
+            .outerjoin(Employee, _ri_to_employee_join())
             .join(Slot, Interview.slot_id == Slot.id)
             .outerjoin(Candidate, Round.candidate_id == Candidate.id)
             .outerjoin(HiringRequest, Round.jd_id == HiringRequest.id)
@@ -117,6 +124,8 @@ class InterviewQueryRepository:
                 Employee.emp_id,
                 Employee.name.label("interviewer_name"),
                 Employee.email.label("interviewer_email"),
+                Round.external_interviewer_name,
+                Round.external_interviewer_email,
                 Candidate.candidate_name,
                 Candidate.candidate_email,
                 Candidate.external_application_id,
@@ -124,8 +133,8 @@ class InterviewQueryRepository:
                 Round.name.label("round_name"),
             )
             .join(Round, Interview.round_id == Round.id)
-            .join(RoundInterviewer, RoundInterviewer.round_id == Round.id)
-            .join(Employee, _ri_to_employee_join())
+            .outerjoin(RoundInterviewer, RoundInterviewer.round_id == Round.id)
+            .outerjoin(Employee, _ri_to_employee_join())
             .join(Slot, Interview.slot_id == Slot.id)
             .outerjoin(Candidate, Round.candidate_id == Candidate.id)
             .outerjoin(HiringRequest, Round.jd_id == HiringRequest.id)
@@ -148,8 +157,8 @@ class InterviewQueryRepository:
             },
             "interviewer": {
                 "id": str(row.interviewer_employee_id) if row.interviewer_employee_id else "",
-                "name": row.interviewer_name or "",
-                "email": row.interviewer_email or "",
+                "name": row.interviewer_name or row.external_interviewer_name or row.external_interviewer_email or "",
+                "email": row.interviewer_email or row.external_interviewer_email or "",
             },
             "candidate": {
                 "id": row.external_application_id or str(row.candidate_id or ""),

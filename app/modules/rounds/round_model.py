@@ -25,6 +25,12 @@ class Round(Base):
     scheduled_end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     scheduled_end_time: Mapped[time | None] = mapped_column(Time, nullable=True)
     scheduled_timezone: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # Set instead of a round_interviewers row when the scheduler types in an
+    # interviewer's email rather than picking an employee (see
+    # BookingService.book_external_interview) — the interviewer has no
+    # employee/user record to join against.
+    external_interviewer_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    external_interviewer_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

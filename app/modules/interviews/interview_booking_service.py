@@ -9,7 +9,7 @@ from app.modules.events.event_schema import EventCreate
 from app.modules.events.event_service import EventService
 from app.modules.interviews.interview_repository import InterviewRepository, InterviewRepositoryProtocol
 from app.modules.interviews.interview_schedule_service import InterviewScheduleService, EventServiceProtocol
-from app.modules.interviews.interview_schema import BookInterviewRequest, ScheduleInterviewResponse
+from app.modules.interviews.interview_schema import BookExternalInterviewRequest, BookInterviewRequest, ScheduleInterviewResponse
 
 logger = get_logger(__name__)
 
@@ -76,4 +76,64 @@ class BookingService:
             },
         ))
         logger.info("Booked: id=%s | round=%s", result.id, result.round_id)
+        return result
+
+    def book_external_interview(self, data: BookExternalInterviewRequest) -> ScheduleInterviewResponse:
+        """Book a round for an interviewer who isn't an employee.
+
+        No slot to match against — an ad-hoc slot is created for the
+        scheduler's chosen time window, and the interviewer's email is
+        stored on the round (see InterviewRepository.get_interviewer_emails_for_round)
+        instead of a round_interviewers row. Everything past that point
+        (calendar invite, notifications, fallback/ongoing cron) is the same
+        path a normal booking takes.
+        """
+        logger.info("Booking external interviewer: candidate=%s | email=%s | round=%s",
+                    data.candidate_id, data.interviewer_email, data.round_name)
+
+        candidate = self.repository.get_candidate_by_id(data.candidate_id)
+        if not candidate:
+            raise ApplicationNotFoundException(data.candidate_id)
+        if candidate.final_verdict is not None:
+            raise CandidateFinalizedException(data.candidate_id, candidate.final_verdict)
+
+        slot = self.repository.create_ad_hoc_slot(data.start_at, data.end_at)
+
+        round_obj = self.repository.create_round(
+            name=data.round_name, round_type=data.round_type,
+            candidate_id=data.candidate_id,
+            jd_id=uuid.UUID(data.jd_id), slot_id=slot.id,
+            external_interviewer_email=data.interviewer_email,
+            external_interviewer_name=data.interviewer_name,
+        )
+
+        prev_round_id = candidate.current_round_id
+        candidate.current_round_id = round_obj.id
+        self.db.flush()
+
+        result = self._schedule_svc.schedule_interview(
+            round_id=round_obj.id, slot_id=slot.id,
+            create_google_meet=data.create_google_meet, commit=False,
+        )
+        self.db.commit()
+        self._event_service.create_event(EventCreate(
+            entity_type="CANDIDATE",
+            entity_id=str(data.candidate_id),
+            candidate_id=data.candidate_id,
+            job_id=uuid.UUID(data.jd_id),
+            event_name="Round Booked",
+            state_code="ROUND_BOOKED",
+            actor_type="HR",
+            event_metadata={
+                "round_id": str(round_obj.id),
+                "round_name": data.round_name,
+                "round_type": data.round_type,
+                "jd_id": data.jd_id,
+                "from_round_id": str(prev_round_id) if prev_round_id else None,
+                "interviewer_count": 1,
+                "external_interviewer_email": data.interviewer_email,
+                "source": "booking_service_external",
+            },
+        ))
+        logger.info("Booked (external): id=%s | round=%s", result.id, result.round_id)
         return result

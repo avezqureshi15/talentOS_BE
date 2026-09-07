@@ -18,7 +18,11 @@ class Slot(Base):
     __tablename__ = "slots"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    employee_id: Mapped[int] = mapped_column(Integer, ForeignKey("employees.id"), nullable=False, index=True)
+    # Null for an ad-hoc slot created for a manually-entered (non-employee)
+    # interviewer — see InterviewRepository.create_ad_hoc_slot. It has no
+    # owner's calendar to belong to, so it never shows up in employee slot
+    # listings, which filter on employee_id.
+    employee_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("employees.id"), nullable=True, index=True)
     start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     end_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     status: Mapped[str] = mapped_column(

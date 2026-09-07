@@ -129,7 +129,11 @@ class ApplicationRepository:
             interview_by_round[rid] = {
                 "interview_id": str(interview.id),
                 "interviewer_emp_id": None,
-                "interviewer_name": None,
+                # No round_interviewers row for a manually-entered interviewer —
+                # fall back to the email/name stored on the round itself. The
+                # round_interviewers loop below overwrites this for a real
+                # employee interviewer; it has nothing to overwrite here.
+                "interviewer_name": round_.external_interviewer_name or round_.external_interviewer_email,
                 "round_name": round_.name or "",
                 "scheduled_at": scheduled_at,
                 "scheduled_end_at": scheduled_end_at,
@@ -153,7 +157,7 @@ class ApplicationRepository:
                 interview_by_round[rid] = {
                     "interview_id": None,
                     "interviewer_emp_id": None,
-                    "interviewer_name": None,
+                    "interviewer_name": r.external_interviewer_name or r.external_interviewer_email,
                     "round_name": r.name or "",
                     "scheduled_at": scheduled_at,
                     "scheduled_end_at": scheduled_end_at,
