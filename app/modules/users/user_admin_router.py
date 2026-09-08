@@ -82,7 +82,7 @@ def _user_to_admin_response(u: User) -> AdminUserResponse:
 @router.get("", response_model=PaginatedAdminUserResponse)
 def list_users(
     q: str | None = Query(None, description="Search by name or email"),
-    tenant_id: int | None = Query(None, description="Ignored for superadmin — see below"),
+    tenant_id: int | None = Query(None, description="Optional for superadmin (scopes to one tenant); required for other roles"),
     page: int = Query(1, ge=1),
     per_page: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
     db: Session = Depends(get_db),
@@ -91,10 +91,13 @@ def list_users(
     if current_user.role == "superadmin":
         # Privacy: superadmin only sees users they personally created (Admin →
         # Users) or invited — not every account a tenant org has entered on
-        # its own. tenant_id is intentionally ignored here (still used by the
-        # create/update/delete/invite endpoints below, which are targeted
-        # actions against a specific tenant, not browsing).
+        # its own. tenant_id is still applied when given (e.g. browsing one
+        # tenant's user panel) so a user created in tenant A doesn't leak into
+        # every other tenant's list — it's just no longer *required* the way
+        # _resolve_tenant enforces for the other endpoints below.
         query = db.query(User).filter(User.created_by_user_id == current_user.id)
+        if tenant_id is not None:
+            query = query.filter(User.tenant_id == tenant_id)
     else:
         tid = _resolve_tenant(current_user, tenant_id)
         query = db.query(User).filter(User.tenant_id == tid)
