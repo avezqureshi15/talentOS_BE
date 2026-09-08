@@ -39,7 +39,7 @@ class TenantService:
             counter += 1
         return slug
 
-    def _tenant_to_response(self, tenant: Tenant) -> TenantResponse:
+    def _tenant_to_response(self, tenant: Tenant, viewer_user_id: int | None = None) -> TenantResponse:
         last_active_at = self.repo.get_last_login_at(tenant.id) or tenant.created_at
         is_inactive = (
             datetime.now(timezone.utc) - last_active_at
@@ -51,7 +51,10 @@ class TenantService:
             slug=tenant.slug,
             is_active=tenant.is_active,
             verification_status=tenant.verification_status,
-            user_count=self.repo.count_users(tenant.id),
+            # Same privacy scoping as GET /admin/users — superadmin only sees
+            # a count of users they personally created/invited, not the
+            # tenant's full org-managed headcount.
+            user_count=self.repo.count_users(tenant.id, created_by_user_id=viewer_user_id),
             employee_count=self.repo.count_employees(tenant.id),
             logo_url=tenant.logo_url,
             website=tenant.website,
@@ -116,12 +119,13 @@ class TenantService:
         per_page: int = DEFAULT_PAGE_SIZE,
         search: str | None = None,
         status_filter: str | None = None,
+        viewer_user_id: int | None = None,
     ) -> PaginatedTenantResponse:
         if per_page > MAX_PAGE_SIZE:
             per_page = MAX_PAGE_SIZE
 
         tenants, total = self.repo.list_tenants(page, per_page, search, status_filter)
-        data = [self._tenant_to_response(t) for t in tenants]
+        data = [self._tenant_to_response(t, viewer_user_id) for t in tenants]
         has_more = (page * per_page) < total
 
         return PaginatedTenantResponse(
@@ -132,13 +136,13 @@ class TenantService:
             has_more=has_more,
         )
 
-    def get_tenant(self, tenant_id: int) -> TenantResponse:
+    def get_tenant(self, tenant_id: int, viewer_user_id: int | None = None) -> TenantResponse:
         tenant = self.repo.get_by_id(tenant_id)
         if not tenant:
             raise TenantError("Tenant not found", status_code=404)
-        return self._tenant_to_response(tenant)
+        return self._tenant_to_response(tenant, viewer_user_id)
 
-    def update_tenant(self, tenant_id: int, data: dict) -> TenantResponse:
+    def update_tenant(self, tenant_id: int, data: dict, viewer_user_id: int | None = None) -> TenantResponse:
         tenant = self.repo.get_by_id(tenant_id)
         if not tenant:
             raise TenantError("Tenant not found", status_code=404)
@@ -146,7 +150,7 @@ class TenantService:
         self.repo.update_tenant(tenant, data)
         self.db.commit()
         self.db.refresh(tenant)
-        return self._tenant_to_response(tenant)
+        return self._tenant_to_response(tenant, viewer_user_id)
 
     def delete_tenant(self, tenant_id: int) -> None:
         tenant = self.repo.get_by_id(tenant_id)

@@ -56,7 +56,7 @@ def list_tenants(
     current_user: UserInfo = Depends(require_permission(Permission.TENANT_VIEW)),
 ):
     service = TenantService(db)
-    return service.list_tenants(page=page, per_page=per_page, search=q, status_filter=status)
+    return service.list_tenants(page=page, per_page=per_page, search=q, status_filter=status, viewer_user_id=current_user.id)
 
 
 @router.get("/{tenant_id}", response_model=TenantResponse)
@@ -67,7 +67,7 @@ def get_tenant(
 ):
     service = TenantService(db)
     try:
-        return service.get_tenant(tenant_id)
+        return service.get_tenant(tenant_id, viewer_user_id=current_user.id)
     except TenantError as e:
         raise HTTPException(status_code=e.status_code, detail=e.message)
 
@@ -82,7 +82,7 @@ def update_tenant(
     service = TenantService(db)
     data = body.model_dump(exclude_none=True)
     try:
-        return service.update_tenant(tenant_id, data)
+        return service.update_tenant(tenant_id, data, viewer_user_id=current_user.id)
     except TenantError as e:
         raise HTTPException(status_code=e.status_code, detail=e.message)
 

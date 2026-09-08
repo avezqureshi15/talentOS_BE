@@ -105,15 +105,13 @@ class TenantRepository:
         logger.info("Created invite for tenant_id=%d email=%s", tenant_id, email)
         return invite
 
-    def count_users(self, tenant_id: int) -> int:
+    def count_users(self, tenant_id: int, created_by_user_id: int | None = None) -> int:
         from app.modules.users.user_model import User
 
-        return (
-            self.db.query(func.count(User.id))
-            .filter(User.tenant_id == tenant_id)
-            .scalar()
-            or 0
-        )
+        query = self.db.query(func.count(User.id)).filter(User.tenant_id == tenant_id)
+        if created_by_user_id is not None:
+            query = query.filter(User.created_by_user_id == created_by_user_id)
+        return query.scalar() or 0
 
     def count_employees(self, tenant_id: int) -> int:
         from app.modules.employees.employee_model import Employee
