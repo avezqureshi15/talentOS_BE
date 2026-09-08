@@ -1,7 +1,8 @@
+from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import and_, func, or_
-from sqlalchemy.orm import Session
+from sqlalchemy import and_, exists, func, or_
+from sqlalchemy.orm import Query, Session
 
 from app.modules.employees.employee_model import Employee
 
@@ -27,6 +28,24 @@ class EmployeeDirectoryRepository:
     def get_by_email(self, email: str) -> Employee | None:
         return self.db.query(Employee).filter(Employee.email == email).first()
 
+    def _apply_invite_eligible_filter(self, base_query: Query, tenant_id: int | None) -> Query:
+        from app.modules.auth.invite_model import TenantInvite
+        from app.modules.users.user_model import User
+
+        linked_user = exists().where(User.employee_id == Employee.id)
+        email_user = exists().where(User.email == Employee.email)
+
+        invite_clauses = [
+            TenantInvite.email == Employee.email,
+            TenantInvite.accepted_at.is_(None),
+            TenantInvite.expires_at > datetime.now(timezone.utc),
+        ]
+        if tenant_id is not None:
+            invite_clauses.append(TenantInvite.tenant_id == tenant_id)
+        pending_invite = exists().where(and_(*invite_clauses))
+
+        return base_query.filter(~linked_user, ~email_user, ~pending_invite)
+
     def search_paginated(
         self,
         query: str | None = None,
@@ -35,6 +54,7 @@ class EmployeeDirectoryRepository:
         slots_info: bool = False,
         tenant_id: int | None = None,
         authorized_only: bool = False,
+        invite_eligible: bool = False,
     ) -> tuple[list[Employee] | list[tuple[Employee, int]], int]:
         base_query = self.db.query(Employee)
 
@@ -52,6 +72,9 @@ class EmployeeDirectoryRepository:
                     User.role != "",
                 )
             )
+
+        if invite_eligible:
+            base_query = self._apply_invite_eligible_filter(base_query, tenant_id)
 
         if query:
             base_query = base_query.filter(

@@ -140,9 +140,19 @@ def list_employees(
     per_page: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
     slotsInfo: bool = Query(False, description="Include slot availability info and sort by slot count"),
     authorized_only: bool = Query(False, description="Only return employees with an active, role-bearing user account"),
+    invite_eligible: bool = Query(
+        False,
+        description="Only return employees who can be invited (no linked user, no colliding user email, no pending invite)",
+    ),
     db: Session = Depends(get_db),
     current_user: UserInfo = Depends(require_permission(Permission.EMPLOYEE_VIEW)),
 ):
+    if authorized_only and invite_eligible:
+        raise HTTPException(
+            status_code=400,
+            detail="authorized_only and invite_eligible cannot be used together",
+        )
+
     repo = EmployeeDirectoryRepository(db)
 
     tenant_id: int | None = current_user.tenant_id
@@ -156,6 +166,7 @@ def list_employees(
         slots_info=slotsInfo,
         tenant_id=tenant_id,
         authorized_only=authorized_only,
+        invite_eligible=invite_eligible,
     )
 
     employees: list[Employee] = (
