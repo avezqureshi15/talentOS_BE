@@ -161,6 +161,39 @@ class ApplicationStateService:
     def set_final_verdict(self, candidate_id: int, verdict: str) -> EvaluationResponse:
         return self.trigger_transition(f"final.selection.{verdict}", candidate_id=candidate_id)
 
+    def resume_from_hold(self, candidate_id: int) -> EvaluationResponse:
+        from app.core.constants import EvaluationStatus, get_pipeline_stage
+
+        candidate = self.repo.get_by_candidate_id(candidate_id)
+        if not candidate:
+            raise ApplicationNotFoundException(candidate_id)
+        if candidate.final_verdict != "ON_HOLD":
+            from fastapi import HTTPException
+
+            raise HTTPException(status_code=400, detail="Candidate is not currently on hold")
+
+        # Any interview that was active when the candidate went on hold was
+        # already cancelled at that point (see trigger_transition), so there's
+        # no in-flight round state worth restoring — drop back into
+        # MOVE_TO_NEXT_ROUND, same landing spot "Move to Next Round" uses, and
+        # let the recruiter decide the next step (schedule a fresh round).
+        candidate.final_verdict = None
+        candidate.status = EvaluationStatus.MOVE_TO_NEXT_ROUND.value
+        candidate.stage = get_pipeline_stage(candidate.status, None)
+        self.db.commit()
+        self.db.refresh(candidate)
+
+        logger.info("Candidate resumed from hold: candidate_id=%s", candidate_id)
+        EventService(self.db).create_event(EventCreate(
+            entity_type="CANDIDATE",
+            entity_id=str(candidate_id),
+            event_name="Candidate Resumed From Hold",
+            state_code="CANDIDATE_RESUMED",
+            actor_type="HR",
+            candidate_id=candidate_id,
+        ))
+        return EvaluationResponse.model_validate(candidate)
+
     def update_candidate_status(self, candidate_id: int, new_status: str) -> EvaluationResponse:
         # Capture from-state before the mutation so the event metadata can
         # describe the transition rather than just the destination.

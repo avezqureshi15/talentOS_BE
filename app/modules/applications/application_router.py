@@ -149,3 +149,9 @@ def create_application(data: ApplicationCreate):
 def move_candidate_to_next_round(candidate_id: int, db: Session = Depends(get_db)):
     service = ApplicationService(db)
     return service.move_to_next_round(candidate_id)
+
+
+@router.post("/candidates/{candidate_id}/resume", response_model=EvaluationResponse, dependencies=[Depends(require_permission(Permission.APPLICATION_EVALUATE))])
+def resume_candidate_from_hold(candidate_id: int, db: Session = Depends(get_db)):
+    service = ApplicationService(db)
+    return service.resume_from_hold(candidate_id)

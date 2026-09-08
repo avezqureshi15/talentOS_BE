@@ -215,6 +215,10 @@ class ApplicationService:
         if not self.state_svc: raise ValueError("State service not available")
         return self.state_svc.set_final_verdict(candidate_id, verdict)
 
+    def resume_from_hold(self, candidate_id: int) -> EvaluationResponse:
+        if not self.state_svc: raise ValueError("State service not available")
+        return self.state_svc.resume_from_hold(candidate_id)
+
     def set_candidate_round_status(self, candidate_id: int, data) -> dict:
         from app.modules.evaluations.evaluation_model import Candidate
         candidate = self.db.query(Candidate).filter(Candidate.id == candidate_id).first()
