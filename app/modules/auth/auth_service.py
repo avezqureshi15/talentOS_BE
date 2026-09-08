@@ -217,6 +217,7 @@ class AuthService:
             tenant_id=invite.tenant_id,
             role=invite.role,
             status="active",
+            created_by_user_id=invite.invited_by_user_id,
         )
 
         invite.accepted_at = datetime.now(timezone.utc)

@@ -33,6 +33,13 @@ class User(Base):
     )
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # Who created this account (direct admin-create, or whoever sent the
+    # accepted invite). Null for self-service signup / Google first-login.
+    # Superadmin's user list is scoped to this — see user_admin_router.list_users.
+    created_by_user_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id"), nullable=True
+    )
+
     # HR/directory fields (designation, department, doj, band, skills, etc.)
     # live on the linked Employee row. Access via ``user.employee``.
     employee = relationship("Employee", lazy="joined")

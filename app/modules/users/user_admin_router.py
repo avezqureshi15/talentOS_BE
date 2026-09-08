@@ -82,14 +82,22 @@ def _user_to_admin_response(u: User) -> AdminUserResponse:
 @router.get("", response_model=PaginatedAdminUserResponse)
 def list_users(
     q: str | None = Query(None, description="Search by name or email"),
-    tenant_id: int | None = Query(None, description="Required for superadmin — filters by tenant"),
+    tenant_id: int | None = Query(None, description="Ignored for superadmin — see below"),
     page: int = Query(1, ge=1),
     per_page: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
     db: Session = Depends(get_db),
     current_user: UserInfo = Depends(require_permission(Permission.USER_MANAGE)),
 ):
-    tid = _resolve_tenant(current_user, tenant_id)
-    query = db.query(User).filter(User.tenant_id == tid)
+    if current_user.role == "superadmin":
+        # Privacy: superadmin only sees users they personally created (Admin →
+        # Users) or invited — not every account a tenant org has entered on
+        # its own. tenant_id is intentionally ignored here (still used by the
+        # create/update/delete/invite endpoints below, which are targeted
+        # actions against a specific tenant, not browsing).
+        query = db.query(User).filter(User.created_by_user_id == current_user.id)
+    else:
+        tid = _resolve_tenant(current_user, tenant_id)
+        query = db.query(User).filter(User.tenant_id == tid)
     if q:
         query = query.filter(
             User.name.ilike(f"%{q}%") | User.email.ilike(f"%{q}%")
@@ -124,6 +132,7 @@ def create_user(
         role=body.role,
         is_active=True,
         status="active",
+        created_by_user_id=current_user.id if not current_user.is_api_key else None,
     )
     db.add(user)
     db.flush()
