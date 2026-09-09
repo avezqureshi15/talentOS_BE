@@ -30,6 +30,13 @@ class WebhookRecord(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
+    @field_validator("willing_to_relocate", mode="before")
+    @classmethod
+    def coerce_willing_to_relocate(cls, v: object) -> bool:
+        if v is None:
+            return False
+        return bool(v)
+
 
 class SupabaseWebhookPayload(BaseModel):
     """Fixed envelope Supabase sends to database webhooks."""

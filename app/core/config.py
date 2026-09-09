@@ -63,6 +63,10 @@ class Settings(BaseSettings):
     # Service-role key for downloading resumes from private Supabase Storage buckets.
     # Leave empty if the resume bucket is public.
     SUPABASE_SERVICE_ROLE_KEY: str = ""
+    # Careers-site project service role (Add candidate upload + job_applications).
+    # Separate from SUPABASE_SERVICE_ROLE_KEY so OpenBao does not overwrite it.
+    # JWT `ref` must match the host in SUPABASE_FUNCTIONS_BASE_URL.
+    SUPABASE_CAREERS_SERVICE_ROLE_KEY: str = ""
 
     # Kafka / Redpanda
     KAFKA_BOOTSTRAP_SERVERS: str = "localhost:9092"
