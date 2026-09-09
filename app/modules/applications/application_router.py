@@ -58,7 +58,7 @@ def get_all_applications(
     ai: bool = Query(default=False, description="If true, omit cover_letter from response"),
     q: str | None = Query(default=None, description="Search candidates by name or email"),
     reject_reason: str | None = Query(default=None, description="Comma-separated rejection reasons (yoe,location,budget,notice_period)"),
-    stage: str | None = Query(default=None, description="Filter by pipeline stage (resume-shortlisting, screening, interview, waiting-evaluation, evaluated)"),
+    stage: str | None = Query(default=None, description="Filter by pipeline stage (resume-shortlisting, screening, interview, waiting-evaluation, evaluated, evaluation)"),
     candidate_type: str | None = Query(default=None, description="Filter by candidate type (REGULAR, REFERRAL, ...)"),
     archived: bool = Query(default=False, description="Filter by archived status (default excludes archived)"),
     db: Session = Depends(get_db),

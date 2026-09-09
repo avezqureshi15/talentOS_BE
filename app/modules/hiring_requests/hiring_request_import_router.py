@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -9,6 +9,7 @@ from app.core.authorization import require_permission
 from app.core.config import settings
 from app.core.permissions import Permission
 from app.db.session import get_db
+from app.modules.hiring_requests.add_candidate_service import AddCandidateService
 from app.modules.hiring_requests.excel.import_service import CandidateImportService
 
 router = APIRouter(
@@ -30,6 +31,31 @@ class ImportSummary(BaseModel):
     imported: int
     skipped_duplicates: int
     failed: list[ImportRowError]
+
+
+class AddCandidateResponse(BaseModel):
+    id: str
+    status: str
+
+
+@router.post("/{hiring_request_id}/candidates", response_model=AddCandidateResponse)
+def add_candidate(
+    hiring_request_id: UUID,
+    name: str = Form(...),
+    email: str = Form(...),
+    phone: str = Form(...),
+    referral: bool = Form(False),
+    resume: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    return AddCandidateService(db).add_candidate(
+        hiring_request_id,
+        name=name,
+        email=email,
+        phone=phone,
+        referral=referral,
+        resume=resume,
+    )
 
 
 @router.post("/{hiring_request_id}/import-candidates", response_model=ImportSummary)

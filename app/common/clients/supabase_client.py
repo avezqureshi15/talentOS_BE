@@ -1,9 +1,14 @@
 from uuid import UUID
 
+import httpx
+
 from app.common.clients.base_client import BaseClient, ClientError
 from app.core.config import settings
 from app.core.constants import ErrorCode
 from app.core.logger import get_logger
+from app.core.secrets import get_secret
+
+_RESUME_BUCKET = "resumes"
 
 logger = get_logger(__name__)
 
@@ -79,6 +84,67 @@ class SupabaseClient(BaseClient):
     def send_application_email(self, payload: dict) -> dict:
         logger.info("Sending application email via Supabase function")
         return self._post("send-application-email", json_data=payload).json()
+
+    # ── careers apply (storage + REST) ─────────────────────────
+
+    def _project_origin(self) -> str:
+        base = (self._base_url or "").rstrip("/")
+        if base.endswith("/functions/v1"):
+            return base[: -len("/functions/v1")]
+        if not base:
+            raise ClientError(message="Resume storage is not configured", status_code=503)
+        return base
+
+    def _careers_service_role_headers(self) -> dict[str, str]:
+        key = get_secret("SUPABASE_CAREERS_SERVICE_ROLE_KEY")
+        if not key:
+            raise ClientError(message="Resume storage is not configured", status_code=503)
+        return {"Authorization": f"Bearer {key}", "apikey": key}
+
+    def upload_resume(self, object_name: str, content: bytes) -> str:
+        """Upload a PDF to the careers `resumes` bucket. Returns the object URL."""
+        origin = self._project_origin()
+        url = f"{origin}/storage/v1/object/{_RESUME_BUCKET}/{object_name}"
+        headers = {
+            **self._careers_service_role_headers(),
+            "Content-Type": "application/pdf",
+            "x-upsert": "true",
+        }
+        try:
+            response = self.sync.post(url, content=content, headers=headers, timeout=60)
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            logger.error("Resume upload failed: status=%s body=%s", exc.response.status_code, exc.response.text[:200])
+            raise ClientError(message="Failed to upload resume", status_code=502) from exc
+        except httpx.RequestError as exc:
+            logger.error("Resume upload connection error: %s", exc)
+            raise ClientError(message="Failed to upload resume", status_code=503) from exc
+        return url
+
+    def create_job_application(self, payload: dict) -> dict:
+        """Insert a row into `job_applications` (same as the careers apply form)."""
+        origin = self._project_origin()
+        url = f"{origin}/rest/v1/job_applications"
+        headers = {
+            **self._careers_service_role_headers(),
+            "Content-Type": "application/json",
+            "Prefer": "return=representation",
+        }
+        try:
+            response = self.sync.post(url, json=payload, headers=headers, timeout=30)
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            logger.error("job_applications insert failed: status=%s body=%s", exc.response.status_code, exc.response.text[:200])
+            raise ClientError(message="Failed to create application", status_code=502) from exc
+        except httpx.RequestError as exc:
+            logger.error("job_applications insert connection error: %s", exc)
+            raise ClientError(message="Failed to create application", status_code=503) from exc
+
+        data = response.json()
+        row = data[0] if isinstance(data, list) and data else data
+        if not isinstance(row, dict) or row.get("id") is None:
+            raise ClientError(message="Failed to create application", status_code=502)
+        return row
 
     # ── custom error mapping ─────────────────────────────────────
 

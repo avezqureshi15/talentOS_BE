@@ -1,4 +1,4 @@
-from sqlalchemy import func, or_
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
 from app.modules.applications.application_response import extract_disqualified_by
@@ -10,6 +10,7 @@ RESUME_SHORTLISTING_ROUND_TYPE = "RESUME_SHORTLISTING"
 
 # Mirrors the FE pipeline stage tabs (STAGE_FILTER_MAP in detail.constants.ts).
 # key -> (stage values, status values); "waiting-evaluation" uses OR semantics.
+# "evaluation" is the union of waiting-evaluation + evaluated (merged FE tab).
 STAGE_QUERY_MAP: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     "resume-shortlisting": (("RESUME_SHORTLISTING", "RESUME_SHORTLISTED"), ()),
     "screening": (("SCREENING", "AI_SCREENING"), ()),
@@ -18,8 +19,27 @@ STAGE_QUERY_MAP: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
         ("INTERVIEW_SCHEDULED", "INTERVIEW_RESCHEDULED", "INTERVIEW_CANCELLED", "ONGOING"),
     ),
     "waiting-evaluation": (("WAITING_FOR_EVALUATION",), ("WAITING_FOR_REVIEW",)),
-    "evaluated": (("INTERVIEW", "AI_INTERVIEW"), ("UNDER_EVALUATION",)),
+    "evaluated": (("INTERVIEW", "AI_INTERVIEW"), ("UNDER_EVALUATION", "MOVE_TO_NEXT_ROUND")),
 }
+
+_WAITING_EVAL_STAGES = ("WAITING_FOR_EVALUATION",)
+_WAITING_EVAL_STATUSES = ("WAITING_FOR_REVIEW",)
+_EVALUATED_STAGES = ("INTERVIEW", "AI_INTERVIEW")
+_EVALUATED_STATUSES = ("UNDER_EVALUATION", "MOVE_TO_NEXT_ROUND")
+
+
+def _waiting_evaluation_clause():
+    return or_(
+        Candidate.stage.in_(_WAITING_EVAL_STAGES),
+        Candidate.status.in_(_WAITING_EVAL_STATUSES),
+    )
+
+
+def _evaluated_clause():
+    return and_(
+        Candidate.stage.in_(_EVALUATED_STAGES),
+        Candidate.status.in_(_EVALUATED_STATUSES),
+    )
 
 
 def _apply_candidate_filters(
@@ -92,12 +112,9 @@ def _apply_candidate_filters(
     if stage:
         stage_key = stage.strip().lower().replace(" ", "-")
         if stage_key == "waiting-evaluation":
-            query = query.filter(
-                or_(
-                    Candidate.stage.in_(("WAITING_FOR_EVALUATION",)),
-                    Candidate.status.in_(("WAITING_FOR_REVIEW",)),
-                )
-            )
+            query = query.filter(_waiting_evaluation_clause())
+        elif stage_key == "evaluation":
+            query = query.filter(or_(_waiting_evaluation_clause(), _evaluated_clause()))
         else:
             stage_values, status_values = STAGE_QUERY_MAP.get(stage_key, ((), ()))
             if stage_values and status_values:
@@ -176,17 +193,16 @@ def count_candidates_by_stage(
     archived: bool | None = False,
     apply_reject_reason_override: bool = True,
 ) -> dict[str, int]:
-    """Per-stage counts for the pipeline tabs, using the same filters as the list query.
-    The disqualified-by (reject_reason) filter only applies to the resume-shortlisting
-    tab, so it is excluded from the base counts and applied to that stage separately."""
+    """Per-stage counts for the pipeline tabs.
+
+    ATS list filters (round_verdict, score) and disqualified-by (reject_reason)
+    only apply to the resume-shortlisting badge so other tab counts stay full.
+    """
     query = _apply_candidate_filters(
         db,
         job_id=job_id,
         status=status,
         schedule=schedule,
-        round_verdict=round_verdict,
-        min_score=min_score,
-        max_score=max_score,
         date_from=date_from,
         date_to=date_to,
         exclude_finalized=exclude_finalized,
@@ -215,7 +231,8 @@ def count_candidates_by_stage(
         ):
             counts["waiting-evaluation"] += cnt
 
-    if reject_reason and apply_reject_reason_override:
+    ats_list_filters = bool(round_verdict or min_score is not None or max_score is not None)
+    if ats_list_filters or (reject_reason and apply_reject_reason_override):
         filtered_query = _apply_candidate_filters(
             db,
             job_id=job_id,
@@ -228,7 +245,7 @@ def count_candidates_by_stage(
             date_to=date_to,
             exclude_finalized=exclude_finalized,
             search=search,
-            reject_reason=reject_reason,
+            reject_reason=reject_reason if apply_reject_reason_override else None,
             stage="resume-shortlisting",
             archived=archived,
         )
