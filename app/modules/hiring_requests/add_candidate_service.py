@@ -1,3 +1,4 @@
+import re
 import uuid
 from uuid import UUID
 
@@ -15,6 +16,11 @@ from app.modules.hiring_requests.excel.import_service import (
 logger = get_logger(__name__)
 
 MAX_RESUME_BYTES = 2 * 1024 * 1024
+
+
+def _is_valid_phone(value: str) -> bool:
+    digits = re.sub(r"[\s\-()]", "", value.strip())
+    return bool(re.fullmatch(r"[6-9]\d{9}", digits))
 
 
 class AddCandidateService:
@@ -81,8 +87,11 @@ class AddCandidateService:
             errors.append("Email is required")
         elif not EMAIL_RE.match(email_value):
             errors.append("Email is invalid")
-        if not (phone or "").strip():
+        phone_value = (phone or "").strip()
+        if not phone_value:
             errors.append("Phone is required")
+        elif not _is_valid_phone(phone_value):
+            errors.append("Phone must be a 10-digit number starting with 6, 7, 8, or 9")
         return errors
 
     @staticmethod

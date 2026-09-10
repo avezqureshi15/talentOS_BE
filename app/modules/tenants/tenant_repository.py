@@ -84,9 +84,18 @@ class TenantRepository:
         if tenant.deleted_at is None:
             tenant.deleted_at = datetime.now(timezone.utc)
             tenant.is_active = False
+            self.deactivate_tenant_users(tenant.id)
             self.invalidate_tenant_sessions(tenant.id)
         self.db.flush()
         logger.info("Deleted tenant: id=%d", tenant.id)
+
+    def deactivate_tenant_users(self, tenant_id: int) -> None:
+        from app.modules.users.user_model import User
+
+        self.db.query(User).filter(User.tenant_id == tenant_id).update(
+            {User.is_active: False},
+            synchronize_session=False,
+        )
 
     def invalidate_tenant_sessions(self, tenant_id: int) -> None:
         from app.modules.users.user_model import User

@@ -19,6 +19,7 @@ from app.modules.employees.employee_lookup import ensure_employee_for_user
 from app.modules.hiring_requests.hiring_request_model import HiringRequest
 from app.modules.job_teams.job_team_model import JobTeamMember
 from app.modules.roles.role_service import RoleService
+from app.modules.tenants.tenant_access import tenant_lock_message
 from app.modules.tenants.tenant_model import Tenant
 from app.modules.users.user_model import User
 from app.modules.users.user_schema import (
@@ -64,6 +65,17 @@ def _org_name_for_tenant(db: Session, tenant_id: int | None) -> str | None:
         return None
     tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
     return tenant.name if tenant else None
+
+
+def _require_writable_tenant(db: Session, tenant_id: int | None) -> None:
+    if tenant_id is None:
+        return
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if tenant is None:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    message = tenant_lock_message(tenant)
+    if message:
+        raise HTTPException(status_code=403, detail=message)
 
 
 def _user_to_admin_response(u: User) -> AdminUserResponse:
@@ -119,6 +131,7 @@ def create_user(
     current_user: UserInfo = Depends(require_permission(Permission.USER_MANAGE)),
 ):
     tid = _resolve_tenant(current_user, body.tenant_id)
+    _require_writable_tenant(db, tid)
     _validate_role(db, body.role)
 
     existing = db.query(User).filter(User.email == body.email).first()
@@ -154,6 +167,7 @@ def update_user(
     current_user: UserInfo = Depends(require_permission(Permission.USER_MANAGE)),
 ):
     tid = _resolve_tenant(current_user, body.tenant_id)
+    _require_writable_tenant(db, tid)
     _validate_role(db, body.role)
     user = db.query(User).filter(User.id == user_id, User.tenant_id == tid).first()
     if not user:
@@ -203,6 +217,7 @@ def deactivate_user(
     current_user: UserInfo = Depends(require_permission(Permission.USER_MANAGE)),
 ):
     tid = _resolve_tenant(current_user, tenant_id)
+    _require_writable_tenant(db, tid)
     user = db.query(User).filter(User.id == user_id, User.tenant_id == tid).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -274,6 +289,7 @@ def create_invite(
     if current_user.is_api_key:
         raise HTTPException(status_code=403, detail="Invites cannot be created by an API key")
     tid = _resolve_tenant(current_user, body.tenant_id)
+    _require_writable_tenant(db, tid)
     _validate_role(db, body.role)
 
     existing_invite = db.query(TenantInvite).filter(
@@ -358,6 +374,7 @@ def resend_invite(
     current_user: UserInfo = Depends(require_permission(Permission.USER_MANAGE)),
 ):
     tid = _resolve_tenant(current_user, body.tenant_id)
+    _require_writable_tenant(db, tid)
 
     invite = db.query(TenantInvite).filter(
         TenantInvite.tenant_id == tid,
