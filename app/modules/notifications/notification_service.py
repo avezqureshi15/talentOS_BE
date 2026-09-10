@@ -164,6 +164,20 @@ class NotificationService:
             **kwargs,
         )
 
+    def notify_superadmins(self, **kwargs) -> int:
+        """Fan out to platform Super Admins (users with role superadmin)."""
+        from app.modules.users.user_model import User
+
+        if not self.db:
+            return 0
+        user_ids = [
+            row[0]
+            for row in self.db.query(User.id)
+            .filter(User.role == "superadmin", User.is_active.is_(True))
+            .all()
+        ]
+        return self.notify_many(user_ids, **kwargs)
+
     def list_mine(
         self,
         employee_id: int,

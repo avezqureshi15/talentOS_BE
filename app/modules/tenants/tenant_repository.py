@@ -55,9 +55,11 @@ class TenantRepository:
 
         if status_filter:
             if status_filter == "active":
-                query = query.filter(Tenant.is_active == True)
+                query = query.filter(Tenant.is_active == True, Tenant.deleted_at.is_(None))
             elif status_filter == "suspended":
-                query = query.filter(Tenant.is_active == False)
+                query = query.filter(Tenant.is_active == False, Tenant.deleted_at.is_(None))
+            elif status_filter == "deleted":
+                query = query.filter(Tenant.deleted_at.isnot(None))
             elif status_filter:
                 query = query.filter(Tenant.verification_status == status_filter)
 
@@ -79,9 +81,20 @@ class TenantRepository:
         return tenant
 
     def delete_tenant(self, tenant: Tenant) -> None:
-        tenant.is_active = False
+        if tenant.deleted_at is None:
+            tenant.deleted_at = datetime.now(timezone.utc)
+            tenant.is_active = False
+            self.invalidate_tenant_sessions(tenant.id)
         self.db.flush()
-        logger.info("Soft-deleted tenant: id=%d", tenant.id)
+        logger.info("Deleted tenant: id=%d", tenant.id)
+
+    def invalidate_tenant_sessions(self, tenant_id: int) -> None:
+        from app.modules.users.user_model import User
+
+        self.db.query(User).filter(User.tenant_id == tenant_id).update(
+            {User.token_version: User.token_version + 1},
+            synchronize_session=False,
+        )
 
     def create_invite(
         self,
@@ -130,4 +143,29 @@ class TenantRepository:
             self.db.query(func.max(User.last_login_at))
             .filter(User.tenant_id == tenant_id)
             .scalar()
+        )
+
+    def list_quiet_tenants(self, cutoff: datetime) -> list[tuple[Tenant, datetime]]:
+        from app.modules.users.user_model import User
+
+        last_login_sq = (
+            self.db.query(
+                User.tenant_id.label("tenant_id"),
+                func.max(User.last_login_at).label("last_login_at"),
+            )
+            .group_by(User.tenant_id)
+            .subquery()
+        )
+        last_active = func.coalesce(last_login_sq.c.last_login_at, Tenant.created_at).label(
+            "last_active_at"
+        )
+        return (
+            self.db.query(Tenant, last_active)
+            .outerjoin(last_login_sq, last_login_sq.c.tenant_id == Tenant.id)
+            .filter(
+                Tenant.deleted_at.is_(None),
+                Tenant.is_active.is_(True),
+                last_active < cutoff,
+            )
+            .all()
         )

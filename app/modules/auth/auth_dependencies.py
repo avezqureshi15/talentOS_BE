@@ -4,6 +4,8 @@ from sqlalchemy.orm import Session
 from app.core.permissions import Permission
 from app.db.session import get_db
 from app.modules.auth.auth_schema import UserInfo
+from app.modules.tenants.tenant_access import tenant_lock_message
+from app.modules.tenants.tenant_model import Tenant
 
 
 def get_current_user(
@@ -23,6 +25,11 @@ def get_current_user(
 
         permissions = ApiKeyService.get_permissions_for_key(api_key.id, db)
         is_tenant_scoped = api_key.tenant_id is not None
+        if api_key.tenant_id:
+            tenant = db.query(Tenant).filter(Tenant.id == api_key.tenant_id).first()
+            lock = tenant_lock_message(tenant)
+            if lock:
+                raise HTTPException(status_code=403, detail=lock)
         # A key's stored role (account_admin / job_owner / reviewer)
         # drives its identity; legacy keys without a role keep the previous
         # behavior (account_admin for tenant-scoped, superadmin otherwise).
@@ -39,11 +46,13 @@ def get_current_user(
             is_api_key=True,
         )
 
-    from app.modules.auth.auth_service import AuthService
+    from app.modules.auth.auth_service import AuthError, AuthService
 
     service = AuthService(db)
     try:
         return service.get_current_user(token)
+    except AuthError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message)
     except Exception as exc:
         raise HTTPException(status_code=401, detail=str(exc))
 

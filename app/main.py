@@ -17,6 +17,7 @@ from app.db.session import engine
 from app.cron.hourly_jobs import setup_form_jobs
 from app.cron.interview_outcome import setup_interview_jobs
 from app.cron.link_reconciler import setup_link_reconciler
+from app.cron.org_inactivity import setup_org_inactivity_jobs
 from app.cron.screening_outcome import setup_screening_jobs
 from app.middleware import OriginCaptureMiddleware, RequestLoggingMiddleware, TenantContextMiddleware
 from app.scheduler import init_scheduler, start_scheduler, shutdown_scheduler
@@ -96,6 +97,7 @@ async def lifespan(app: FastAPI):
     ])
     scheduler = init_scheduler()
     setup_form_jobs(scheduler)
+    setup_org_inactivity_jobs(scheduler)
     setup_screening_jobs(scheduler)
     setup_interview_jobs(scheduler)
     setup_link_reconciler(scheduler)

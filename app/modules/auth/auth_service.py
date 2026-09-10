@@ -16,6 +16,7 @@ from app.common.exceptions.base_exception import BaseAppException
 from app.modules.auth.auth_repository import AuthRepository
 from app.modules.auth.auth_schema import UserInfo
 from app.modules.employees.employee_lookup import ensure_employee_for_user
+from app.modules.tenants.tenant_access import tenant_lock_message
 from app.modules.tenants.tenant_model import Tenant
 from app.modules.users.permission_service import PermissionService
 
@@ -94,13 +95,7 @@ class AuthService:
         if not user.is_active:
             raise AuthError("Your account has been deactivated. Contact your administrator.", status_code=423)
 
-        if user.tenant_id:
-            tenant = self.db.query(Tenant).filter(Tenant.id == user.tenant_id).first()
-            if tenant and tenant.verification_status != "approved":
-                raise AuthError(
-                    "Your organization is not yet verified. Please contact support.",
-                    status_code=403,
-                )
+        self._assert_tenant_access(user.tenant_id, check_verification=True)
 
         access_token, refresh_token, expires_in = self.create_tokens(user.id)
         return user, access_token, refresh_token, expires_in
@@ -185,6 +180,7 @@ class AuthService:
             raise AuthError("Invalid or expired invite token")
 
         tenant = self.db.query(Tenant).filter(Tenant.id == invite.tenant_id).first()
+        self._assert_tenant_access(invite.tenant_id)
         return {
             "email": invite.email,
             "role": invite.role,
@@ -202,6 +198,8 @@ class AuthService:
         ).first()
         if not invite:
             raise AuthError("Invalid or expired invite token")
+
+        self._assert_tenant_access(invite.tenant_id)
 
         existing = self.repo.get_user_by_email(invite.email)
         if existing:
@@ -244,6 +242,7 @@ class AuthService:
         if user:
             if not user.is_active:
                 raise AuthError("Your account has been deactivated.", status_code=423)
+            self._assert_tenant_access(user.tenant_id, check_verification=True)
             logger.info("Existing user logged in: email=%s id=%d", email, user.id)
             return user
 
@@ -302,6 +301,8 @@ class AuthService:
         if not record:
             raise AuthError("Invalid or expired refresh token")
         user = self.repo.get_user_by_id(record.user_id)
+        if user:
+            self._assert_tenant_access(user.tenant_id)
         perm_service = PermissionService(self.db)
         permissions = perm_service.get_permissions_for_role(user.role if user else "reviewer")
         access_token, expires_in = self._create_access_token(
@@ -334,6 +335,8 @@ class AuthService:
         if not user.is_active:
             raise AuthError("Your account has been deactivated.", status_code=423)
 
+        self._assert_tenant_access(user.tenant_id)
+
         if payload.get("ver", 0) != user.token_version:
             raise AuthError("Session expired. Please sign in again.")
 
@@ -342,3 +345,11 @@ class AuthService:
         if jwt_perms:
             user_info.permissions = jwt_perms
         return user_info
+
+    def _assert_tenant_access(self, tenant_id: int | None, *, check_verification: bool = False) -> None:
+        if not tenant_id:
+            return
+        tenant = self.db.query(Tenant).filter(Tenant.id == tenant_id).first()
+        message = tenant_lock_message(tenant, check_verification=check_verification)
+        if message:
+            raise AuthError(message, status_code=403)

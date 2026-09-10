@@ -20,6 +20,7 @@ class NotificationType(str, Enum):
     INTERVIEW_SCHEDULED = "INTERVIEW_SCHEDULED"
     FINAL_VERDICT = "FINAL_VERDICT"
     JOB_CREATED = "JOB_CREATED"
+    ORG_INACTIVE = "ORG_INACTIVE"
 
 
 class Notification(Base):

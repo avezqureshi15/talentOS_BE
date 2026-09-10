@@ -29,16 +29,17 @@ router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/auth", tags=["auth"])
 @router.post("/google", response_model=TokenResponse)
 def google_login(body: GoogleLoginRequest, db: Session = Depends(get_db)):
     service = AuthService(db)
-
-    google_info = service.verify_google_token(body.credential)
-    user = service.find_or_create_user(google_info)
-    access_token, refresh_token, expires_in = service.create_tokens(user.id)
-
-    return TokenResponse(
-        access_token=access_token,
-        refresh_token=refresh_token,
-        expires_in=expires_in,
-    )
+    try:
+        google_info = service.verify_google_token(body.credential)
+        user = service.find_or_create_user(google_info)
+        access_token, refresh_token, expires_in = service.create_tokens(user.id)
+        return TokenResponse(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            expires_in=expires_in,
+        )
+    except AuthError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.message)
 
 
 @router.post("/login", response_model=TokenResponse)

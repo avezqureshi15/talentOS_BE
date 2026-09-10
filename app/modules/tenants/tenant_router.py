@@ -49,7 +49,7 @@ def create_tenant(
 @router.get("", response_model=PaginatedTenantResponse)
 def list_tenants(
     q: str | None = Query(None, description="Search by name or slug"),
-    status: str | None = Query(None, description="Filter: pending, approved, rejected, active, suspended"),
+    status: str | None = Query(None, description="Filter: pending, approved, rejected, active, suspended, deleted"),
     page: int = Query(1, ge=1),
     per_page: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -96,6 +96,6 @@ def delete_tenant(
     service = TenantService(db)
     try:
         service.delete_tenant(tenant_id)
-        return {"message": "Tenant suspended successfully"}
+        return {"message": "Tenant deleted successfully"}
     except TenantError as e:
         raise HTTPException(status_code=e.status_code, detail=e.message)

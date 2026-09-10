@@ -20,6 +20,7 @@ class TenantResponse(BaseModel):
     name: str
     slug: str
     is_active: bool
+    deleted_at: datetime | None = None
     verification_status: str
     user_count: int = 0
     employee_count: int = 0

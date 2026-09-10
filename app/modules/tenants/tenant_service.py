@@ -50,6 +50,7 @@ class TenantService:
             name=tenant.name,
             slug=tenant.slug,
             is_active=tenant.is_active,
+            deleted_at=tenant.deleted_at,
             verification_status=tenant.verification_status,
             # Same privacy scoping as GET /admin/users — superadmin only sees
             # a count of users they personally created/invited, not the
@@ -146,8 +147,13 @@ class TenantService:
         tenant = self.repo.get_by_id(tenant_id)
         if not tenant:
             raise TenantError("Tenant not found", status_code=404)
+        if tenant.deleted_at is not None:
+            raise TenantError("This organization is permanently deleted.", status_code=403)
 
+        becoming_inactive = data.get("is_active") is False and tenant.is_active
         self.repo.update_tenant(tenant, data)
+        if becoming_inactive:
+            self.repo.invalidate_tenant_sessions(tenant.id)
         self.db.commit()
         self.db.refresh(tenant)
         return self._tenant_to_response(tenant, viewer_user_id)
@@ -159,4 +165,31 @@ class TenantService:
 
         self.repo.delete_tenant(tenant)
         self.db.commit()
-        logger.info("Tenant soft-deleted: id=%d", tenant_id)
+        logger.info("Tenant deleted: id=%d", tenant_id)
+
+    def notify_inactive_organizations(self) -> int:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=TENANT_INACTIVITY_THRESHOLD_DAYS)
+        rows = self.repo.list_quiet_tenants(cutoff)
+        if not rows:
+            return 0
+
+        from app.modules.notifications.notification_model import NotificationType
+        from app.modules.notifications.notification_service import NotificationService
+
+        svc = NotificationService(self.db)
+        created = 0
+        for tenant, last_active_at in rows:
+            if last_active_at.tzinfo is None:
+                last_active_at = last_active_at.replace(tzinfo=timezone.utc)
+            streak_day = last_active_at.astimezone(timezone.utc).date().isoformat()
+            created += svc.notify_superadmins(
+                notification_type=NotificationType.ORG_INACTIVE.value,
+                title=f"{tenant.name} has been inactive for 30 days",
+                body="No one from this organization has signed in for 30 days.",
+                action_url=f"/superadmin/tenants/{tenant.id}",
+                action_label="View tenant",
+                dedupe_key=f"org-inactive:{tenant.id}:{streak_day}",
+            )
+        self.db.commit()
+        logger.info("Inactive-org notifications created: %d tenants=%d", created, len(rows))
+        return created
