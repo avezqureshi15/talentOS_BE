@@ -70,7 +70,7 @@ MAX_LENGTHS = {
     "candidate_type": 20,
 }
 
-EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]{2,}$")
 _TRUE_VALUES = {"yes", "true", "1", "y", "yeah"}
 
 
