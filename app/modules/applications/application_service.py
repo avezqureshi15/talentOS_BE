@@ -313,6 +313,51 @@ class ApplicationService:
             ))
         return {"success": True, "archived": bool(candidate.archived)}
 
+    def set_candidate_details(self, candidate_id: int, data) -> dict:
+        """Update a candidate's editable basic details (partial update)."""
+        from app.modules.evaluations.evaluation_model import Candidate
+        candidate = self.db.query(Candidate).filter(Candidate.id == candidate_id).first()
+        if not candidate:
+            raise HTTPException(status_code=404, detail="Candidate not found")
+
+        field_map = {
+            "phone": "candidate_phone",
+            "linkedin_url": "linkedin_url",
+            "how_did_you_hear": "how_did_you_hear",
+            "location": "location",
+            "current_ctc": "current_ctc",
+            "expected_ctc": "expected_ctc",
+            "years_of_experience": "years_of_experience",
+            "notice_period": "notice_period",
+            "willing_to_relocate": "willing_to_relocate",
+        }
+        updates = data.model_dump(exclude_unset=True)
+        changed: dict[str, object] = {}
+        for key, attr in field_map.items():
+            if key not in updates:
+                continue
+            new_value = updates[key]
+            if getattr(candidate, attr) != new_value:
+                setattr(candidate, attr, new_value)
+                changed[attr] = new_value
+
+        if changed:
+            self.db.commit()
+            EventService(self.db).create_event(EventCreate(
+                entity_type="CANDIDATE",
+                entity_id=str(candidate_id),
+                event_name="Candidate Details Updated",
+                state_code="CANDIDATE_DETAILS_UPDATED",
+                actor_type="HR",
+                candidate_id=candidate_id,
+                event_metadata={"fields": list(changed.keys())},
+            ))
+
+        if self.repo:
+            self.repo.attach_interview_data([candidate])
+            return self.repo.to_candidate_dict(candidate)
+        return {"success": True, "id": candidate_id}
+
     def update_candidate_status(self, candidate_id: int, new_status: str) -> EvaluationResponse:
         if not self.state_svc: raise ValueError("State service not available")
         return self.state_svc.update_candidate_status(candidate_id, new_status)

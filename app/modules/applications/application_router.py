@@ -10,6 +10,7 @@ from app.modules.auth.auth_schema import UserInfo
 from app.modules.applications.application_schema import (
     ApplicationCreate,
     ArchiveUpdate,
+    CandidateDetailsUpdate,
     EvaluatedCandidate,
     FinalVerdictUpdate,
     PaginatedEvaluatedCandidatesResponse,
@@ -137,6 +138,20 @@ def update_candidate_archive(
 ):
     service = ApplicationService(db)
     return service.set_candidate_archived(candidate_id, data.archived)
+
+
+@router.patch(
+    "/{candidate_id}/details",
+    response_model=EvaluatedCandidate,
+    dependencies=[Depends(require_permission(Permission.APPLICATION_EVALUATE))],
+)
+def update_candidate_details(
+    candidate_id: int,
+    data: CandidateDetailsUpdate,
+    db: Session = Depends(get_db),
+):
+    service = ApplicationService(db)
+    return service.set_candidate_details(candidate_id, data)
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED)

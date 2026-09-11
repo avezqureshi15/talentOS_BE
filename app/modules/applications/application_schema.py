@@ -113,6 +113,20 @@ class ArchiveUpdate(BaseModel):
     archived: bool = True
 
 
+class CandidateDetailsUpdate(BaseModel):
+    """Editable basic candidate details (all optional → partial update)."""
+
+    phone: str | None = Field(None, max_length=50)
+    linkedin_url: str | None = Field(None, max_length=1024)
+    how_did_you_hear: str | None = Field(None, max_length=100)
+    location: str | None = Field(None, max_length=255)
+    current_ctc: str | None = Field(None, max_length=50)
+    expected_ctc: str | None = Field(None, max_length=50)
+    years_of_experience: str | None = Field(None, max_length=10)
+    notice_period: str | None = Field(None, max_length=50)
+    willing_to_relocate: bool | None = None
+
+
 class PaginatedEvaluatedCandidatesResponse(BaseModel):
     data: list[EvaluatedCandidate]
     total: int
