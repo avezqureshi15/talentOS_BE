@@ -41,9 +41,9 @@ class AddCandidateResponse(BaseModel):
 @router.post("/{hiring_request_id}/candidates", response_model=AddCandidateResponse)
 def add_candidate(
     hiring_request_id: UUID,
-    name: str = Form(...),
-    email: str = Form(...),
-    phone: str = Form(...),
+    name: str | None = Form(None),
+    email: str | None = Form(None),
+    phone: str | None = Form(None),
     referral: bool = Form(False),
     resume: UploadFile = File(...),
     db: Session = Depends(get_db),

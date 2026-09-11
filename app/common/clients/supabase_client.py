@@ -95,20 +95,29 @@ class SupabaseClient(BaseClient):
             raise ClientError(message="Resume storage is not configured", status_code=503)
         return base
 
-    def _careers_service_role_headers(self) -> dict[str, str]:
-        key = get_secret("SUPABASE_CAREERS_SERVICE_ROLE_KEY")
-        if not key:
+    def _careers_auth_key(self) -> str:
+        # Prefer the service-role key when configured; otherwise fall back to the
+        # publishable (anon) key — exactly what the public webknot apply form uses.
+        service_key = get_secret("SUPABASE_CAREERS_SERVICE_ROLE_KEY")
+        if service_key:
+            return service_key
+        anon_key = get_secret("SUPABASE_CAREERS_ANON_KEY") or settings.SUPABASE_CAREERS_ANON_KEY
+        if not anon_key:
             raise ClientError(message="Resume storage is not configured", status_code=503)
+        return anon_key
+
+    def _careers_service_role_headers(self) -> dict[str, str]:
+        key = self._careers_auth_key()
         return {"Authorization": f"Bearer {key}", "apikey": key}
 
     def upload_resume(self, object_name: str, content: bytes) -> str:
-        """Upload a PDF to the careers `resumes` bucket. Returns the object URL."""
+        """Upload a PDF to the careers `resumes` bucket. Returns the public object URL."""
         origin = self._project_origin()
         url = f"{origin}/storage/v1/object/{_RESUME_BUCKET}/{object_name}"
         headers = {
             **self._careers_service_role_headers(),
             "Content-Type": "application/pdf",
-            "x-upsert": "true",
+            "cacheControl": "3600",
         }
         try:
             response = self.sync.post(url, content=content, headers=headers, timeout=60)
@@ -119,16 +128,23 @@ class SupabaseClient(BaseClient):
         except httpx.RequestError as exc:
             logger.error("Resume upload connection error: %s", exc)
             raise ClientError(message="Failed to upload resume", status_code=503) from exc
-        return url
+        return f"{origin}/storage/v1/object/public/{_RESUME_BUCKET}/{object_name}"
+
+    def _careers_uses_service_role(self) -> bool:
+        return bool(get_secret("SUPABASE_CAREERS_SERVICE_ROLE_KEY"))
 
     def create_job_application(self, payload: dict) -> dict:
         """Insert a row into `job_applications` (same as the careers apply form)."""
         origin = self._project_origin()
         url = f"{origin}/rest/v1/job_applications"
+        wants_row = self._careers_uses_service_role()
         headers = {
             **self._careers_service_role_headers(),
             "Content-Type": "application/json",
-            "Prefer": "return=representation",
+            # The public apply form inserts with the anon key and does not read the
+            # row back (RLS has no SELECT policy). Only ask for representation when
+            # a service-role key is available.
+            "Prefer": "return=representation" if wants_row else "return=minimal",
         }
         try:
             response = self.sync.post(url, json=payload, headers=headers, timeout=30)
@@ -140,11 +156,14 @@ class SupabaseClient(BaseClient):
             logger.error("job_applications insert connection error: %s", exc)
             raise ClientError(message="Failed to create application", status_code=503) from exc
 
-        data = response.json()
+        if not response.content:
+            return {}
+        try:
+            data = response.json()
+        except ValueError:
+            return {}
         row = data[0] if isinstance(data, list) and data else data
-        if not isinstance(row, dict) or row.get("id") is None:
-            raise ClientError(message="Failed to create application", status_code=502)
-        return row
+        return row if isinstance(row, dict) else {}
 
     # ── custom error mapping ─────────────────────────────────────
 
