@@ -60,20 +60,3 @@ class EmployeeSlotsResponse(BaseModel):
 
 class BatchEmployeeSlotsResponse(BaseModel):
     data: list[EmployeeSlotsResponse]
-
-
-class SlotDetailResponse(BaseModel):
-    id: str
-    label: str
-    day: str
-    start_at: datetime
-    end_at: datetime
-    status: str
-    updated_at: datetime
-
-
-class SlotSummaryResponse(BaseModel):
-    employees_with_slots: int
-    total_available_slots: int
-    pending_requests: int
-    booked_upcoming: int

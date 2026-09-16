@@ -67,21 +67,3 @@ class NotifyFormResponse(BaseModel):
 
 class FormSubmitResponse(BaseModel):
     message: str
-
-
-class PendingSlotFormItem(BaseModel):
-    form_id: UUID
-    emp_id: str
-    name: str
-    email: str
-    last_sent_at: datetime
-    reminded_at: datetime | None
-    days_waiting: int
-
-
-class PaginatedPendingSlotFormsResponse(BaseModel):
-    data: list[PendingSlotFormItem]
-    total: int
-    page: int
-    per_page: int
-    has_more: bool

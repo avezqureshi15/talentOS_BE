@@ -39,17 +39,3 @@ def present_slot_item(slot: Slot, now_ist_dt: datetime | None = None) -> SlotLis
         label=format_slot_label_ist(slot.start_at, slot.end_at),
         day=format_slot_day_ist(slot.start_at, now_ist_dt),
     )
-
-
-def present_slot_detail(slot: Slot, now_ist_dt: datetime | None = None):
-    from app.modules.slots.slot_schema import SlotDetailResponse
-
-    return SlotDetailResponse(
-        id=str(slot.id),
-        label=format_slot_label_ist(slot.start_at, slot.end_at),
-        day=format_slot_day_ist(slot.start_at, now_ist_dt),
-        start_at=slot.start_at,
-        end_at=slot.end_at,
-        status=slot.status,
-        updated_at=slot.updated_at,
-    )
