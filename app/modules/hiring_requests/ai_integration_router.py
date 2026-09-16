@@ -449,6 +449,9 @@ class MoveToAiInterviewRequest(BaseModel):
     interview_type: str | None = "AI_INTERVIEW"
     round_name: str | None = None
     round_type: str | None = None
+    scheduled_date: str | None = None
+    scheduled_time: str | None = None
+    timezone: str | None = None
 
 
 @router.post("/candidates/{candidate_id}/move-to-interview", status_code=status.HTTP_201_CREATED)
@@ -465,6 +468,23 @@ async def move_to_ai_interview(
     candidate = db.query(Candidate).filter(Candidate.id == candidate_id).first()
     if not candidate:
         raise HTTPException(status_code=404, detail="Candidate not found")
+
+    wants_schedule = bool(body.scheduled_date and body.scheduled_time)
+    if wants_schedule ^ bool(body.scheduled_date or body.scheduled_time):
+        raise HTTPException(
+            status_code=422,
+            detail="Both scheduled_date and scheduled_time are required to set a preferred time",
+        )
+
+    slot_date = None
+    slot_time = None
+    timezone = body.timezone or "Asia/Kolkata"
+    if wants_schedule:
+        try:
+            slot_date = date.fromisoformat(body.scheduled_date)
+            slot_time = time.fromisoformat(body.scheduled_time)
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Invalid scheduled date or time")
 
     try:
         rh_job_id = await _get_or_create_rh_job(hiring_request_id, db)
@@ -486,6 +506,28 @@ async def move_to_ai_interview(
         interview = result.get("interview") or {}
         interview_url = interview.get("interview_url")
         unique_token = interview_url.rsplit("/", 1)[-1] if interview_url else None
+        rh_candidate_id = result["candidate"]["id"]
+        poc_job_id = result.get("candidate", {}).get("job_id") or rh_job_id
+
+        scheduled_at = None
+        if wants_schedule:
+            if not body.timezone:
+                window = await client.get_call_window(poc_job_id)
+                if window and window.get("screening_timezone"):
+                    timezone = window["screening_timezone"]
+            schedule_result = await client.schedule_interview(
+                poc_job_id,
+                rh_candidate_id,
+                body.scheduled_date,
+                body.scheduled_time,
+                timezone,
+            )
+            if schedule_result is None:
+                raise HTTPException(
+                    status_code=502,
+                    detail="Failed to schedule preferred AI interview time",
+                )
+            scheduled_at = schedule_result.get("scheduled_interview_at")
 
         round_obj = Round(
             candidate_id=candidate.id,
@@ -495,6 +537,9 @@ async def move_to_ai_interview(
             rh_external_session_id=interview.get("id"),
             rh_interview_url=interview_url,
             rh_unique_token=unique_token,
+            scheduled_date=slot_date,
+            scheduled_time=slot_time,
+            scheduled_timezone=timezone if wants_schedule else None,
         )
         db.add(round_obj)
         db.flush()
@@ -509,14 +554,13 @@ async def move_to_ai_interview(
             },
         ))
 
-        candidate.rh_external_candidate_id = result["candidate"]["id"]
+        candidate.rh_external_candidate_id = rh_candidate_id
         candidate.current_round_id = round_obj.id
         candidate.status = "INTERVIEW_SCHEDULED"
         candidate.stage = "AI_INTERVIEW"
 
-        rh_job_id = result.get("candidate", {}).get("job_id")
-        if rh_job_id and not hr.rh_external_job_id:
-            hr.rh_external_job_id = str(rh_job_id)
+        if poc_job_id and not hr.rh_external_job_id:
+            hr.rh_external_job_id = str(poc_job_id)
         db.commit()
         EventService(db).create_event(EventCreate(
             entity_type="CANDIDATE",
@@ -530,26 +574,51 @@ async def move_to_ai_interview(
                 "source": "ai_integration",
                 "round_id": str(round_obj.id),
                 "interview_url": interview_url,
+                **(
+                    {
+                        "scheduled_date": body.scheduled_date,
+                        "scheduled_time": body.scheduled_time,
+                        "timezone": timezone,
+                    }
+                    if wants_schedule
+                    else {}
+                ),
             },
         ))
     except Exception:
         db.rollback()
         raise
 
-    email_sent = send_interview_invite_email(
-        candidate_email=candidate.candidate_email,
-        candidate_name=candidate.candidate_name,
-        role_title=hr.title,
-        interview_url=interview_url,
-    )
+    if wants_schedule:
+        email_sent = send_interview_slot_email(
+            candidate_email=candidate.candidate_email,
+            candidate_name=candidate.candidate_name or "there",
+            role_title=hr.title,
+            interview_url=interview_url,
+            scheduled_at_label=format_scheduled_slot_label(
+                body.scheduled_date, body.scheduled_time, timezone
+            ),
+        )
+        email_failed_name = "Interview Slot Email Failed"
+        email_failed_code = "INTERVIEW_SLOT_EMAIL_FAILED"
+    else:
+        email_sent = send_interview_invite_email(
+            candidate_email=candidate.candidate_email,
+            candidate_name=candidate.candidate_name,
+            role_title=hr.title,
+            interview_url=interview_url,
+        )
+        email_failed_name = "Interview Invite Email Failed"
+        email_failed_code = "INTERVIEW_INVITE_EMAIL_FAILED"
+
     if not email_sent:
         try:
             EventService(db).create_event(EventCreate(
                 entity_type="CANDIDATE",
                 entity_id=str(candidate.id),
                 candidate_id=candidate.id,
-                event_name="Interview Invite Email Failed",
-                state_code="INTERVIEW_INVITE_EMAIL_FAILED",
+                event_name=email_failed_name,
+                state_code=email_failed_code,
                 actor_type="SYSTEM",
                 event_metadata={
                     "round_id": str(round_obj.id),
@@ -559,13 +628,21 @@ async def move_to_ai_interview(
         except Exception:
             db.rollback()
 
-    return {
+    response = {
         "round_id": str(round_obj.id),
         "rh_external_session_id": interview.get("id"),
         "interview_url": interview_url,
         "candidate": result.get("candidate"),
         "status": "created",
     }
+    if wants_schedule:
+        response.update({
+            "scheduled_date": body.scheduled_date,
+            "scheduled_time": body.scheduled_time,
+            "timezone": timezone,
+            "scheduled_at": scheduled_at,
+        })
+    return response
 
 
 _SCREENING_KEYS = [

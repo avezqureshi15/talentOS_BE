@@ -62,6 +62,36 @@ class QuestionScore(BaseModel):
     pointCoverage: Optional[list[PointCoverage]] = None
 
 
+class VideoProctoringFlag(BaseModel):
+    timestamp: str = ""
+    timeInSeconds: int = 0
+    event: str = ""
+    severity: str = ""
+    confidence: float = 0.0
+
+
+class VideoProctoringBreakdown(BaseModel):
+    face: int = 0
+    gaze: int = 0
+    objects: int = 0
+
+
+class VideoProctoringResult(BaseModel):
+    duration: Optional[str] = None
+    frameCount: Optional[int] = None
+    flags: list[VideoProctoringFlag] = []
+    verdict: Optional[str] = None
+    score: Optional[int] = None
+    flagCount: Optional[int] = None
+    breakdown: Optional[VideoProctoringBreakdown] = None
+
+
+class VideoProctoringSummary(BaseModel):
+    status: str
+    error: Optional[str] = None
+    result: Optional[VideoProctoringResult] = None
+
+
 class AiInterviewTemplateResponse(BaseModel):
     candidateName: str
     email: str
@@ -89,3 +119,4 @@ class AiInterviewTemplateResponse(BaseModel):
     expiresAt: str = ""
     questionScores: list[QuestionScore] = []
     rubricTotal: Optional[int] = None
+    videoProctoring: Optional[VideoProctoringSummary] = None

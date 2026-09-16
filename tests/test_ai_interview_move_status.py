@@ -70,27 +70,31 @@ def test_move_to_interview_sets_status_and_stage():
     hr_id, cand_id, hr, candidate, session, client, captured = _build_context()
 
     with patch(
-        "app.modules.hiring_requests.ai_integration_router.AiRecruitmentClient",
-        return_value=client,
+        "app.modules.hiring_requests.ai_integration_router._get_or_create_rh_job",
+        new=AsyncMock(return_value="poc-job-1"),
     ):
         with patch(
-            "app.modules.hiring_requests.ai_integration_router.EventService"
-        ) as mock_event_svc:
+            "app.modules.hiring_requests.ai_integration_router.AiRecruitmentClient",
+            return_value=client,
+        ):
             with patch(
-                "app.modules.hiring_requests.ai_integration_router.send_interview_invite_email",
-                return_value=False,
-            ):
-                result = asyncio.run(
-                    move_to_ai_interview(
-                        hr_id,
-                        cand_id,
-                        MoveToAiInterviewRequest(
-                            round_name="AI Interview Round",
-                            round_type="AI_INTERVIEW_ROUND",
-                        ),
-                        session,
+                "app.modules.hiring_requests.ai_integration_router.EventService"
+            ) as mock_event_svc:
+                with patch(
+                    "app.modules.hiring_requests.ai_integration_router.send_interview_invite_email",
+                    return_value=False,
+                ):
+                    result = asyncio.run(
+                        move_to_ai_interview(
+                            hr_id,
+                            cand_id,
+                            MoveToAiInterviewRequest(
+                                round_name="AI Interview Round",
+                                round_type="AI_INTERVIEW_ROUND",
+                            ),
+                            session,
+                        )
                     )
-                )
 
     round_obj = next(obj for obj in captured if isinstance(obj, Round))
 
@@ -104,6 +108,7 @@ def test_move_to_interview_sets_status_and_stage():
     assert round_obj.name == "AI Interview Round"
     assert round_obj.rh_external_session_id == "poc-int-1"
     assert round_obj.rh_unique_token == "tok1"
+    assert round_obj.scheduled_date is None
     assert hr.rh_external_job_id == "poc-job-1"
 
     reviews = [obj for obj in captured if type(obj).__name__ == "Review"]
@@ -119,11 +124,135 @@ def test_move_to_interview_sets_status_and_stage():
     )
 
 
+def test_move_to_interview_applies_preferred_schedule():
+    from datetime import date, time
+
+    hr_id, cand_id, hr, candidate, session, client, captured = _build_context()
+    client.schedule_interview = AsyncMock(
+        return_value={"scheduled_interview_at": "2026-07-21T10:30:00+05:30"}
+    )
+    client.get_call_window = AsyncMock(return_value={"screening_timezone": "Asia/Kolkata"})
+
+    with (
+        patch(
+            "app.modules.hiring_requests.ai_integration_router._get_or_create_rh_job",
+            new=AsyncMock(return_value="poc-job-1"),
+        ),
+        patch(
+            "app.modules.hiring_requests.ai_integration_router.AiRecruitmentClient",
+            return_value=client,
+        ),
+        patch("app.modules.hiring_requests.ai_integration_router.EventService"),
+        patch(
+            "app.modules.hiring_requests.ai_integration_router.send_interview_slot_email",
+            return_value=True,
+        ) as mock_slot_email,
+        patch(
+            "app.modules.hiring_requests.ai_integration_router.send_interview_invite_email",
+            return_value=True,
+        ) as mock_invite_email,
+    ):
+        result = asyncio.run(
+            move_to_ai_interview(
+                hr_id,
+                cand_id,
+                MoveToAiInterviewRequest(
+                    round_name="AI Interview Round",
+                    scheduled_date="2026-07-21",
+                    scheduled_time="10:30",
+                    timezone="Asia/Kolkata",
+                ),
+                session,
+            )
+        )
+
+    round_obj = next(obj for obj in captured if isinstance(obj, Round))
+    assert result["status"] == "created"
+    assert result["scheduled_date"] == "2026-07-21"
+    assert result["scheduled_time"] == "10:30"
+    assert result["timezone"] == "Asia/Kolkata"
+    assert round_obj.scheduled_date == date(2026, 7, 21)
+    assert round_obj.scheduled_time == time(10, 30)
+    assert round_obj.scheduled_timezone == "Asia/Kolkata"
+    client.schedule_interview.assert_awaited_once_with(
+        "poc-job-1",
+        "poc-cand-1",
+        "2026-07-21",
+        "10:30",
+        "Asia/Kolkata",
+    )
+    mock_slot_email.assert_called_once()
+    mock_invite_email.assert_not_called()
+
+
+def test_move_to_interview_rejects_partial_schedule_fields():
+    hr_id, cand_id, _, _, session, client, _ = _build_context()
+
+    with patch(
+        "app.modules.hiring_requests.ai_integration_router.AiRecruitmentClient",
+        return_value=client,
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            asyncio.run(
+                move_to_ai_interview(
+                    hr_id,
+                    cand_id,
+                    MoveToAiInterviewRequest(scheduled_date="2026-07-21"),
+                    session,
+                )
+            )
+
+    assert exc_info.value.status_code == 422
+    client.create_candidate_with_interview.assert_not_called()
+
+
+def test_move_to_interview_rolls_back_when_schedule_fails():
+    hr_id, cand_id, _, candidate, session, client, _ = _build_context()
+    client.schedule_interview = AsyncMock(return_value=None)
+
+    with (
+        patch(
+            "app.modules.hiring_requests.ai_integration_router._get_or_create_rh_job",
+            new=AsyncMock(return_value="poc-job-1"),
+        ),
+        patch(
+            "app.modules.hiring_requests.ai_integration_router.AiRecruitmentClient",
+            return_value=client,
+        ),
+        patch("app.modules.hiring_requests.ai_integration_router.EventService"),
+        patch(
+            "app.modules.hiring_requests.ai_integration_router.send_interview_invite_email",
+            return_value=False,
+        ),
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            asyncio.run(
+                move_to_ai_interview(
+                    hr_id,
+                    cand_id,
+                    MoveToAiInterviewRequest(
+                        scheduled_date="2026-07-21",
+                        scheduled_time="10:30",
+                        timezone="Asia/Kolkata",
+                    ),
+                    session,
+                )
+            )
+
+    assert exc_info.value.status_code == 502
+    session.rollback.assert_called()
+    assert candidate.status == "MOVE_TO_NEXT_ROUND"
+
+
 def test_move_to_interview_rolls_back_and_raises_502_when_poc_fails():
     hr_id, cand_id, hr, candidate, session, client, captured = _build_context()
     client.create_candidate_with_interview = AsyncMock(return_value=None)
 
     with (
+        patch(
+            "app.modules.hiring_requests.ai_integration_router._get_or_create_rh_job",
+            new=AsyncMock(return_value="poc-job-1"),
+        ),
         patch(
             "app.modules.hiring_requests.ai_integration_router.AiRecruitmentClient",
             return_value=client,

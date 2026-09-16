@@ -339,3 +339,42 @@ def test_ai_speaker_segments_map_to_ai():
     out = build_interview_template_response(detail, **_meta())
     speakers = [u["speaker"] for u in out["transcriptSections"][0]["utterances"]]
     assert speakers == ["AI", "AI", "CANDIDATE", "INTERVIEWER"]
+
+
+def test_video_proctoring_maps_camel_case_and_seek_seconds():
+    out = build_interview_template_response(
+        _base_detail(
+            video_proctoring={
+                "status": "succeeded",
+                "error": None,
+                "result": {
+                    "duration": "12:04",
+                    "frame_count": 180,
+                    "verdict": "clear",
+                    "score": 92,
+                    "flag_count": 1,
+                    "flags": [
+                        {
+                            "timestamp": "01:15",
+                            "event": "no_face",
+                            "severity": "HARD",
+                            "confidence": 0.81,
+                        }
+                    ],
+                    "breakdown": {"face": 1, "gaze": 0, "objects": 0},
+                },
+            }
+        ),
+        **_meta(),
+    )
+    vp = out["videoProctoring"]
+    assert vp["status"] == "succeeded"
+    assert vp["result"]["frameCount"] == 180
+    assert vp["result"]["flagCount"] == 1
+    assert vp["result"]["flags"][0]["timeInSeconds"] == 75
+    assert vp["result"]["flags"][0]["severity"] == "HARD"
+
+
+def test_video_proctoring_absent_when_never_started():
+    out = build_interview_template_response(_base_detail(), **_meta())
+    assert out["videoProctoring"] is None

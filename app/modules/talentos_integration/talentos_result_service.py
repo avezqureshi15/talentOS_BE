@@ -179,7 +179,7 @@ def persist_interview_result(
         "problem_solving_score", "experience_score", "role_alignment_score",
         "strengths", "weaknesses", "jd_fit", "final_recommendation",
         "interview_url", "created_at", "started_at", "completed_at",
-        "recording_key",
+        "recording_key", "video_proctoring",
     ]
     payload = {k: result.get(k) for k in keys}
     payload["unique_token"] = round_obj.rh_unique_token

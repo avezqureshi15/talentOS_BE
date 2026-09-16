@@ -64,6 +64,7 @@ def build_interview_template_response(
         "expiresAt": _iso_timestamp(detail.get("expires_at")),
         "questionScores": _question_scores(detail.get("question_scores")),
         "rubricTotal": _int_or_none(detail.get("rubric_total")),
+        "videoProctoring": _video_proctoring(detail.get("video_proctoring")),
     }
 
 
@@ -128,6 +129,62 @@ def _int_or_none(raw: Any) -> int | None:
         return int(raw)
     except (TypeError, ValueError):
         return None
+
+
+def _float_or_zero(raw: Any) -> float:
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _video_proctoring(raw: Any) -> dict[str, Any] | None:
+    if not isinstance(raw, dict):
+        return None
+    status = str(raw.get("status") or "").strip()
+    if not status:
+        return None
+    result_raw = raw.get("result")
+    result: dict[str, Any] | None = None
+    if isinstance(result_raw, dict):
+        flags_in = result_raw.get("flags")
+        flags: list[dict[str, Any]] = []
+        if isinstance(flags_in, list):
+            for item in flags_in:
+                if not isinstance(item, dict):
+                    continue
+                ts_raw = item.get("timestamp")
+                secs, ts_display = _normalize_timestamp(ts_raw)
+                flags.append({
+                    "timestamp": ts_display or str(ts_raw or ""),
+                    "timeInSeconds": secs,
+                    "event": str(item.get("event") or "").strip(),
+                    "severity": str(item.get("severity") or "").strip(),
+                    "confidence": _float_or_zero(item.get("confidence")),
+                })
+        breakdown_raw = result_raw.get("breakdown")
+        breakdown = None
+        if isinstance(breakdown_raw, dict):
+            breakdown = {
+                "face": _int_or_none(breakdown_raw.get("face")) or 0,
+                "gaze": _int_or_none(breakdown_raw.get("gaze")) or 0,
+                "objects": _int_or_none(breakdown_raw.get("objects")) or 0,
+            }
+        result = {
+            "duration": (str(result_raw["duration"]).strip() if result_raw.get("duration") else None),
+            "frameCount": _int_or_none(result_raw.get("frame_count")),
+            "flags": flags,
+            "verdict": (str(result_raw["verdict"]).strip() if result_raw.get("verdict") else None),
+            "score": _int_or_none(result_raw.get("score")),
+            "flagCount": _int_or_none(result_raw.get("flag_count")),
+            "breakdown": breakdown,
+        }
+    error = raw.get("error")
+    return {
+        "status": status,
+        "error": str(error).strip() if error else None,
+        "result": result,
+    }
 
 
 def _question_scores(raw: Any) -> list[dict[str, Any]]:
