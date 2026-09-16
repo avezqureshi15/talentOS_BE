@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import func, text
+from sqlalchemy import func, or_, text
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -193,3 +193,45 @@ class FormRepository:
             sent_before=_expiry,
         )
         return rows
+
+    def list_pending_slot_forms(
+        self,
+        page: int,
+        per_page: int,
+        query: str | None,
+        tenant_id: int | None,
+    ) -> tuple[list[Form], int]:
+        base = (
+            self.db.query(Form)
+            .join(Employee, Employee.id == Form.employee_id)
+            .filter(
+                Form.type == FormType.SLOTS.value,
+                Form.status == FormStatus.SENT.value,
+            )
+        )
+        if tenant_id is not None:
+            base = base.filter(Employee.tenant_id == tenant_id)
+        if query:
+            base = base.filter(
+                or_(
+                    Employee.name.ilike(f"%{query}%"),
+                    Employee.emp_id.ilike(f"%{query}%"),
+                    Employee.email.ilike(f"%{query}%"),
+                )
+            )
+
+        total = base.count()
+        forms = (
+            base.order_by(Form.last_sent_at.asc())
+            .offset((page - 1) * per_page)
+            .limit(per_page)
+            .all()
+        )
+        return forms, total
+
+    @staticmethod
+    def days_waiting(last_sent_at: datetime) -> int:
+        now = datetime.now(timezone.utc)
+        if last_sent_at.tzinfo is None:
+            last_sent_at = last_sent_at.replace(tzinfo=timezone.utc)
+        return max(0, (now - last_sent_at).days)

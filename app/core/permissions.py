@@ -100,7 +100,7 @@ PERMISSION_ENDPOINTS: dict[str, str] = {
     Permission.SETTINGS_VIEW.value: "GET /api/v1/settings",
     Permission.SETTINGS_EDIT.value: "PATCH /api/v1/settings",
     Permission.SLOT_SUBMIT.value: "POST /api/v1/slots",
-    Permission.SLOT_VIEW_ALL.value: "GET /api/v1/slots/employee",
+    Permission.SLOT_VIEW_ALL.value: "GET /api/v1/slots/employee, GET /api/v1/slots/summary, PATCH /api/v1/slots/{id}, GET /api/v1/forms/slots/pending",
     Permission.REVIEW_SUBMIT.value: "POST /api/v1/reviews",
     Permission.REVIEW_VIEW_ALL.value: "GET /api/v1/reviews/round/{round_id}",
     Permission.CHAT.value: "GET /api/v1/chat/chats",

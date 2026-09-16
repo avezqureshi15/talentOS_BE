@@ -1,26 +1,53 @@
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import exc as sa_exc
 from sqlalchemy.orm import Session
 
+from app.core.authorization import require_permission
 from app.core.config import settings
+from app.core.constants import DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
+from app.core.permissions import Permission
 from app.db.session import get_db
+from app.modules.auth.auth_dependencies import get_current_user
+from app.modules.auth.auth_schema import UserInfo
 from app.modules.forms.form_mail import (
     detail_to_message,
     send_review_mail_task,
     send_slot_mail_task,
 )
+from app.modules.forms.form_model import FormType
 from app.modules.forms.form_schema import (
     FormSubmitResponse,
     FormValidateResponse,
     NotifyFormRequest,
     NotifyFormResponse,
+    PaginatedPendingSlotFormsResponse,
 )
 from app.modules.forms.form_service import FormService
-from app.modules.forms.form_model import FormType
 
 router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/forms", tags=["forms"])
+
+
+@router.get(
+    "/slots/pending",
+    response_model=PaginatedPendingSlotFormsResponse,
+    dependencies=[Depends(require_permission(Permission.SLOT_VIEW_ALL))],
+)
+def list_pending_slot_forms(
+    q: str | None = Query(None, description="Search by employee name, emp_id, or email"),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(get_current_user),
+):
+    tenant_id = None if current_user.role == "superadmin" else current_user.tenant_id
+    return FormService(db).list_pending_slot_forms(
+        page=page,
+        per_page=per_page,
+        query=q,
+        tenant_id=tenant_id,
+    )
 
 
 @router.get("/validate/{form_id}", response_model=FormValidateResponse)

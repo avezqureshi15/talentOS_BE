@@ -34,7 +34,9 @@ from app.modules.forms.form_schema import (
     AskFormResultItem,
     FormSubmitResponse,
     FormValidateResponse,
+    PaginatedPendingSlotFormsResponse,
     PendingMailTask,
+    PendingSlotFormItem,
     SubmittedReviewPayload,
     SubmittedSlotItem,
 )
@@ -773,3 +775,36 @@ class FormService:
             round_obj.scheduled_time.strftime("%H:%M:%S"),
             round_obj.scheduled_timezone,
         ) or None
+
+    def list_pending_slot_forms(
+        self,
+        page: int,
+        per_page: int,
+        query: str | None,
+        tenant_id: int | None,
+    ) -> PaginatedPendingSlotFormsResponse:
+        forms, total = self.repository.list_pending_slot_forms(
+            page=page,
+            per_page=per_page,
+            query=query,
+            tenant_id=tenant_id,
+        )
+        data = [
+            PendingSlotFormItem(
+                form_id=form.id,
+                emp_id=form.employee.emp_id,
+                name=form.employee.name,
+                email=form.employee.email,
+                last_sent_at=form.last_sent_at,
+                reminded_at=form.reminded_at,
+                days_waiting=FormRepository.days_waiting(form.last_sent_at),
+            )
+            for form in forms
+        ]
+        return PaginatedPendingSlotFormsResponse(
+            data=data,
+            total=total,
+            page=page,
+            per_page=per_page,
+            has_more=(page * per_page) < total,
+        )

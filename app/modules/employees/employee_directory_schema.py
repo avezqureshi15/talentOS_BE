@@ -1,6 +1,9 @@
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
+
+SlotFormStatus = Literal["none", "pending", "submitted"]
 
 
 class EmployeeResponse(BaseModel):
@@ -29,6 +32,8 @@ class EmployeeResponse(BaseModel):
     created_at: datetime
     slots_count: int = 0
     has_slots: bool = False
+    slot_form_status: SlotFormStatus = "none"
+    last_slot_activity: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

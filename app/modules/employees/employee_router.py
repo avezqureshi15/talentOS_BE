@@ -50,12 +50,20 @@ def _user_id_map(db, employee_ids: list[int]) -> dict[int, int]:
     return {emp_id: uid for emp_id, uid in rows}
 
 
-def _to_response(e: Employee, user_id: int | None, slots_count: int = 0) -> EmployeeResponse:
+def _to_response(
+    e: Employee,
+    user_id: int | None,
+    slots_count: int = 0,
+    slot_form_status: str = "none",
+    last_slot_activity=None,
+) -> EmployeeResponse:
     item = EmployeeResponse.model_validate(e)
     item.user_id = user_id
     if slots_count:
         item.slots_count = slots_count
         item.has_slots = True
+    item.slot_form_status = slot_form_status  # type: ignore[assignment]
+    item.last_slot_activity = last_slot_activity
     return item
 
 router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/employees", tags=["employees"])
@@ -119,6 +127,16 @@ def get_benched_employees(
     return {"data": data, "count": len(data)}
 
 
+@router.get("/departments")
+def list_employee_departments(
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(require_permission(Permission.EMPLOYEE_VIEW)),
+):
+    repo = EmployeeDirectoryRepository(db)
+    tenant_id = None if current_user.role == "superadmin" else current_user.tenant_id
+    return {"data": repo.get_distinct_departments(tenant_id=tenant_id)}
+
+
 @router.get("/{emp_id}", response_model=EmployeeResponse | None)
 def get_employee_by_emp_id(
     emp_id: str,
@@ -139,6 +157,13 @@ def list_employees(
     page: int = Query(1, ge=1),
     per_page: int = Query(DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
     slotsInfo: bool = Query(False, description="Include slot availability info and sort by slot count"),
+    has_slots: bool | None = Query(None, description="Filter by available future slots"),
+    slot_form_status: str | None = Query(
+        None,
+        pattern="^(none|pending|submitted)$",
+        description="Filter by latest slot form status",
+    ),
+    department: str | None = Query(None, description="Filter by department"),
     authorized_only: bool = Query(False, description="Only return employees with an active, role-bearing user account"),
     invite_eligible: bool = Query(
         False,
@@ -167,6 +192,9 @@ def list_employees(
         tenant_id=tenant_id,
         authorized_only=authorized_only,
         invite_eligible=invite_eligible,
+        has_slots=has_slots if slotsInfo else None,
+        slot_form_status=slot_form_status if slotsInfo else None,
+        department=department,
     )
 
     employees: list[Employee] = (
@@ -176,7 +204,14 @@ def list_employees(
 
     if slotsInfo:
         data: list[EmployeeResponse] = [
-            _to_response(e, uid_map.get(e.id), slots_count=count) for e, count in result
+            _to_response(
+                e,
+                uid_map.get(e.id),
+                slots_count=count,
+                slot_form_status=form_status,
+                last_slot_activity=last_activity,
+            )
+            for e, count, last_activity, form_status in result
         ]
     else:
         data = [_to_response(e, uid_map.get(e.id)) for e in employees]
