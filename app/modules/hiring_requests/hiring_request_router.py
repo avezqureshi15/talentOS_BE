@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -10,8 +10,12 @@ from app.core.permissions import Permission
 from app.db.session import get_db
 from app.modules.auth.auth_dependencies import get_current_user
 from app.modules.auth.auth_schema import UserInfo
-from app.modules.hiring_requests.hiring_request_schema import HiringRequestCreate, HiringRequestUpdate
+from app.modules.hiring_requests.hiring_request_schema import (
+    HiringRequestCreate,
+    HiringRequestUpdate,
+)
 from app.modules.hiring_requests.hiring_request_service import HiringRequestService
+from app.modules.hiring_requests.jd_parse_service import parse_jd_file
 
 router = APIRouter(prefix=f"{settings.API_V1_PREFIX}/hiring-requests", tags=["hiring-requests"])
 
@@ -87,6 +91,19 @@ def get_types(
 ):
     service = HiringRequestService(db)
     return service.get_types(current_user=current_user)
+
+
+@router.post("/parse-jd")
+def parse_hiring_request_jd(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: UserInfo = Depends(get_current_user),
+):
+    """Extract hiring-request fields from a JD PDF. Does not create the job."""
+    if not can_create_job(db, current_user):
+        raise HTTPException(status_code=403, detail="Missing required permission: hiring_request.create")
+    parsed = parse_jd_file(file)
+    return {"data": parsed.model_dump()}
 
 
 @router.patch("/{hiring_request_id}/status")

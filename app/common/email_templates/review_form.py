@@ -1,5 +1,3 @@
-from app.core.config import settings
-
 _SUBJECT = "Submit your interview feedback"
 _REMINDER_SUBJECT = "Reminder: Submit your interview feedback"
 _PREHEADER = "Open the form to share your review for the candidate"
@@ -14,7 +12,6 @@ _BODY_REMINDER_INTRO = (
     "This is a reminder to submit your feedback for the candidate you recently interviewed. "
     "Use the button below to open the review form."
 )
-_EXPIRY_NOTE = f"This link expires in {settings.FORM_EXPIRY_HOURS} hours."
 
 _PARA_STYLE = "font-size:14px;line-height:1.7;color:rgba(255,255,255,0.6);margin:0 0 16px;"
 
@@ -41,7 +38,6 @@ def render_review_form_email(
         body_html += f'<p style="{_PARA_STYLE}"><strong>Round:</strong> {round_name}</p>'
     if scheduled_at_label:
         body_html += f'<p style="{_PARA_STYLE}"><strong>Interview time:</strong> {scheduled_at_label}</p>'
-    body_html += _para(_EXPIRY_NOTE)
 
     prefix = "This is a reminder. " if is_reminder else ""
     details = f"\nRound: {round_name}" if round_name else ""
@@ -51,7 +47,6 @@ def render_review_form_email(
         f"Hi {recipient_name},\n\n"
         f"{prefix}Please submit your feedback for {candidate_name}.{details}\n\n"
         f"{form_url}\n\n"
-        f"{_EXPIRY_NOTE}\n\n"
         "Regards,\nTalentOS"
     )
 

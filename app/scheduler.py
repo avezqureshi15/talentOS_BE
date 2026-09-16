@@ -103,7 +103,6 @@ class ResilientSQLAlchemyJobStore(SQLAlchemyJobStore):
 JOB_DESCRIPTIONS: dict[str, str] = {
     "form_reminder": "Sends follow-up emails to interviewers who haven't submitted their review forms",
     "form_escalation": "Escalates overdue review forms to the next level (manager or alternate)",
-    "form_expiry": "Marks review/slot forms that have exceeded the expiry window as expired",
 }
 
 

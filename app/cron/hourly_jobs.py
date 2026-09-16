@@ -16,12 +16,10 @@ logger = get_logger(__name__)
 JOB_DESCRIPTIONS: dict[str, str] = {
     "form_reminder": "Sends follow-up emails to interviewers who haven't submitted their review forms",
     "form_escalation": "Escalates overdue review forms to the next level (manager or alternate)",
-    "form_expiry": "Marks review/slot forms that have exceeded the expiry window as expired",
 }
 JOB_NAMES: dict[str, str] = {
     "form_reminder": "Form Reminder",
     "form_escalation": "Form Escalation",
-    "form_expiry": "Form Expiry",
 }
 
 
@@ -63,27 +61,25 @@ def _run_escalation_job() -> None:
     _run_job_with_retry("form_escalation", lambda db: FormService(db).run_escalation_job())
 
 
-def _run_expiry_job() -> None:
-    _run_job_with_retry("form_expiry", lambda db: FormService(db).run_expiry_reconciliation_job())
-
-
 def _cron_trigger(job_id: str) -> IntervalTrigger | CronTrigger:
     if settings.APP_ENV in ("development", "uat", "staging"):
         return IntervalTrigger(seconds=3)
     triggers = {
         "form_reminder": CronTrigger(hour="*", minute=0),
         "form_escalation": CronTrigger(hour="*", minute=5),
-        "form_expiry": CronTrigger(hour="*", minute=10),
     }
     return triggers.get(job_id, CronTrigger(hour="*", minute=0))
 
 
 def setup_form_jobs(scheduler: BackgroundScheduler) -> None:
-    for job_id in ("form_reminder", "form_escalation", "form_expiry"):
+    existing_expiry = scheduler.get_job("form_expiry")
+    if existing_expiry:
+        scheduler.remove_job("form_expiry")
+        logger.info("Removed retired cron job | id=form_expiry")
+    for job_id in ("form_reminder", "form_escalation"):
         funcs = {
             "form_reminder": _run_reminder_job,
             "form_escalation": _run_escalation_job,
-            "form_expiry": _run_expiry_job,
         }
         scheduler.add_job(
             funcs[job_id],

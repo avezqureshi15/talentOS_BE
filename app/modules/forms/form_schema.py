@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
@@ -22,6 +23,16 @@ class AskFormResponse(BaseModel):
     results: list[AskFormResultItem]
 
 
+class SubmittedSlotItem(BaseModel):
+    start_at: datetime
+    end_at: datetime
+
+
+class SubmittedReviewPayload(BaseModel):
+    reviews: dict | None = None
+    verdict: str | None = None
+
+
 class FormValidateResponse(BaseModel):
     valid: bool
     reason: str
@@ -29,7 +40,11 @@ class FormValidateResponse(BaseModel):
     type: str | None = None
     round_id: UUID | None = None
     candidate_id: int | None = None
+    hiring_request_id: UUID | None = None
     review_questions: dict | None = None
+    read_only: bool = False
+    submitted_slots: list[SubmittedSlotItem] | None = None
+    submitted_review: SubmittedReviewPayload | None = None
 
 
 class PendingMailTask(BaseModel):

@@ -1,5 +1,4 @@
 import re
-from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from app.common.services.email_service import EmailService
@@ -9,7 +8,6 @@ from app.core.logger import get_logger
 from app.db.session import SessionLocal
 from app.modules.email.email_template_service import render as render_email_template
 from app.modules.employees.employee_model import Employee
-from app.modules.forms.form_model import Form
 
 logger = get_logger(__name__)
 
@@ -163,7 +161,3 @@ def send_review_mail_task(
         logger.warning("Background review mail failed for employee_id=%s: %s", employee_id, exc)
     finally:
         db.close()
-
-
-def is_form_expired(form: Form) -> bool:
-    return datetime.now(timezone.utc) > (form.last_sent_at + timedelta(hours=settings.FORM_EXPIRY_HOURS))

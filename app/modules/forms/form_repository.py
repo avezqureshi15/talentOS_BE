@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import func, text
@@ -40,13 +40,11 @@ class FormRepository:
         )
 
     def get_active_sent(self, emp_id: str, form_type: str = FormType.SLOTS.value) -> Form | None:
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=settings.FORM_EXPIRY_HOURS)
         return (
             self._base_by_emp_id(emp_id)
             .filter(
                 Form.type == form_type,
                 Form.status == FormStatus.SENT.value,
-                Form.last_sent_at > cutoff,
             )
             .order_by(Form.last_sent_at.desc())
             .first()
@@ -61,41 +59,46 @@ class FormRepository:
         )
 
     def get_active_sent_by_employee(self, employee_id: int, form_type: str = FormType.SLOTS.value) -> Form | None:
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=settings.FORM_EXPIRY_HOURS)
         return (
             self._base_by_employee(employee_id)
             .filter(
                 Form.type == form_type,
                 Form.status == FormStatus.SENT.value,
-                Form.last_sent_at > cutoff,
             )
             .order_by(Form.last_sent_at.desc())
             .first()
         )
 
     def get_active_sent_by_employee_and_round(self, employee_id: int, round_id: UUID) -> Form | None:
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=settings.FORM_EXPIRY_HOURS)
         return (
             self._base_by_employee(employee_id)
             .filter(
                 Form.type == FormType.REVIEW.value,
                 Form.round_id == round_id,
                 Form.status == FormStatus.SENT.value,
-                Form.last_sent_at > cutoff,
             )
             .order_by(Form.last_sent_at.desc())
             .first()
         )
 
     def get_active_sent_by_emp_and_round(self, emp_id: str, round_id: UUID) -> Form | None:
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=settings.FORM_EXPIRY_HOURS)
         return (
             self._base_by_emp_id(emp_id)
             .filter(
                 Form.type == FormType.REVIEW.value,
                 Form.round_id == round_id,
                 Form.status == FormStatus.SENT.value,
-                Form.last_sent_at > cutoff,
+            )
+            .order_by(Form.last_sent_at.desc())
+            .first()
+        )
+
+    def get_latest_by_employee_and_round(self, employee_id: int, round_id: UUID) -> Form | None:
+        return (
+            self._base_by_employee(employee_id)
+            .filter(
+                Form.type == FormType.REVIEW.value,
+                Form.round_id == round_id,
             )
             .order_by(Form.last_sent_at.desc())
             .first()
@@ -132,6 +135,12 @@ class FormRepository:
         form.status = FormStatus.EXPIRED.value
         self.db.flush()
         logger.info("Marked form expired: id=%s | emp_id=%s", form.id, form.employee.emp_id)
+        return form
+
+    def reopen(self, form: Form) -> Form:
+        form.status = FormStatus.SENT.value
+        self.db.flush()
+        logger.info("Reopened form: id=%s | emp_id=%s", form.id, form.employee.emp_id)
         return form
 
     def _list_by_type_and_status(

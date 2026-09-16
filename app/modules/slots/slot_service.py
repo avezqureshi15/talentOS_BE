@@ -1,11 +1,14 @@
 from sqlalchemy import exc as sa_exc
 from sqlalchemy.orm import Session
 
+from app.common.exceptions.form_exception import FormAlreadySubmittedException
 from app.common.exceptions.slot_exception import (
     EmployeeNotFoundException,
 )
 from app.core.logger import get_logger
 from app.modules.employees.employee_directory_repository import EmployeeDirectoryRepository
+from app.modules.forms.form_model import FormStatus, FormType
+from app.modules.forms.form_repository import FormRepository
 from app.modules.slots.slot_actions import resolve_slot_action
 from app.modules.slots.slot_model import Slot, SlotStatus
 from app.modules.slots.slot_presenter import now_ist, present_slot_item, to_ist
@@ -33,6 +36,12 @@ class SlotService:
         employee = self.employees.get_by_emp_id(data.emp_id)
         if not employee:
             raise EmployeeNotFoundException(data.emp_id)
+
+        latest_form = FormRepository(self.db).get_latest(data.emp_id, FormType.SLOTS.value)
+        if latest_form and latest_form.status == FormStatus.SUBMITTED.value:
+            raise FormAlreadySubmittedException(
+                "Slot availability has already been submitted and cannot be edited"
+            )
 
         logger.info("Creating %d slot(s) for emp_id=%s", len(data.slots), data.emp_id)
 

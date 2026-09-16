@@ -193,7 +193,7 @@ EMAIL_TEMPLATES: tuple[TemplateSpec, ...] = (
         cta_url_placeholder="form_url",
         recipient_placeholder="recipient_name",
         footer_note="TalentOS",
-        default_version=4,
+        default_version=5,
     ),
     TemplateSpec(
         key="slot_form_reminder",
@@ -212,7 +212,7 @@ EMAIL_TEMPLATES: tuple[TemplateSpec, ...] = (
         cta_url_placeholder="form_url",
         recipient_placeholder="recipient_name",
         footer_note="TalentOS",
-        default_version=4,
+        default_version=5,
     ),
     TemplateSpec(
         key="review_form",
@@ -233,7 +233,7 @@ EMAIL_TEMPLATES: tuple[TemplateSpec, ...] = (
         cta_url_placeholder="form_url",
         recipient_placeholder="recipient_name",
         footer_note="TalentOS",
-        default_version=4,
+        default_version=5,
     ),
     TemplateSpec(
         key="review_form_reminder",
@@ -254,7 +254,7 @@ EMAIL_TEMPLATES: tuple[TemplateSpec, ...] = (
         cta_url_placeholder="form_url",
         recipient_placeholder="recipient_name",
         footer_note="TalentOS",
-        default_version=4,
+        default_version=5,
     ),
     TemplateSpec(
         key="interview_invite",

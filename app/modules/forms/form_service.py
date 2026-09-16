@@ -20,7 +20,6 @@ from app.modules.forms.form_mail import (
     build_review_link,
     build_slot_link,
     detail_to_message,
-    is_form_expired,
     is_smtp_configured,
     is_valid_email,
     send_review_mail_task,
@@ -36,6 +35,8 @@ from app.modules.forms.form_schema import (
     FormSubmitResponse,
     FormValidateResponse,
     PendingMailTask,
+    SubmittedReviewPayload,
+    SubmittedSlotItem,
 )
 
 logger = get_logger(__name__)
@@ -65,8 +66,10 @@ class FormService:
             return active, DETAIL_RESENT
 
         latest = self.repository.get_latest(emp_id, form_type)
-        if latest and latest.status == FormStatus.SENT.value and is_form_expired(latest):
-            self.repository.mark_expired(latest)
+        if latest and latest.status == FormStatus.EXPIRED.value:
+            self.repository.reopen(latest)
+            self.repository.touch_last_sent_at(latest, last_sent_at=now)
+            return latest, DETAIL_RESENT
 
         form = self.repository.create(
             employee_id=employee.id,
@@ -96,21 +99,19 @@ class FormService:
             scheduled_at_label = self._scheduled_at_label_for_round(round_id)
 
         now = datetime.now(timezone.utc)
-        active = self.repository.get_active_sent_by_employee_and_round(employee.id, round_id)
-        if active:
-            self.repository.touch_last_sent_at(active, last_sent_at=now)
+        latest_for_round = self.repository.get_latest_by_employee_and_round(employee.id, round_id)
+        if latest_for_round and latest_for_round.status != FormStatus.SUBMITTED.value:
+            if latest_for_round.status == FormStatus.EXPIRED.value:
+                self.repository.reopen(latest_for_round)
+            self.repository.touch_last_sent_at(latest_for_round, last_sent_at=now)
             self.db.commit()
-            self._notify_form_sent(active)
+            self._notify_form_sent(latest_for_round)
             self.db.commit()
             send_review_mail_task(
-                employee.id, active.id, candidate_name, round_name, interviewer_name,
+                employee.id, latest_for_round.id, candidate_name, round_name, interviewer_name,
                 scheduled_at_label=scheduled_at_label,
             )
-            return active
-
-        latest = self.repository.get_latest(emp_id, FormType.REVIEW.value)
-        if latest and latest.status == FormStatus.SENT.value and is_form_expired(latest):
-            self.repository.mark_expired(latest)
+            return latest_for_round
 
         form = self.repository.create(
             employee_id=employee.id,
@@ -214,46 +215,72 @@ class FormService:
         if not form:
             return FormValidateResponse(valid=False, reason="NOT_FOUND")
 
+        if form.status == FormStatus.EXPIRED.value:
+            try:
+                self.repository.reopen(form)
+                self.db.commit()
+            except sa_exc.SQLAlchemyError:
+                self.db.rollback()
+                raise
+
         review_questions = None
+        hiring_request_id = None
         if form.type == FormType.REVIEW.value and form.round_id:
             from app.modules.interviews.review_questions_service import ReviewQuestionsService
+            from app.modules.rounds.round_model import Round
 
             review_questions = ReviewQuestionsService(self.db).get_questions_for_round(form.round_id)
+            round_obj = self.db.query(Round).filter(Round.id == form.round_id).first()
+            if round_obj:
+                hiring_request_id = round_obj.jd_id
 
-        if form.status == FormStatus.SUBMITTED.value:
-            return FormValidateResponse(
-                valid=False, reason="ALREADY_SUBMITTED", emp_id=form.employee.emp_id, type=form.type,
-                round_id=form.round_id, candidate_id=form.candidate_id,
-                review_questions=review_questions,
-            )
-        if form.status == FormStatus.EXPIRED.value:
-            return FormValidateResponse(
-                valid=False, reason="EXPIRED", emp_id=form.employee.emp_id, type=form.type,
-                round_id=form.round_id, candidate_id=form.candidate_id,
-                review_questions=review_questions,
-            )
-        if is_form_expired(form):
-            if form.status == FormStatus.SENT.value:
-                try:
-                    self.repository.mark_expired(form)
-                    self.db.commit()
-                    if form.user is not None:
-                        self.notification_service.mark_all_read(
-                            form.user.id, notification_type=form.type
-                        )
-                except sa_exc.SQLAlchemyError:
-                    self.db.rollback()
-                    raise
-            return FormValidateResponse(
-                valid=False, reason="EXPIRED", emp_id=form.employee.emp_id, type=form.type,
-                round_id=form.round_id, candidate_id=form.candidate_id,
-                review_questions=review_questions,
-            )
+        submitted_slots = None
+        submitted_review = None
+        read_only = form.status == FormStatus.SUBMITTED.value
+        if read_only:
+            submitted_slots, submitted_review = self._submitted_payload(form)
+
         return FormValidateResponse(
-            valid=True, reason="VALID", emp_id=form.employee.emp_id, type=form.type,
-            round_id=form.round_id, candidate_id=form.candidate_id,
+            valid=not read_only,
+            reason="ALREADY_SUBMITTED" if read_only else "VALID",
+            emp_id=form.employee.emp_id,
+            type=form.type,
+            round_id=form.round_id,
+            candidate_id=form.candidate_id,
+            hiring_request_id=hiring_request_id,
             review_questions=review_questions,
+            read_only=read_only,
+            submitted_slots=submitted_slots,
+            submitted_review=submitted_review,
         )
+
+    def _submitted_payload(
+        self, form: Form
+    ) -> tuple[list[SubmittedSlotItem] | None, SubmittedReviewPayload | None]:
+        if form.type == FormType.SLOTS.value:
+            from app.modules.slots.slot_model import SlotStatus
+            from app.modules.slots.slot_repository import SlotRepository
+
+            slots = SlotRepository(self.db).get_slots_for_employee(
+                form.employee_id,
+                status=None,
+                include_past=True,
+            )
+            return (
+                [
+                    SubmittedSlotItem(start_at=slot.start_at, end_at=slot.end_at)
+                    for slot in slots
+                    if slot.status != SlotStatus.INACTIVE.value
+                ],
+                None,
+            )
+        if form.type == FormType.REVIEW.value and form.round_id:
+            from app.modules.reviews.review_repository import ReviewRepository
+
+            review = ReviewRepository(self.db).get_by_round_and_entity(form.round_id, "interviewer")
+            if review:
+                return None, SubmittedReviewPayload(reviews=review.reviews, verdict=review.verdict)
+        return None, None
 
     def notify_form(self, user_id: int, form_type: str, is_reminder: bool = True, requester_name: str | None = None) -> tuple[Form, str]:
         # ``user_id`` is wire-name legacy; value is a real ``employees.id``.
@@ -278,30 +305,25 @@ class FormService:
                 self.repository.touch_last_sent_at(active, last_sent_at=now)
                 detail = DETAIL_RESENT
                 form = active
+            elif latest and latest.status == FormStatus.EXPIRED.value:
+                self.repository.reopen(latest)
+                self.repository.touch_last_sent_at(latest, last_sent_at=now)
+                detail = DETAIL_RESENT
+                form = latest
             else:
-                if latest and latest.status == FormStatus.SENT.value and is_form_expired(latest):
-                    self.repository.mark_expired(latest)
-                if latest and latest.status in (FormStatus.EXPIRED.value, FormStatus.SENT.value):
-                    form = self.repository.create(
-                        employee_id=employee_id,
-                        form_type=form_type,
-                        last_sent_at=now,
-                        round_id=latest.round_id,
-                        candidate_id=latest.candidate_id,
-                        requested_by_name=requester_name,
-                    )
-                else:
-                    raise ValueError("No existing review form found for this employee.")
-                detail = DETAIL_NEW_LINK
+                raise ValueError("No existing review form found for this employee.")
         else:
             active = self.repository.get_active_sent_by_employee(employee_id, form_type)
             if active:
                 self.repository.touch_last_sent_at(active, last_sent_at=now)
                 detail = DETAIL_RESENT
                 form = active
+            elif latest and latest.status == FormStatus.EXPIRED.value:
+                self.repository.reopen(latest)
+                self.repository.touch_last_sent_at(latest, last_sent_at=now)
+                detail = DETAIL_RESENT
+                form = latest
             else:
-                if latest and latest.status == FormStatus.SENT.value and is_form_expired(latest):
-                    self.repository.mark_expired(latest)
                 form = self.repository.create(
                     employee_id=employee_id,
                     form_type=form_type,

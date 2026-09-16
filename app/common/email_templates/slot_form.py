@@ -1,5 +1,3 @@
-from app.core.config import settings
-
 _SUBJECT = "Submit Your Availability"
 _REMINDER_SUBJECT = "Reminder: Submit Your Availability"
 _PREHEADER = "Open the form to share your available slots"
@@ -13,7 +11,6 @@ _BODY_REMINDER_INTRO = (
     "This is a reminder to share your availability. "
     "Use the button below to open the slot submission form."
 )
-_EXPIRY_NOTE = f"This link expires in {settings.FORM_EXPIRY_HOURS} hours."
 
 _PARA_STYLE = "font-size:14px;line-height:1.7;color:rgba(255,255,255,0.6);margin:0 0 16px;"
 
@@ -31,15 +28,13 @@ def render_slot_form_email(
     body_html = _para(intro)
     if requester_name:
         body_html += f'<p style="{_PARA_STYLE}"><strong>Requested by:</strong> {requester_name}</p>'
-    body_html += _para(_EXPIRY_NOTE)
 
     prefix = "This is a reminder. " if is_reminder else ""
     requester_line = f"\n\nRequested by: {requester_name}" if requester_name else ""
     plain = (
         f"Hi {recipient_name},\n\n"
         f"{prefix}{_BODY_INTRO}\n\n"
-        f"{form_url}\n\n"
-        f"{_EXPIRY_NOTE}{requester_line}\n\n"
+        f"{form_url}{requester_line}\n\n"
         "Regards,\nTalentOS"
     )
 

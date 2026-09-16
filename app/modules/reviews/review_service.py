@@ -102,6 +102,31 @@ class ReviewService:
     def upsert_review(self, round_id: uuid.UUID, data: ReviewUpdateByRound) -> ReviewResponse:
         reviews_payload = data.reviews
         if data.entity_type.lower() == _INTERVIEWER_ENTITY:
+            from app.modules.forms.form_model import Form, FormStatus, FormType
+
+            has_open_form = (
+                self.db.query(Form.id)
+                .filter(
+                    Form.round_id == round_id,
+                    Form.type == FormType.REVIEW.value,
+                    Form.status == FormStatus.SENT.value,
+                )
+                .first()
+            )
+            has_submitted_form = (
+                self.db.query(Form.id)
+                .filter(
+                    Form.round_id == round_id,
+                    Form.type == FormType.REVIEW.value,
+                    Form.status == FormStatus.SUBMITTED.value,
+                )
+                .first()
+            )
+            if has_submitted_form and not has_open_form:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Review form has already been submitted and cannot be edited",
+                )
             reviews_payload = self._normalize_interviewer_reviews(data.reviews)
 
         review = self.repository.get_by_round_and_entity(round_id, data.entity_type)

@@ -14,6 +14,19 @@ def _normalize_locations(value: list[str]) -> list[str]:
     return cleaned
 
 
+class ParsedHiringRequestJd(BaseModel):
+    """Fields extracted from an uploaded JD for the create form (review before create)."""
+
+    title: str = ""
+    department: str = ""
+    type: str = ""
+    location: list[str] = Field(default_factory=list)
+    description: str = ""
+    requirements: list[str] = Field(default_factory=list)
+    benefits: list[str] = Field(default_factory=list)
+    custom_evaluation_criteria: str = ""
+
+
 class HiringRequestCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=255)
     department: str = Field(..., min_length=1, max_length=255)

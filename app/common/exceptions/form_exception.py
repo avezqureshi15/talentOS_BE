@@ -18,3 +18,12 @@ class FormValidationException(BaseAppException):
             code=code,
             status_code=400,
         )
+
+
+class FormAlreadySubmittedException(BaseAppException):
+    def __init__(self, message: str = "This form has already been submitted and cannot be edited"):
+        super().__init__(
+            message=message,
+            code=ErrorCode.FORM_ALREADY_SUBMITTED,
+            status_code=409,
+        )
