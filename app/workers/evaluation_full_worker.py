@@ -57,7 +57,7 @@ def _notify_evaluation_failed(db, job_id: str, candidate_id: int, reason: str) -
             notification_type=NotificationType.EVALUATION_FAILED.value,
             title="Resume evaluation failed",
             body=f"A candidate's resume could not be evaluated ({reason}).",
-            action_url=f"/hiring-requests/{jd_uuid}/candidates/{candidate_id}",
+            action_url=f"/hiring-requests/{jd_uuid}/applications?applicant={candidate_id}",
             action_label="View candidate",
             candidate_id=candidate_id,
         )
@@ -231,7 +231,7 @@ def _evaluate_full(message: AsyncEvaluationMessage) -> None:
                 notification_type=NotificationType.EVALUATION_COMPLETED.value,
                 title="Resume evaluation completed",
                 body=f"{candidate.candidate_name} was {'shortlisted' if verdict == 'shortlisted' else 'not shortlisted'} by AI (score {ai_result.overall_score_percentage:.0f}%).",
-                action_url=f"/hiring-requests/{jd_uuid}/candidates/{candidate.id}",
+                action_url=f"/hiring-requests/{jd_uuid}/applications?applicant={candidate.id}",
                 action_label="View candidate",
                 candidate_id=candidate.id,
             )

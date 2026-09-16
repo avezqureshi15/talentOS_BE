@@ -313,7 +313,7 @@ def _notify_ai_failure(
         notification_type=notification_type,
         title=title,
         body=body,
-        action_url=f"/hiring-requests/{hiring_request_id}/candidates/{candidate_id}" if candidate_id else None,
+        action_url=f"/hiring-requests/{hiring_request_id}/applications?applicant={candidate_id}" if candidate_id else None,
         action_label="View candidate" if candidate_id else None,
         candidate_id=candidate_id,
         dedupe_key=dedupe_key or f"AI_FAILED-{round_id}",

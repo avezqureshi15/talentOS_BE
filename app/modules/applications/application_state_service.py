@@ -93,7 +93,7 @@ class ApplicationStateService:
                         notification_type=NotificationType.FINAL_VERDICT.value,
                         title=f"Candidate {_verdict_display}",
                         body=f"{candidate.candidate_name or f'Candidate #{candidate_id}'} was {_verdict_lower}.",
-                        action_url=f"/hiring-requests/{jd_uuid}/candidates/{candidate_id}",
+                        action_url=f"/hiring-requests/{jd_uuid}/applications?applicant={candidate_id}",
                         action_label="View candidate",
                         candidate_id=candidate_id,
                         dedupe_key=f"FINAL_VERDICT-{candidate_id}",

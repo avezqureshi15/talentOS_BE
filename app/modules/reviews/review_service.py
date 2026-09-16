@@ -144,7 +144,7 @@ class ReviewService:
                         notification_type=NotificationType.REVIEW_SUBMITTED.value,
                         title="Interviewer review submitted",
                         body=f"A review was submitted for round \"{round_obj.name or round_id}\" with verdict \"{data.verdict}\".",
-                        action_url=f"/hiring-requests/{round_obj.jd_id}/candidates/{round_obj.candidate_id}",
+                        action_url=f"/hiring-requests/{round_obj.jd_id}/applications?applicant={round_obj.candidate_id}",
                         action_label="View candidate",
                         candidate_id=round_obj.candidate_id,
                         dedupe_key=f"REVIEW_SUBMITTED-{round_id}",
