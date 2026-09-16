@@ -4,7 +4,6 @@ from unittest.mock import patch
 from app.common.clients import AIClientError
 from app.modules.hiring_requests.add_candidate_service import (
     MAX_RESUME_PARSE_CHARS,
-    MAX_RESUME_PARSE_PAGES,
     _cap_resume_text,
     _extract_text,
     _parse_resume_fields,
@@ -24,16 +23,15 @@ def test_cap_resume_text_leaves_short_text_alone():
 
 
 @patch("app.modules.hiring_requests.add_candidate_service.PdfReader")
-def test_extract_text_reads_only_first_pages(mock_reader):
+def test_extract_text_reads_all_pages(mock_reader):
     pages = [SimpleNamespace(extract_text=lambda i=i: f"PAGE{i}\n") for i in range(7)]
     mock_reader.return_value = SimpleNamespace(pages=pages)
 
     text = _extract_text(b"%PDF-fake")
     assert "PAGE0" in text
     assert "PAGE4" in text
-    assert "PAGE5" not in text
-    assert "PAGE6" not in text
-    assert MAX_RESUME_PARSE_PAGES == 5
+    assert "PAGE5" in text
+    assert "PAGE6" in text
 
 
 @patch("app.modules.hiring_requests.add_candidate_service.PdfReader")
@@ -46,24 +44,40 @@ def test_extract_text_caps_characters(mock_reader):
     assert len(text) == MAX_RESUME_PARSE_CHARS
 
 
+def _ai_result(**overrides):
+    result = {
+        "name": "Ada Lovelace",
+        "email": "ada@example.com",
+        "phone": "+1 (202) 555-0147",
+        "linkedin_url": "linkedin.com/in/adalovelace",
+        "location": "London, UK",
+        "current_ctc": "18 LPA",
+        "expected_ctc": "22",
+        "years_of_experience": "5 years",
+        "notice_period": "30 days",
+        "willing_to_relocate": True,
+    }
+    result.update(overrides)
+    return result
+
+
 @patch("app.modules.hiring_requests.add_candidate_service.AIClient")
 @patch("app.modules.hiring_requests.add_candidate_service._extract_text")
 def test_ai_fields_fill_missing_values(mock_extract, mock_ai):
     mock_extract.return_value = "some resume body"
-    mock_ai.return_value.generate.return_value = SimpleNamespace(
-        result={
-            "name": "Ada Lovelace",
-            "email": "ada@example.com",
-            "phone": "+1 (202) 555-0147",
-            "linkedin_url": "linkedin.com/in/adalovelace",
-        }
-    )
+    mock_ai.return_value.generate.return_value = SimpleNamespace(result=_ai_result())
 
-    name, email, phone, linkedin = _parse_resume_fields(b"pdf", "", "", "")
-    assert name == "Ada Lovelace"
-    assert email == "ada@example.com"
-    assert phone == "2025550147"
-    assert linkedin == "https://linkedin.com/in/adalovelace"
+    fields = _parse_resume_fields(b"pdf", "", "", "")
+    assert fields["name"] == "Ada Lovelace"
+    assert fields["email"] == "ada@example.com"
+    assert fields["phone"] == "2025550147"
+    assert fields["linkedin_url"] == "https://linkedin.com/in/adalovelace"
+    assert fields["location"] == "London, UK"
+    assert fields["current_ctc"] == "18"
+    assert fields["expected_ctc"] == "22"
+    assert fields["years_of_experience"] == "5"
+    assert fields["notice_period"] == "30"
+    assert fields["willing_to_relocate"] is True
     mock_ai.return_value.generate.assert_called_once()
     sent = mock_ai.return_value.generate.call_args.kwargs["input_data"]["resume_text"]
     assert sent == "some resume body"
@@ -71,30 +85,32 @@ def test_ai_fields_fill_missing_values(mock_extract, mock_ai):
 
 @patch("app.modules.hiring_requests.add_candidate_service.AIClient")
 @patch("app.modules.hiring_requests.add_candidate_service._extract_text")
-def test_form_values_win_over_ai(mock_extract, mock_ai):
+def test_form_contact_wins_ai_still_fills_profile(mock_extract, mock_ai):
     mock_extract.return_value = "Jane Doe\njane@example.com"
     mock_ai.return_value.generate.return_value = SimpleNamespace(
-        result={
-            "name": "AI Name",
-            "email": "ai@example.com",
-            "phone": "1111111111",
-            "linkedin_url": "https://linkedin.com/in/ai",
-        }
+        result=_ai_result(
+            name="AI Name",
+            email="ai@example.com",
+            phone="1111111111",
+            linkedin_url="https://linkedin.com/in/ai",
+        )
     )
 
-    name, email, phone, linkedin = _parse_resume_fields(
+    fields = _parse_resume_fields(
         b"pdf",
         "Form Name",
         "form@example.com",
         "8888888888",
         "https://linkedin.com/in/form",
     )
-    mock_extract.assert_not_called()
-    mock_ai.assert_not_called()
-    assert name == "Form Name"
-    assert email == "form@example.com"
-    assert phone == "8888888888"
-    assert linkedin == "https://linkedin.com/in/form"
+    mock_extract.assert_called_once()
+    mock_ai.assert_called_once()
+    assert fields["name"] == "Form Name"
+    assert fields["email"] == "form@example.com"
+    assert fields["phone"] == "8888888888"
+    assert fields["linkedin_url"] == "https://linkedin.com/in/form"
+    assert fields["location"] == "London, UK"
+    assert fields["current_ctc"] == "18"
 
 
 @patch("app.modules.hiring_requests.add_candidate_service.AIClient")
@@ -102,24 +118,20 @@ def test_form_values_win_over_ai(mock_extract, mock_ai):
 def test_partial_form_fields_still_call_ai(mock_extract, mock_ai):
     mock_extract.return_value = "body"
     mock_ai.return_value.generate.return_value = SimpleNamespace(
-        result={
-            "name": "AI Name",
-            "email": "ai@example.com",
-            "phone": "1111111111",
-            "linkedin_url": "https://linkedin.com/in/ai",
-        }
+        result=_ai_result(
+            name="AI Name",
+            email="ai@example.com",
+            phone="1111111111",
+            linkedin_url="https://linkedin.com/in/ai",
+        )
     )
 
-    name, email, phone, linkedin = _parse_resume_fields(
-        b"pdf",
-        "Form Name",
-        "",
-        "",
-    )
-    assert name == "Form Name"
-    assert email == "ai@example.com"
-    assert phone == "1111111111"
-    assert linkedin == "https://linkedin.com/in/ai"
+    fields = _parse_resume_fields(b"pdf", "Form Name", "", "")
+    assert fields["name"] == "Form Name"
+    assert fields["email"] == "ai@example.com"
+    assert fields["phone"] == "1111111111"
+    assert fields["linkedin_url"] == "https://linkedin.com/in/ai"
+    assert fields["years_of_experience"] == "5"
 
 
 @patch("app.modules.hiring_requests.add_candidate_service.AIClient")
@@ -133,8 +145,29 @@ def test_regex_fallback_when_ai_fails(mock_extract, mock_ai):
         status_code=502,
     )
 
-    name, email, phone, linkedin = _parse_resume_fields(b"pdf", "", "", "")
-    assert name == "Grace Hopper"
-    assert email == "grace@navy.mil"
-    assert phone == "2025550100"
-    assert "linkedin.com/in/gracehopper" in linkedin
+    fields = _parse_resume_fields(b"pdf", "", "", "")
+    assert fields["name"] == "Grace Hopper"
+    assert fields["email"] == "grace@navy.mil"
+    assert fields["phone"] == "2025550100"
+    assert "linkedin.com/in/gracehopper" in fields["linkedin_url"]
+    assert fields["location"] == ""
+    assert fields["current_ctc"] == ""
+    assert fields["willing_to_relocate"] is False
+
+
+@patch("app.modules.hiring_requests.add_candidate_service.AIClient")
+@patch("app.modules.hiring_requests.add_candidate_service._extract_text")
+def test_immediate_notice_and_missing_relocate(mock_extract, mock_ai):
+    mock_extract.return_value = "resume"
+    mock_ai.return_value.generate.return_value = SimpleNamespace(
+        result=_ai_result(
+            notice_period="Immediate joining",
+            willing_to_relocate=False,
+            expected_ctc="",
+        )
+    )
+
+    fields = _parse_resume_fields(b"pdf", "", "", "")
+    assert fields["notice_period"] == "immediate"
+    assert fields["expected_ctc"] == ""
+    assert fields["willing_to_relocate"] is False

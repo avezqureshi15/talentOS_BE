@@ -1,9 +1,14 @@
+from uuid import UUID
+
 from sqlalchemy import exc as sa_exc
 from sqlalchemy.orm import Session
 
 from app.common.exceptions.form_exception import FormAlreadySubmittedException
 from app.common.exceptions.slot_exception import (
     EmployeeNotFoundException,
+    SlotBookedException,
+    SlotInvalidStatusException,
+    SlotNotFoundException,
 )
 from app.core.logger import get_logger
 from app.modules.employees.employee_directory_repository import EmployeeDirectoryRepository
@@ -11,14 +16,17 @@ from app.modules.forms.form_model import FormStatus, FormType
 from app.modules.forms.form_repository import FormRepository
 from app.modules.slots.slot_actions import resolve_slot_action
 from app.modules.slots.slot_model import Slot, SlotStatus
-from app.modules.slots.slot_presenter import now_ist, present_slot_item, to_ist
+from app.modules.slots.slot_presenter import now_ist, present_slot_detail, present_slot_item, to_ist
 from app.modules.slots.slot_repository import SlotRepository
 from app.modules.slots.slot_schema import (
     BatchEmployeeSlotsResponse,
     EmployeeSlotsResponse,
     SkippedSlot,
+    SlotDetailResponse,
     SlotListItemResponse,
     SlotResponse,
+    SlotStatusUpdate,
+    SlotSummaryResponse,
     SlotsCreateRequest,
     SlotsCreateResponse,
 )
@@ -114,13 +122,49 @@ class SlotService:
         )
         return SlotsCreateResponse(data=result, skipped=skipped)
 
-    def get_slots_for_employee(self, employee_id: int) -> list[SlotListItemResponse]:
+    def get_slots_for_employee(
+        self,
+        employee_id: int,
+        *,
+        detail: bool = False,
+    ) -> list[SlotListItemResponse] | list[SlotDetailResponse]:
+        if detail:
+            slots = self.repository.get_slots_for_employee(
+                employee_id,
+                status=None,
+                include_past=False,
+            )
+            return [present_slot_detail(s) for s in slots]
+
         slots = self.repository.get_slots_for_employee(
             employee_id,
             status=SlotStatus.AVAILABLE.value,
             include_past=False,
         )
         return [present_slot_item(s) for s in slots]
+
+    def get_summary(self, tenant_id: int | None) -> SlotSummaryResponse:
+        counts = self.repository.get_summary(tenant_id)
+        return SlotSummaryResponse(**counts)
+
+    def update_slot_status(self, slot_id: UUID, data: SlotStatusUpdate) -> SlotResponse:
+        slot = self.repository.get_slot_by_id(slot_id)
+        if not slot:
+            raise SlotNotFoundException(str(slot_id))
+        if slot.status == SlotStatus.BOOKED.value:
+            raise SlotBookedException()
+        if data.status not in (SlotStatus.AVAILABLE.value, SlotStatus.INACTIVE.value):
+            raise SlotInvalidStatusException()
+        if slot.status == data.status:
+            return SlotResponse.model_validate(slot)
+
+        updated = self.repository.update_slot_status(slot, data.status)
+        try:
+            self.db.commit()
+        except sa_exc.SQLAlchemyError:
+            self.db.rollback()
+            raise
+        return SlotResponse.model_validate(updated)
 
     def get_slots_for_employees(self, emp_ids: list[str]) -> BatchEmployeeSlotsResponse:
         data: list[EmployeeSlotsResponse] = []
